@@ -1,0 +1,536 @@
+{
+  "library": "Iconoir",
+  "style": "Regular",
+  "selectionStatus": "selected",
+  "selectedOn": "2026-11-09",
+  "pathBase": "repository",
+  "upstream": {
+    "repository": "https://github.com/iconoir-icons/iconoir",
+    "commit": "39834e3f193bc0cca2c36bebb6a650471977433d",
+    "sourceDirectory": "icons/regular",
+    "license": "MIT",
+    "licenseFile": "assets/icons/LICENSE"
+  },
+  "rendering": {
+    "nativeWidth": 24,
+    "nativeHeight": 24,
+    "viewBox": "0 0 24 24",
+    "strokeWidth": 1.5,
+    "color": "currentColor",
+    "minimumTouchTarget": {
+      "width": 48,
+      "height": 48
+    }
+  },
+  "icons": {
+    "home": {
+      "file": "assets/icons/home.svg",
+      "label": "首页",
+      "group": "navigation",
+      "usage": "对话与记录默认首页",
+      "requirements": [
+        "F02",
+        "F06"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/home-simple.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/home-simple.svg",
+      "upstreamGitBlobSha": "bde1f4cb1ab16f0a99970743bef9db5689084a26"
+    },
+    "chat": {
+      "file": "assets/icons/chat.svg",
+      "label": "对话",
+      "group": "navigation",
+      "usage": "对话入口与消息",
+      "requirements": [
+        "F02",
+        "F06"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/chat-bubble.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/chat-bubble.svg",
+      "upstreamGitBlobSha": "576c34825de515ef3d684a322fef0d84a4e408dd"
+    },
+    "memory": {
+      "file": "assets/icons/memory.svg",
+      "label": "记忆与偏好",
+      "group": "settings",
+      "usage": "设置中的明确设置、习惯与条件偏好",
+      "requirements": [
+        "F05",
+        "F08"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/book.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/book.svg",
+      "upstreamGitBlobSha": "c32af3caec05a0c3cb6d35fbab89157b8ca94ae4"
+    },
+    "sources": {
+      "file": "assets/icons/sources.svg",
+      "label": "材料",
+      "group": "navigation",
+      "usage": "原话、图片、链接与资源",
+      "requirements": [
+        "F02",
+        "F03",
+        "F04"
+      ],
+      "aliases": [
+        "materials"
+      ],
+      "upstreamFile": "icons/regular/multiple-pages.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/multiple-pages.svg",
+      "upstreamGitBlobSha": "f7bb73e8667f76bfac99ef1cac691800c59fbc09"
+    },
+    "tasks": {
+      "file": "assets/icons/tasks.svg",
+      "label": "事项进展",
+      "group": "content",
+      "usage": "原记录中的目标、决策、执行与反馈",
+      "requirements": [
+        "F06",
+        "F07",
+        "F09"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/task-list.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/task-list.svg",
+      "upstreamGitBlobSha": "104db22904becfb88d13b0c8200e9bc38bd9fa24"
+    },
+    "settings": {
+      "file": "assets/icons/settings.svg",
+      "label": "设置",
+      "group": "navigation",
+      "usage": "记忆偏好、标签规则、模型处理、数据与连接",
+      "requirements": [
+        "F01",
+        "F11",
+        "F12"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/settings.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/settings.svg",
+      "upstreamGitBlobSha": "177771faeeb42f10c04f78f5d269ffd95c56e0b0"
+    },
+    "subject": {
+      "file": "assets/icons/subject.svg",
+      "label": "人物",
+      "group": "object",
+      "usage": "经历归属人物与人物筛选",
+      "requirements": [
+        "F03",
+        "F12"
+      ],
+      "aliases": [
+        "user"
+      ],
+      "upstreamFile": "icons/regular/user.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/user.svg",
+      "upstreamGitBlobSha": "2b36c6ebfff8fb789f2f9c64be732d80e9baf8f4"
+    },
+    "timeline": {
+      "file": "assets/icons/timeline.svg",
+      "label": "时间线",
+      "group": "view",
+      "usage": "记录库中按时间回查记录与事件",
+      "requirements": [
+        "F03"
+      ],
+      "aliases": [
+        "history"
+      ],
+      "upstreamFile": "icons/regular/clock-rotate-right.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/clock-rotate-right.svg",
+      "upstreamGitBlobSha": "38216101ecb9479c6a3a134cf7e751663e4e120d"
+    },
+    "search": {
+      "file": "assets/icons/search.svg",
+      "label": "搜索",
+      "group": "action",
+      "usage": "检索记录、事件和语义标签",
+      "requirements": [
+        "F03",
+        "F06"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/search.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/search.svg",
+      "upstreamGitBlobSha": "fe5bbb87dca15f1a6138601b5410954e24213f64"
+    },
+    "add": {
+      "file": "assets/icons/add.svg",
+      "label": "新增",
+      "group": "action",
+      "usage": "新增记录、明确设置或目标",
+      "requirements": [
+        "F02",
+        "F05",
+        "F06"
+      ],
+      "aliases": [
+        "plus"
+      ],
+      "upstreamFile": "icons/regular/plus.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/plus.svg",
+      "upstreamGitBlobSha": "52704596fc7a93c0b4edc8c87013c6efbd09e308"
+    },
+    "edit": {
+      "file": "assets/icons/edit.svg",
+      "label": "编辑",
+      "group": "action",
+      "usage": "修改资料或纠正内容",
+      "requirements": [
+        "F03",
+        "F08"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/edit-pencil.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/edit-pencil.svg",
+      "upstreamGitBlobSha": "fe91b4f8a84cb353065a918b158d620ef241a9d3"
+    },
+    "back": {
+      "file": "assets/icons/back.svg",
+      "label": "返回",
+      "group": "navigation",
+      "usage": "返回上一层",
+      "requirements": [],
+      "aliases": [
+        "arrow-left"
+      ],
+      "upstreamFile": "icons/regular/arrow-left.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/arrow-left.svg",
+      "upstreamGitBlobSha": "b9bb7e5a8845df56fc7efe60742cd104ffeeba48"
+    },
+    "close": {
+      "file": "assets/icons/close.svg",
+      "label": "关闭",
+      "group": "action",
+      "usage": "关闭浮层或退出当前视图",
+      "requirements": [],
+      "aliases": [],
+      "upstreamFile": "icons/regular/xmark.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/xmark.svg",
+      "upstreamGitBlobSha": "89eb595632a1cc07696fb85566dbe3adb287c5aa"
+    },
+    "more": {
+      "file": "assets/icons/more.svg",
+      "label": "更多",
+      "group": "action",
+      "usage": "展开次级操作",
+      "requirements": [],
+      "aliases": [],
+      "upstreamFile": "icons/regular/more-horiz.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/more-horiz.svg",
+      "upstreamGitBlobSha": "157c9fe20de0b7fb2727d961224f4c81e119000a"
+    },
+    "delete": {
+      "file": "assets/icons/delete.svg",
+      "label": "删除",
+      "group": "action",
+      "usage": "进入删除操作与范围确认",
+      "requirements": [
+        "F08"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/trash.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/trash.svg",
+      "upstreamGitBlobSha": "6284f65e7ca76144b0eb23187455525ced2b4ead"
+    },
+    "export": {
+      "file": "assets/icons/export.svg",
+      "label": "导出",
+      "group": "action",
+      "usage": "导出备份或资料文件",
+      "requirements": [
+        "F11"
+      ],
+      "aliases": [
+        "download"
+      ],
+      "upstreamFile": "icons/regular/download.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/download.svg",
+      "upstreamGitBlobSha": "29ac7f00386c272440d87c9e5b22a8edee5282d1"
+    },
+    "restore": {
+      "file": "assets/icons/restore.svg",
+      "label": "恢复备份",
+      "group": "action",
+      "usage": "校验并恢复备份",
+      "requirements": [
+        "F11"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/database-restore.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/database-restore.svg",
+      "upstreamGitBlobSha": "c3f16920438339d80dc9729723e1ff251dc5076a"
+    },
+    "import": {
+      "file": "assets/icons/import.svg",
+      "label": "导入材料",
+      "group": "action",
+      "usage": "从本机文件导入材料或选择备份",
+      "requirements": [
+        "F02",
+        "F11"
+      ],
+      "aliases": [
+        "upload"
+      ],
+      "upstreamFile": "icons/regular/upload.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/upload.svg",
+      "upstreamGitBlobSha": "2a5712abb2311159eaa2655bcd57878304ed927a"
+    },
+    "pause": {
+      "file": "assets/icons/pause.svg",
+      "label": "暂停",
+      "group": "action",
+      "usage": "暂停处理任务",
+      "requirements": [
+        "F09"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/pause.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/pause.svg",
+      "upstreamGitBlobSha": "21f41886bfe10cd51611943aef8a0448e1cba892"
+    },
+    "resume": {
+      "file": "assets/icons/resume.svg",
+      "label": "继续",
+      "group": "action",
+      "usage": "继续已暂停的处理任务",
+      "requirements": [
+        "F09"
+      ],
+      "aliases": [
+        "play"
+      ],
+      "upstreamFile": "icons/regular/play.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/play.svg",
+      "upstreamGitBlobSha": "8e419177ff105f95478083975b069b20e492f8c2"
+    },
+    "retry": {
+      "file": "assets/icons/retry.svg",
+      "label": "重试",
+      "group": "action",
+      "usage": "重试可重新执行的失败任务",
+      "requirements": [
+        "F09"
+      ],
+      "aliases": [
+        "refresh"
+      ],
+      "upstreamFile": "icons/regular/refresh.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/refresh.svg",
+      "upstreamGitBlobSha": "32fe1b1e2a9187d9ee0ecfb7dc274a3411b1dc03"
+    },
+    "send": {
+      "file": "assets/icons/send.svg",
+      "label": "发送",
+      "group": "action",
+      "usage": "提交对话输入",
+      "requirements": [
+        "F02",
+        "F06"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/send.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/send.svg",
+      "upstreamGitBlobSha": "ca56c472cc5a1ba5273813dde4f1a356817d3412"
+    },
+    "check": {
+      "file": "assets/icons/check.svg",
+      "label": "确认",
+      "group": "status",
+      "usage": "配合具体文字显示保存、更新或完成状态",
+      "requirements": [
+        "F02",
+        "F05",
+        "F07"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/check.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/check.svg",
+      "upstreamGitBlobSha": "9e287415d62b5bd0ed93bb3f02493471318f706d"
+    },
+    "warning": {
+      "file": "assets/icons/warning.svg",
+      "label": "需要核对",
+      "group": "status",
+      "usage": "需要核对、冲突与异常提示",
+      "requirements": [
+        "F04",
+        "F08"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/warning-triangle.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/warning-triangle.svg",
+      "upstreamGitBlobSha": "032f9668b7f8ddec096170b6770851ef81ee4250"
+    },
+    "info": {
+      "file": "assets/icons/info.svg",
+      "label": "说明",
+      "group": "status",
+      "usage": "字段、授权与处理方式说明",
+      "requirements": [
+        "F01",
+        "F12"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/info-circle.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/info-circle.svg",
+      "upstreamGitBlobSha": "3edff0e248c58d3b4251a2001dfae68ad1ff4fc5"
+    },
+    "clock": {
+      "file": "assets/icons/clock.svg",
+      "label": "等待条件",
+      "group": "status",
+      "usage": "等待执行条件与待处理状态",
+      "requirements": [
+        "F09"
+      ],
+      "aliases": [],
+      "upstreamFile": "icons/regular/clock.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/clock.svg",
+      "upstreamGitBlobSha": "e495dc187d65c91b40de161e7d09ee07d4906362"
+    },
+    "chevron-right": {
+      "file": "assets/icons/chevron-right.svg",
+      "label": "进入",
+      "group": "navigation",
+      "usage": "进入列表项详情",
+      "requirements": [],
+      "aliases": [
+        "arrow-right"
+      ],
+      "upstreamFile": "icons/regular/nav-arrow-right.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/nav-arrow-right.svg",
+      "upstreamGitBlobSha": "930d7a212953d716d219767130c8c9514306c254"
+    },
+    "chevron-down": {
+      "file": "assets/icons/chevron-down.svg",
+      "label": "展开",
+      "group": "navigation",
+      "usage": "展开选择器或折叠区域",
+      "requirements": [],
+      "aliases": [
+        "arrow-down"
+      ],
+      "upstreamFile": "icons/regular/nav-arrow-down.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/nav-arrow-down.svg",
+      "upstreamGitBlobSha": "2e5bd7383c9d097cdb0c1a1855644f608f84a050"
+    },
+    "library": {
+      "file": "assets/icons/library.svg",
+      "label": "记录库",
+      "group": "navigation",
+      "usage": "记录库入口与记录本组织",
+      "requirements": [
+        "F03",
+        "F04",
+        "F08"
+      ],
+      "aliases": [
+        "notebook"
+      ],
+      "upstreamFile": "icons/regular/folder.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/folder.svg",
+      "upstreamGitBlobSha": "ccc42cb6f89304569522a101612ab7aebee53f78"
+    },
+    "tag": {
+      "file": "assets/icons/tag.svg",
+      "label": "语义标签",
+      "group": "classification",
+      "usage": "算法生成标签的筛选、依据与人工纠正",
+      "requirements": [
+        "F03",
+        "F04",
+        "F08"
+      ],
+      "aliases": [
+        "semantic-tag"
+      ],
+      "upstreamFile": "icons/regular/label.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/label.svg",
+      "upstreamGitBlobSha": "44a9a877a9ce54fb05feea24c440796c7b9c6c53"
+    },
+    "voice": {
+      "file": "assets/icons/voice.svg",
+      "label": "语音输入",
+      "group": "input",
+      "usage": "系统听写，转成可编辑文字后按当前模式提交",
+      "requirements": [
+        "F02"
+      ],
+      "aliases": [
+        "microphone"
+      ],
+      "upstreamFile": "icons/regular/microphone.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/microphone.svg",
+      "upstreamGitBlobSha": "71bba4900258f0bf147ccb485fc4cbd55193d192"
+    },
+    "connection": {
+      "file": "assets/icons/connection.svg",
+      "label": "连接",
+      "group": "settings",
+      "usage": "模型服务与外部客户端的连接和授权",
+      "requirements": [
+        "F01",
+        "F12"
+      ],
+      "aliases": [
+        "terminal"
+      ],
+      "upstreamFile": "icons/regular/terminal.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/terminal.svg",
+      "upstreamGitBlobSha": "381d2c3ae0e80d69e67596b23ef39417322cbd65"
+    },
+    "appearance": {
+      "file": "assets/icons/appearance.svg",
+      "label": "外观",
+      "group": "settings",
+      "usage": "主题与文字大小设置",
+      "requirements": [],
+      "aliases": [
+        "palette"
+      ],
+      "upstreamFile": "icons/regular/palette.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/palette.svg",
+      "upstreamGitBlobSha": "272c4aec61c20227567f093803ecbc7834adf22e"
+    },
+    "model": {
+      "file": "assets/icons/model.svg",
+      "label": "模型",
+      "group": "settings",
+      "usage": "推理位置与模型服务配置",
+      "requirements": [
+        "F01",
+        "F09"
+      ],
+      "aliases": [
+        "cpu"
+      ],
+      "upstreamFile": "icons/regular/cpu.svg",
+      "upstreamUrl": "https://github.com/iconoir-icons/iconoir/blob/39834e3f193bc0cca2c36bebb6a650471977433d/icons/regular/cpu.svg",
+      "upstreamGitBlobSha": "6888323f47e41798fece2a7c03e6c6353868e032"
+    }
+  },
+  "aliases": {
+    "materials": "sources",
+    "user": "subject",
+    "history": "timeline",
+    "plus": "add",
+    "arrow-left": "back",
+    "download": "export",
+    "upload": "import",
+    "play": "resume",
+    "refresh": "retry",
+    "arrow-right": "chevron-right",
+    "arrow-down": "chevron-down",
+    "notebook": "library",
+    "semantic-tag": "tag",
+    "microphone": "voice",
+    "terminal": "connection",
+    "palette": "appearance",
+    "cpu": "model"
+  }
+}

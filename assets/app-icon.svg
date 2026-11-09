@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="pp-app-title pp-app-desc">
+  <title id="pp-app-title">PebblePile · 叠石应用图标</title>
+  <desc id="pp-app-desc">三块青灰色自然河石错位搭接，米白圆角背景中有贯穿的浅色河流，岸边点缀少量水草与芦苇。</desc>
+  <defs><linearGradient id="pp-app-base-light" x1="153" y1="275" x2="324" y2="372" gradientUnits="userSpaceOnUse"><stop stop-color="#BEC5BC"/><stop offset="1" stop-color="#99A69C"/></linearGradient><linearGradient id="pp-app-middle-light" x1="191" y1="217" x2="323" y2="295" gradientUnits="userSpaceOnUse"><stop stop-color="#99A99D"/><stop offset="1" stop-color="#768C7E"/></linearGradient><linearGradient id="pp-app-upper-light" x1="211" y1="164" x2="298" y2="232" gradientUnits="userSpaceOnUse"><stop stop-color="#D1D3C7"/><stop offset="1" stop-color="#B4BCB0"/></linearGradient><clipPath id="pp-app-corner-clip"><rect width="512" height="512" rx="112"/></clipPath></defs>
+  <g clip-path="url(#pp-app-corner-clip)">
+    <rect width="512" height="512" fill="#F5F3EB" />
+    <path d="M0 312C71 298 126 326 198 341C278 359 337 321 410 328C448 331 481 348 512 355L512 447C465 438 424 416 379 421C303 430 269 449 194 431C117 412 65 386 0 400Z" fill="#DEE8E2" />
+    <path d="M0 341C60 328 98 351 138 357M363 350C418 342 461 369 512 382M0 374C69 361 107 393 160 396M317 419C391 399 451 410 512 428" fill="none" stroke="#A6BCB1" stroke-width="2.5" stroke-linecap="round" />
+    <g aria-label="河岸植物">
+      <path d="M53 334C53 311 49 288 39 271M53 334C58 314 66 302 73 295" fill="none" stroke="#536D58" stroke-width="3" stroke-linecap="round" />
+      <path d="M455 353C460 325 459 293 465 267M469 358C472 336 478 315 483 298" fill="none" stroke="#536D58" stroke-width="2.5" stroke-linecap="round" />
+      <path d="M464 268L468 248M482 298L486 283" fill="none" stroke="#6E5D40" stroke-width="6" stroke-linecap="round" />
+      <path d="M457 334C447 319 444 313 442 305M474 334C483 325 490 323 495 322" fill="none" stroke="#536D58" stroke-width="2.5" stroke-linecap="round" />
+    </g>
+    <ellipse cx="263" cy="387" rx="147" ry="13" fill="#415448" style="opacity: 0.09" />
+    <path d="M83 313C88 296 111 282 139 274C155 270 173 273 189 278C213 285 232 281 254 288C273 294 290 296 308 305C330 315 348 309 369 318C395 330 419 337 426 355C432 369 417 383 397 389C374 398 350 393 329 388C310 383 290 391 270 384C250 378 236 369 216 369C187 370 166 359 144 352C116 344 93 335 83 313Z" fill="#738278" />
+    <path d="M83 313C88 296 111 282 139 274C155 270 173 273 189 278C213 285 232 281 254 288C273 294 290 296 308 305C330 315 348 309 369 318C390 327 409 335 414 345C398 350 385 349 370 357C349 369 325 357 304 357C283 358 269 350 251 346C233 341 220 346 204 341C184 335 166 337 149 331C124 323 104 326 83 313Z" fill="url(#pp-app-base-light)" />
+    <path d="M163 305C189 292 219 296 248 301C278 306 315 311 351 325C342 339 310 338 287 334C260 330 239 324 216 325C193 324 174 316 163 305Z" fill="#405B49" style="opacity: 0.18" />
+    <path d="M145 249C144 234 158 220 179 215C199 210 218 219 236 217C257 214 269 222 285 228C303 235 320 232 337 242C357 252 374 269 377 284C380 303 360 313 342 314C322 315 310 329 291 326C272 323 259 317 242 316C223 315 209 305 191 302C166 296 158 281 155 267C152 260 148 254 145 249Z" fill="#576D60" />
+    <path d="M145 249C144 234 158 220 179 215C199 210 218 219 236 217C257 214 269 222 285 228C303 235 320 232 337 242C355 250 367 262 371 274C355 281 341 283 325 291C308 300 291 293 275 289C256 283 240 287 224 280C206 272 193 278 178 267C167 259 155 259 145 249Z" fill="url(#pp-app-middle-light)" />
+    <path d="M192 242C209 229 231 228 254 236C274 241 294 243 314 254C304 264 285 263 269 258C250 252 235 252 221 251C210 250 200 249 192 242Z" fill="#314E3D" style="opacity: 0.23" />
+    <path d="M190 188C198 174 210 161 227 160C241 161 251 167 264 166C281 164 291 176 302 185C315 194 329 206 327 218C324 232 313 240 300 244C286 248 271 241 260 239C245 237 235 239 223 230C213 223 202 223 196 213C192 205 184 199 190 188Z" fill="#959F92" />
+    <path d="M190 188C198 174 210 161 227 160C241 161 251 167 264 166C281 164 291 176 302 185C315 194 325 202 324 211C310 210 306 220 293 222C279 225 268 216 253 218C239 220 232 211 219 209C204 207 198 198 190 188Z" fill="url(#pp-app-upper-light)" />
+    <path d="M119 307C131 300 140 302 151 305M321 346C335 349 343 347 352 344" fill="none" stroke="#E0E3D859" stroke-width="2" stroke-linecap="round" />
+    <path d="M175 242L194 237L206 240M246 183L258 184L266 181" fill="none" stroke="#E4E8DD47" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>

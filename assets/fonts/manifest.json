@@ -1,0 +1,211 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-11-09",
+  "selectedPair": [
+    "LXGW WenKai",
+    "Leftist Mono Serif"
+  ],
+  "scope": "Source metadata, current-user installation, Paper recognition and local Chrome prototype glyph sources verified. Native app/device rendering remains unverified.",
+  "localStorage": ".local/fonts/ (ignored; three original TTF files present)",
+  "families": [
+    {
+      "cssFamily": "LXGW WenKai",
+      "author": "LXGW",
+      "version": "1.530",
+      "weights": [
+        400,
+        500
+      ],
+      "source": "https://github.com/lxgw/LxgwWenKai/releases/tag/v1.530",
+      "license": "SIL OFL 1.1 with upstream additional naming permission",
+      "licenseFile": "assets/fonts/LXGW-WenKai-OFL.txt",
+      "sourceLicense": "https://github.com/lxgw/LxgwWenKai/blob/v1.530/OFL.txt"
+    },
+    {
+      "cssFamily": "Leftist Mono Serif",
+      "author": "Domenico Catapano (Dom)",
+      "version": "1.000",
+      "weights": [
+        400
+      ],
+      "source": "https://www.dafont.com/leftist-mono-serif.font",
+      "download": "https://dl.dafont.com/dl/?f=leftist_mono_serif",
+      "license": "Donationware listing; no license text in the source archive. Application embedding and redistribution terms unverified.",
+      "fontBinaryIncludedInRepository": false,
+      "nameConflict": "Name IDs 1 and 4 say Leftist Mono Serif; ID 16 says Leftist Mono Sans. Both names identify the same installed source file. CSS local() binds PostScript face LeftistMonoSerif to Leftist Mono Serif.",
+      "cssFamilyChain": "\"Leftist Mono Serif\", \"Leftist Mono Sans\"",
+      "nativeFamilyAlias": "Leftist Mono Sans",
+      "postScriptName": "LeftistMonoSerif"
+    }
+  ],
+  "files": [
+    {
+      "file": "LXGWWenKai-Regular.ttf",
+      "expectedLocalPath": ".local/fonts/lxgw-wenkai/LXGWWenKai-Regular.ttf",
+      "cssFamily": "LXGW WenKai",
+      "weight": 400,
+      "style": "normal",
+      "names": {
+        "1": "LXGW WenKai",
+        "2": "Regular",
+        "4": "LXGW WenKai",
+        "5": "Version 1.530; October 18, 2026",
+        "6": "LXGWWenKai-Regular",
+        "16": null,
+        "17": null
+      },
+      "sha256": "2d73eea94ad808999d90c0000c239a84a33b09d4bc6ab6c5b8bbf1eda8a7fc8b",
+      "sizeBytes": 25928940,
+      "os2WeightClass": 400,
+      "os2EmbeddingFlags": 0,
+      "embeddingFlagInterpretation": "Technical metadata only; the license controls distribution rights.",
+      "isFixedPitch": false,
+      "digitAdvanceUnits": {
+        "0": 600,
+        "1": 600,
+        "2": 600,
+        "3": 600,
+        "4": 600,
+        "5": 600,
+        "6": 600,
+        "7": 600,
+        "8": 600,
+        "9": 600
+      },
+      "unitsPerEm": 1000,
+      "variableAxes": [],
+      "fontBinaryIncludedInRepository": false
+    },
+    {
+      "file": "LXGWWenKai-Medium.ttf",
+      "expectedLocalPath": ".local/fonts/lxgw-wenkai/LXGWWenKai-Medium.ttf",
+      "cssFamily": "LXGW WenKai",
+      "weight": 500,
+      "style": "normal",
+      "names": {
+        "1": "LXGW WenKai Medium",
+        "2": "Regular",
+        "4": "LXGW WenKai Medium",
+        "5": "Version 1.530; October 18, 2026",
+        "6": "LXGWWenKai-Medium",
+        "16": "LXGW WenKai",
+        "17": "Medium"
+      },
+      "sha256": "f4b8a34d1f838fe411540cb7c97b1c384ac9738a876c4104500bc42508b2312a",
+      "sizeBytes": 25800076,
+      "os2WeightClass": 500,
+      "os2EmbeddingFlags": 0,
+      "embeddingFlagInterpretation": "Technical metadata only; the license controls distribution rights.",
+      "isFixedPitch": false,
+      "digitAdvanceUnits": {
+        "0": 600,
+        "1": 600,
+        "2": 600,
+        "3": 600,
+        "4": 600,
+        "5": 600,
+        "6": 600,
+        "7": 600,
+        "8": 600,
+        "9": 600
+      },
+      "unitsPerEm": 1000,
+      "variableAxes": [],
+      "fontBinaryIncludedInRepository": false
+    },
+    {
+      "file": "LeftistMonoSerif.ttf",
+      "expectedLocalPath": ".local/fonts/leftist-mono-serif/LeftistMonoSerif.ttf",
+      "cssFamily": "Leftist Mono Serif",
+      "weight": 400,
+      "style": "normal",
+      "names": {
+        "1": "Leftist Mono Serif",
+        "2": "Regular",
+        "4": "Leftist Mono Serif",
+        "5": "Version 1.000 2005 initial release",
+        "6": "LeftistMonoSerif",
+        "16": "Leftist Mono Sans",
+        "17": "Regular"
+      },
+      "sha256": "e243b842e066895bea5d4b2bcc35c7aaea3f154f19aeac5919e5e00fac38d848",
+      "sizeBytes": 24552,
+      "os2WeightClass": 400,
+      "os2EmbeddingFlags": 0,
+      "embeddingFlagInterpretation": "Technical metadata only; the license controls distribution rights.",
+      "isFixedPitch": false,
+      "digitAdvanceUnits": {
+        "0": 519,
+        "1": 519,
+        "2": 519,
+        "3": 519,
+        "4": 519,
+        "5": 519,
+        "6": 519,
+        "7": 519,
+        "8": 519,
+        "9": 519
+      },
+      "unitsPerEm": 1000,
+      "variableAxes": [],
+      "fontBinaryIncludedInRepository": false
+    }
+  ],
+  "css": {
+    "file": "assets/theme.css",
+    "sources": "local PostScript names only",
+    "fontSynthesis": "none",
+    "latinRole": ".pp-latin or [data-script=\"latin\"]",
+    "latinFamilyChain": "\"Leftist Mono Serif\", \"Leftist Mono Sans\""
+  },
+  "verification": {
+    "sourceMetadata": true,
+    "localCssTokenMapping": true,
+    "fontInstallation": true,
+    "runtimeFontLoading": false,
+    "paperFontAvailability": true,
+    "paperFormalBoards": true,
+    "paperFormalTextNodes": 257
+  },
+  "installation": {
+    "script": "scripts/install-design-fonts.ps1",
+    "scope": "Windows current user",
+    "target": "%LOCALAPPDATA%/Microsoft/Windows/Fonts",
+    "registry": "HKCU/Software/Microsoft/Windows NT/CurrentVersion/Fonts",
+    "sourceFilesModified": false,
+    "currentUserRegistryVerified": true,
+    "installedFileHashesMatchManifest": true
+  },
+  "paper": {
+    "afterRestart": true,
+    "cjkFamily": "LXGW WenKai",
+    "cjkWeights": [
+      400,
+      500
+    ],
+    "latinNativeAlias": "Leftist Mono Sans",
+    "latinWeight": 400,
+    "latinPostScriptName": "LeftistMonoSerif",
+    "requestedFamily": "\"Leftist Mono Serif\", \"Leftist Mono Sans\"",
+    "computedFamily": "\"LeftistMonoSerif\", \"Leftist Mono Sans\", system-ui, sans-serif",
+    "verificationMethod": "Font family query, computed style readback and glyph screenshot",
+    "sameSourceFile": true,
+    "formalBoardReview": "pending",
+    "latinBinding": {
+      "mode": "direct font-family style for Latin nodes and mixed-script spans",
+      "value": "\"Leftist Mono Serif\", \"Leftist Mono Sans\"",
+      "computedValue": "\"LeftistMonoSerif\", \"Leftist Mono Sans\", system-ui, sans-serif",
+      "reason": "Paper fontFamily token chains rendered a system fallback; applying the same chain directly resolved the selected source face.",
+      "scope": "Paper Latin family binding only; all other properties continue using design tokens.",
+      "sourceFileModified": false
+    }
+  },
+  "prototypeWebValidation": {
+    "date": "2026-11-09",
+    "method": "Chrome DevTools Protocol CSS.getPlatformFontsForNode",
+    "chineseRegular": "LXGWWenKai-Regular",
+    "chineseMedium": "LXGWWenKai-Medium",
+    "latin": "LeftistMonoSerif",
+    "scope": "Local standalone prototype; OS status bar keeps platform font"
+  }
+}

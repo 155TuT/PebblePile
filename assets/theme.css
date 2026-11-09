@@ -1,0 +1,230 @@
+/* PebblePile light theme v1.3.1. Source: design-tokens.json. Components: components.css. */
+/* Local faces only. Sources and deployment requirements: fonts/README.md. */
+@font-face {
+  font-family: "LXGW WenKai";
+  src: local("LXGWWenKai-Regular");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "LXGW WenKai";
+  src: local("LXGWWenKai-Medium");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Leftist Mono Serif";
+  src: local("LeftistMonoSerif");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --color-bg: #F5F3EB;
+  --color-surface: #FFFDF7;
+  --color-surface-muted: #ECECE3;
+  --color-surface-hover: #E6E8DE;
+  --color-text: #222C24;
+  --color-text-secondary: #5E6B5D;
+  --color-text-disabled: #788374;
+  --color-text-inverse: #FFFDF7;
+  --color-border: #DADDD2;
+  --color-border-control: #788374;
+  --color-primary: #536D58;
+  --color-primary-hover: #465E4B;
+  --color-primary-pressed: #36503D;
+  --color-primary-soft: #E3EBDD;
+  --color-on-primary: #FFFDF7;
+  --color-focus: #365B44;
+  --color-link: #365B44;
+  --color-accent: #E5DDC4;
+  --color-accent-strong: #6E5D40;
+  --color-success: #3E6246;
+  --color-success-soft: #E5EFE2;
+  --color-warning: #775C29;
+  --color-warning-soft: #F3EAD2;
+  --color-danger: #934C47;
+  --color-danger-soft: #F5E6E2;
+  --color-info: #3C6470;
+  --color-info-soft: #E6EEF0;
+  --color-neutral-0: #FFFDF7;
+  --color-neutral-50: #F5F3EB;
+  --color-neutral-100: #ECECE3;
+  --color-neutral-200: #DADDD2;
+  --color-neutral-300: #C2C8BB;
+  --color-neutral-400: #A0AA9B;
+  --color-neutral-500: #788374;
+  --color-neutral-600: #5E6B5D;
+  --color-neutral-700: #475344;
+  --color-neutral-800: #323D32;
+  --color-neutral-900: #222C24;
+  --color-moss-100: #E3EBDD;
+  --color-moss-300: #B1BE9C;
+  --color-moss-500: #8FA789;
+  --color-moss-700: #536D58;
+  --color-moss-900: #36503D;
+  --color-sand-100: #F2ECD9;
+  --color-sand-300: #E5DDC4;
+  --color-sand-700: #6E5D40;
+  --color-stone-base: #738278;
+  --color-stone-middle: #576D60;
+  --color-stone-top: #959F92;
+  --color-river: #DEE8E2;
+  --color-river-line: #A6BCB1;
+  --spacing-0: 0px;
+  --spacing-2: 2px;
+  --spacing-4: 4px;
+  --spacing-8: 8px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-20: 20px;
+  --spacing-24: 24px;
+  --spacing-32: 32px;
+  --spacing-40: 40px;
+  --spacing-48: 48px;
+  --spacing-64: 64px;
+  --spacing-96: 96px;
+  --radius-none: 0px;
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+  --breakpoint-compact: 360px;
+  --breakpoint-mobile: 390px;
+  --breakpoint-wide: 768px;
+  --breakpoint-desktop: 1200px;
+  --container-icon-sm: 16px;
+  --container-icon: 24px;
+  --container-touch: 48px;
+  --container-nav: 64px;
+  --container-phone: 390px;
+  --container-reading: 640px;
+  --container-content: 1120px;
+  --container-canvas: 1440px;
+  --font-cjk: "LXGW WenKai";
+  --font-latin: "Leftist Mono Serif", "Leftist Mono Sans";
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-latin: 400;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 32px;
+  --text-4xl: 48px;
+  --leading-xs: 18px;
+  --leading-sm: 20px;
+  --leading-base: 26px;
+  --leading-lg: 28px;
+  --leading-xl: 30px;
+  --leading-2xl: 34px;
+  --leading-3xl: 42px;
+  --leading-4xl: 58px;
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0em;
+  --tracking-wide: 0.06em;
+  --opacity-none: 0;
+  --opacity-scrim: 0.32;
+  --opacity-disabled: 0.48;
+  --opacity-full: 1;
+  --color-control-surface: var(--color-bg);
+  --color-relief-shade: #D6D7CF;
+  --color-relief-light: #FFFFFF;
+  --container-input: 64px;
+  --container-topbar: 64px;
+  --container-composer: 172px;
+  --container-dialog: 360px;
+  --container-dialog-wide: 480px;
+  --radius-control: 16px;
+  --radius-card: 24px;
+  --radius-toolbar: 32px;
+
+  --font-fallback-cjk: "Kaiti SC", "STKaiti", "KaiTi", serif;
+  --font-fallback-latin: "Times New Roman", serif;
+  --border-width-hairline: 1px;
+  --border-width-strong: 2px;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 3px;
+  --shadow-none: none;
+  --shadow-sm: var(--shadow-raised);
+  --shadow-popover: var(--shadow-overlay);
+  --shadow-sheet: var(--shadow-overlay);
+  --duration-none: 0ms;
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-popover: 20;
+  --z-dialog: 30;
+  --z-toast: 40;
+  --border-control: var(--border-width-hairline) solid var(--color-border-control);
+  --page-gutter: var(--spacing-20);
+  --card-padding: var(--spacing-24);
+  --button-height: var(--container-touch);
+  --button-radius: var(--radius-control);
+  --input-min-height: var(--container-input);
+  --input-radius: var(--radius-control);
+  --card-radius: var(--radius-card);
+  --sheet-radius: var(--radius-card);
+  --icon-stroke-width: 1.5px;
+  --logo-clear-space: 25%;
+  --shadow-raised: 6px 6px 14px #D6D7CF, -6px -6px 14px #FFFFFF;
+  --shadow-inset: inset 3px 3px 7px #D1D4C9, inset -3px -3px 7px #FFFFFF;
+  --shadow-primary: 4px 4px 10px #C6CCC0, -4px -4px 10px #FFFFFF;
+  --shadow-pressed: inset 3px 3px 6px #263F2D, inset -3px -3px 6px #58765F;
+  --shadow-overlay: 12px 12px 32px #222C2433, -4px -4px 16px #FFFFFF80;
+  --input-padding: var(--spacing-16);
+  --topbar-height: var(--container-topbar);
+  --composer-min-height: var(--container-composer);
+  --composer-occupied-height: var(--container-composer);
+  --dialog-width: var(--container-dialog);
+  --dialog-wide-width: var(--container-dialog-wide);
+  --toolbar-radius: var(--radius-toolbar);
+  --menu-radius: 20px;
+}
+
+/* Chinese is the default role; components.css defines explicit Latin spans. */
+.pebblepile-theme {
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-family: var(--font-cjk), var(--font-fallback-cjk);
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--leading-base);
+  letter-spacing: var(--tracking-normal);
+  font-synthesis: none;
+}
+
+.pebblepile-theme :is(h1, h2, h3, h4, h5, h6, b, strong) {
+  font-weight: var(--font-weight-medium);
+}
+
+.pebblepile-theme :focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus);
+  outline-offset: var(--focus-ring-offset);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pebblepile-theme {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+
+  /* Tag decorative layers only; keep layout transforms on an untagged wrapper. */
+  .pebblepile-theme [data-decorative-motion] {
+    animation: none;
+    transform: none;
+    transition: none;
+  }
+}
