@@ -1,0 +1,1801 @@
+{
+  "start": "H1",
+  "defaultState": {
+    "inputMode": "dialog",
+    "draft": "今天加班，晚饭想省事一点，预算二十元。",
+    "continuation": "",
+    "feedback": "最后吃了热汤面，速度够快，也很舒服。",
+    "feedbackDone": "done",
+    "tagStatus": "pending",
+    "tagName": "省事",
+    "tagDetailsOpen": true,
+    "memoryScope": "future",
+    "memoryUpdated": false,
+    "autoOrganize": true,
+    "inferenceAssist": true,
+    "textSize": "standard",
+    "memoryCondition": "只在工作日加班时优先省事",
+    "committedMemoryCondition": "只在工作日加班时优先省事",
+    "modelEndpoint": "https://api.example.com/v1",
+    "modelName": "example-model"
+  },
+  "returnTargets": {
+    "memory": "H3",
+    "tags": "L3"
+  },
+  "paperSources": [
+    {
+      "fileId": "01M41JA45T3KFWNYX3GFW8SB5Q",
+      "pageId": "p-5-0",
+      "tokenHash": "23078a09"
+    }
+  ],
+  "screens": [
+    {
+      "id": "H1",
+      "nodeId": "2OU-0",
+      "title": "首页 · 对话",
+      "width": 390,
+      "height": 844,
+      "actions": [
+        {
+          "nodeId": "2PA-0",
+          "label": "记录库",
+          "target": "L1"
+        },
+        {
+          "nodeId": "2PE-0",
+          "label": "设置",
+          "target": "M1"
+        },
+        {
+          "nodeId": "2RO-0",
+          "label": "加班晚餐 · 待反馈",
+          "target": "H4"
+        },
+        {
+          "nodeId": "3GA-0",
+          "label": "对话",
+          "choice": {
+            "key": "inputMode",
+            "value": "dialog"
+          }
+        },
+        {
+          "nodeId": "3GC-0",
+          "label": "记录",
+          "target": "H0",
+          "choice": {
+            "key": "inputMode",
+            "value": "record"
+          }
+        },
+        {
+          "nodeId": "2SB-0",
+          "label": "添加材料",
+          "dialogTitle": "添加材料",
+          "choices": [
+            {
+              "label": "图片",
+              "message": "选择 JPEG 或 PNG，单张最多 5 MiB。此导览保留选择入口，未连接系统文件选择器。"
+            },
+            {
+              "label": "链接",
+              "message": "粘贴公开静态页面链接，保存 URL 与内容快照。此导览未抓取网络内容。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        },
+        {
+          "nodeId": "3GO-0",
+          "label": "语音输入",
+          "dialogTitle": "语音输入 · 演示",
+          "choices": [
+            {
+              "label": "模拟听写完成",
+              "setState": {
+                "draft": "今天加班，晚饭想省事一点，预算二十元。"
+              }
+            },
+            {
+              "label": "模拟权限拒绝",
+              "message": "语音权限未开启，可继续键盘输入。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        },
+        {
+          "nodeId": "2SG-0",
+          "label": "发送",
+          "target": "H7",
+          "requiresText": "draft",
+          "enabledStyles": {
+            "opacity": "1",
+            "boxShadow": "4px 4px 10px #C6CCC0, -4px -4px 10px #FFFFFF"
+          }
+        }
+      ],
+      "onEnterState": {
+        "inputMode": "dialog"
+      },
+      "fields": [
+        {
+          "nodeId": "2S9-0",
+          "stateKey": "draft",
+          "label": "输入内容",
+          "initialValue": "今天加班，晚饭想省事一点，预算二十元。"
+        }
+      ],
+      "bindings": [],
+      "jsxFile": "H1.jsx"
+    },
+    {
+      "id": "H0",
+      "nodeId": "3JA-0",
+      "title": "首页 · 记录",
+      "width": 390,
+      "height": 844,
+      "actions": [
+        {
+          "nodeId": "3KC-0",
+          "label": "记录库",
+          "target": "L1"
+        },
+        {
+          "nodeId": "3K7-0",
+          "label": "设置",
+          "target": "M1"
+        },
+        {
+          "nodeId": "3JY-0",
+          "label": "加班晚餐 · 待反馈",
+          "target": "H4"
+        },
+        {
+          "nodeId": "3JQ-0",
+          "label": "对话",
+          "target": "H1",
+          "choice": {
+            "key": "inputMode",
+            "value": "dialog"
+          }
+        },
+        {
+          "nodeId": "3JO-0",
+          "label": "记录",
+          "choice": {
+            "key": "inputMode",
+            "value": "record"
+          }
+        },
+        {
+          "nodeId": "3JS-0",
+          "label": "添加材料",
+          "dialogTitle": "添加材料",
+          "choices": [
+            {
+              "label": "图片",
+              "message": "选择 JPEG 或 PNG，单张最多 5 MiB。此导览保留选择入口，未连接系统文件选择器。"
+            },
+            {
+              "label": "链接",
+              "message": "粘贴公开静态页面链接，保存 URL 与内容快照。此导览未抓取网络内容。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        },
+        {
+          "nodeId": "3JI-0",
+          "label": "语音输入",
+          "dialogTitle": "语音输入 · 演示",
+          "choices": [
+            {
+              "label": "模拟听写完成",
+              "setState": {
+                "draft": "今天加班，晚饭想省事一点，预算二十元。"
+              }
+            },
+            {
+              "label": "模拟权限拒绝",
+              "message": "语音权限未开启，可继续键盘输入。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        },
+        {
+          "nodeId": "3JE-0",
+          "label": "保存记录",
+          "target": "H6",
+          "requiresText": "draft",
+          "enabledStyles": {
+            "opacity": "1",
+            "boxShadow": "4px 4px 10px #C6CCC0, -4px -4px 10px #FFFFFF"
+          }
+        }
+      ],
+      "onEnterState": {
+        "inputMode": "record"
+      },
+      "fields": [
+        {
+          "nodeId": "3JW-0",
+          "stateKey": "draft",
+          "label": "输入内容",
+          "initialValue": "今天加班，晚饭想省事一点，预算二十元。"
+        }
+      ],
+      "bindings": [],
+      "jsxFile": "H0.jsx"
+    },
+    {
+      "id": "H2",
+      "nodeId": "2UV-0",
+      "title": "已保存 · 等待网络",
+      "width": 390,
+      "height": 844,
+      "actions": [
+        {
+          "nodeId": "2VT-0",
+          "label": "记录库",
+          "target": "L1"
+        },
+        {
+          "nodeId": "2VO-0",
+          "label": "设置",
+          "target": "M1"
+        },
+        {
+          "nodeId": "2VC-0",
+          "label": "处理进度",
+          "target": "H7"
+        },
+        {
+          "nodeId": "2XC-0",
+          "label": "重试",
+          "target": "H7"
+        },
+        {
+          "nodeId": "3H8-0",
+          "label": "对话",
+          "choice": {
+            "key": "inputMode",
+            "value": "dialog"
+          }
+        },
+        {
+          "nodeId": "3HA-0",
+          "label": "记录",
+          "choice": {
+            "key": "inputMode",
+            "value": "record"
+          }
+        },
+        {
+          "nodeId": "3H4-0",
+          "label": "添加材料",
+          "dialogTitle": "添加材料",
+          "choices": [
+            {
+              "label": "图片",
+              "message": "选择 JPEG 或 PNG，单张最多 5 MiB。此导览保留选择入口，未连接系统文件选择器。"
+            },
+            {
+              "label": "链接",
+              "message": "粘贴公开静态页面链接，保存 URL 与内容快照。此导览未抓取网络内容。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        },
+        {
+          "nodeId": "3HC-0",
+          "label": "语音输入",
+          "dialogTitle": "语音输入 · 演示",
+          "choices": [
+            {
+              "label": "模拟听写完成",
+              "setState": {
+                "continuation": "今天加班，晚饭想省事一点，预算二十元。"
+              }
+            },
+            {
+              "label": "模拟权限拒绝",
+              "message": "语音权限未开启，可继续键盘输入。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        },
+        {
+          "nodeId": "3HH-0",
+          "label": "提交输入",
+          "targetByState": {
+            "key": "inputMode",
+            "cases": {
+              "record": "H6",
+              "dialog": "H7"
+            }
+          },
+          "requiresText": "continuation",
+          "enabledStyles": {
+            "opacity": "1",
+            "boxShadow": "4px 4px 10px #C6CCC0, -4px -4px 10px #FFFFFF"
+          }
+        }
+      ],
+      "fields": [
+        {
+          "nodeId": "2VA-0",
+          "stateKey": "continuation",
+          "label": "继续补充",
+          "initialValue": "",
+          "placeholder": "继续补充…"
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "2VK-0",
+          "key": "draft"
+        }
+      ],
+      "jsxFile": "H2.jsx"
+    },
+    {
+      "id": "H3",
+      "nodeId": "2XF-0",
+      "title": "对话 · 建议与依据",
+      "width": 390,
+      "height": 844,
+      "actions": [
+        {
+          "nodeId": "2YF-0",
+          "label": "记录库",
+          "target": "L1"
+        },
+        {
+          "nodeId": "2YA-0",
+          "label": "设置",
+          "target": "M1"
+        },
+        {
+          "nodeId": "30B-0",
+          "label": "两次加班晚餐经历",
+          "target": "M3",
+          "rememberReturn": "memory"
+        },
+        {
+          "nodeId": "2XW-0",
+          "label": "记录实际结果",
+          "target": "H4"
+        },
+        {
+          "nodeId": "3HU-0",
+          "label": "对话",
+          "choice": {
+            "key": "inputMode",
+            "value": "dialog"
+          }
+        },
+        {
+          "nodeId": "3HW-0",
+          "label": "记录",
+          "choice": {
+            "key": "inputMode",
+            "value": "record"
+          }
+        },
+        {
+          "nodeId": "3HQ-0",
+          "label": "添加材料",
+          "dialogTitle": "添加材料",
+          "choices": [
+            {
+              "label": "图片",
+              "message": "选择 JPEG 或 PNG，单张最多 5 MiB。此导览保留选择入口，未连接系统文件选择器。"
+            },
+            {
+              "label": "链接",
+              "message": "粘贴公开静态页面链接，保存 URL 与内容快照。此导览未抓取网络内容。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        },
+        {
+          "nodeId": "3HY-0",
+          "label": "语音输入",
+          "dialogTitle": "语音输入 · 演示",
+          "choices": [
+            {
+              "label": "模拟听写完成",
+              "setState": {
+                "continuation": "今天加班，晚饭想省事一点，预算二十元。"
+              }
+            },
+            {
+              "label": "模拟权限拒绝",
+              "message": "语音权限未开启，可继续键盘输入。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        },
+        {
+          "nodeId": "3I3-0",
+          "label": "提交输入",
+          "targetByState": {
+            "key": "inputMode",
+            "cases": {
+              "record": "H6",
+              "dialog": "H7"
+            }
+          },
+          "requiresText": "continuation",
+          "enabledStyles": {
+            "opacity": "1",
+            "boxShadow": "4px 4px 10px #C6CCC0, -4px -4px 10px #FFFFFF"
+          }
+        }
+      ],
+      "fields": [
+        {
+          "nodeId": "2XU-0",
+          "stateKey": "continuation",
+          "label": "继续补充",
+          "initialValue": "",
+          "placeholder": "继续补充…"
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "2Y6-0",
+          "key": "draft"
+        }
+      ],
+      "jsxFile": "H3.jsx"
+    },
+    {
+      "id": "H4",
+      "nodeId": "30R-0",
+      "title": "实际反馈",
+      "width": 390,
+      "height": 844,
+      "actions": [
+        {
+          "nodeId": "31T-0",
+          "label": "返回",
+          "target": "back"
+        },
+        {
+          "nodeId": "31O-0",
+          "label": "设置",
+          "target": "M1"
+        },
+        {
+          "nodeId": "31B-0",
+          "label": "加班晚餐",
+          "target": "L3"
+        },
+        {
+          "nodeId": "318-0",
+          "label": "事项状态",
+          "dialogTitle": "事项状态",
+          "choices": [
+            {
+              "label": "已完成",
+              "setState": {
+                "feedbackDone": "done"
+              }
+            },
+            {
+              "label": "仍在进行",
+              "setState": {
+                "feedbackDone": "ongoing"
+              }
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        },
+        {
+          "nodeId": "33P-0",
+          "label": "保存反馈",
+          "target": "H5"
+        }
+      ],
+      "fields": [
+        {
+          "nodeId": "31K-0",
+          "stateKey": "feedback",
+          "label": "实际体验",
+          "initialValue": "最后吃了热汤面，速度够快，也很舒服。"
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "319-0",
+          "key": "feedbackDone",
+          "textByValue": {
+            "done": "✓  这件事已完成",
+            "ongoing": "这件事仍在进行"
+          }
+        }
+      ],
+      "jsxFile": "H4.jsx"
+    },
+    {
+      "id": "H5",
+      "nodeId": "33Y-0",
+      "title": "反馈已保存",
+      "width": 390,
+      "height": 844,
+      "actions": [
+        {
+          "nodeId": "34O-0",
+          "label": "返回",
+          "target": "back"
+        },
+        {
+          "nodeId": "34J-0",
+          "label": "设置",
+          "target": "M1"
+        },
+        {
+          "nodeId": "346-0",
+          "label": "相关认识",
+          "target": "M3",
+          "rememberReturn": "memory"
+        },
+        {
+          "nodeId": "343-0",
+          "label": "查看记录",
+          "target": "L3"
+        },
+        {
+          "nodeId": "340-0",
+          "label": "回到原对话",
+          "target": "H3"
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "34F-0",
+          "key": "feedback"
+        },
+        {
+          "nodeId": "34C-0",
+          "key": "feedbackDone",
+          "textByValue": {
+            "done": "这件事已完成",
+            "ongoing": "这件事仍在进行"
+          }
+        }
+      ],
+      "jsxFile": "H5.jsx"
+    },
+    {
+      "id": "H6",
+      "nodeId": "36S-0",
+      "title": "记录已保存",
+      "width": 390,
+      "height": 844,
+      "actions": [
+        {
+          "nodeId": "37S-0",
+          "label": "记录库",
+          "target": "L1"
+        },
+        {
+          "nodeId": "37N-0",
+          "label": "设置",
+          "target": "M1"
+        },
+        {
+          "nodeId": "37B-0",
+          "label": "处理进度",
+          "target": "H7"
+        },
+        {
+          "nodeId": "379-0",
+          "label": "查看记录",
+          "target": "L3"
+        },
+        {
+          "nodeId": "3ID-0",
+          "label": "对话",
+          "choice": {
+            "key": "inputMode",
+            "value": "dialog"
+          }
+        },
+        {
+          "nodeId": "3IF-0",
+          "label": "记录",
+          "choice": {
+            "key": "inputMode",
+            "value": "record"
+          }
+        },
+        {
+          "nodeId": "3I9-0",
+          "label": "添加材料",
+          "dialogTitle": "添加材料",
+          "choices": [
+            {
+              "label": "图片",
+              "message": "选择 JPEG 或 PNG，单张最多 5 MiB。此导览保留选择入口，未连接系统文件选择器。"
+            },
+            {
+              "label": "链接",
+              "message": "粘贴公开静态页面链接，保存 URL 与内容快照。此导览未抓取网络内容。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        },
+        {
+          "nodeId": "3IH-0",
+          "label": "语音输入",
+          "dialogTitle": "语音输入 · 演示",
+          "choices": [
+            {
+              "label": "模拟听写完成",
+              "setState": {
+                "continuation": "今天加班，晚饭想省事一点，预算二十元。"
+              }
+            },
+            {
+              "label": "模拟权限拒绝",
+              "message": "语音权限未开启，可继续键盘输入。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        },
+        {
+          "nodeId": "3IM-0",
+          "label": "提交输入",
+          "targetByState": {
+            "key": "inputMode",
+            "cases": {
+              "record": "H6",
+              "dialog": "H7"
+            }
+          },
+          "requiresText": "continuation",
+          "enabledStyles": {
+            "opacity": "1",
+            "boxShadow": "4px 4px 10px #C6CCC0, -4px -4px 10px #FFFFFF"
+          }
+        }
+      ],
+      "onEnterState": {
+        "inputMode": "record"
+      },
+      "fields": [
+        {
+          "nodeId": "377-0",
+          "stateKey": "continuation",
+          "label": "继续补充",
+          "initialValue": "",
+          "placeholder": "继续补充…"
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "37J-0",
+          "key": "draft"
+        }
+      ],
+      "jsxFile": "H6.jsx"
+    },
+    {
+      "id": "H7",
+      "nodeId": "38E-0",
+      "title": "整理中",
+      "width": 390,
+      "height": 844,
+      "actions": [
+        {
+          "nodeId": "394-0",
+          "label": "返回",
+          "target": "back"
+        },
+        {
+          "nodeId": "38Z-0",
+          "label": "设置",
+          "target": "M1"
+        },
+        {
+          "nodeId": "38M-0",
+          "label": "模型与连接",
+          "target": "M6"
+        },
+        {
+          "nodeId": "38J-0",
+          "label": "暂停处理",
+          "target": "H8"
+        },
+        {
+          "nodeId": "38G-0",
+          "label": "返回记录",
+          "target": "L3"
+        }
+      ],
+      "demoTransitions": [
+        {
+          "label": "模拟整理完成",
+          "target": "H3"
+        },
+        {
+          "label": "模拟网络中断",
+          "target": "H2"
+        }
+      ],
+      "bindings": [],
+      "jsxFile": "H7.jsx"
+    },
+    {
+      "id": "H8",
+      "nodeId": "3B0-0",
+      "title": "已暂停",
+      "width": 390,
+      "height": 844,
+      "actions": [
+        {
+          "nodeId": "3BQ-0",
+          "label": "返回",
+          "target": "back"
+        },
+        {
+          "nodeId": "3BL-0",
+          "label": "设置",
+          "target": "M1"
+        },
+        {
+          "nodeId": "3B8-0",
+          "label": "模型与连接",
+          "target": "M6"
+        },
+        {
+          "nodeId": "3B5-0",
+          "label": "继续整理",
+          "target": "H7"
+        },
+        {
+          "nodeId": "3B2-0",
+          "label": "返回记录",
+          "target": "L3"
+        }
+      ],
+      "bindings": [],
+      "jsxFile": "H8.jsx"
+    },
+    {
+      "id": "L1",
+      "title": "记录库 · 时间线",
+      "nodeId": "2QU-0",
+      "width": 390,
+      "height": 844,
+      "description": "按时间回查记录；入口打开同一份记录。",
+      "actions": [
+        {
+          "nodeId": "2W7-0",
+          "label": "返回首页",
+          "target": "H1"
+        },
+        {
+          "nodeId": "2WB-0",
+          "label": "新建记录",
+          "target": "H1"
+        },
+        {
+          "nodeId": "32T-0",
+          "label": "搜索记录",
+          "message": "输入关键词，检索原话、事件与语义标签。"
+        },
+        {
+          "nodeId": "330-0",
+          "label": "时间线",
+          "target": "L1"
+        },
+        {
+          "nodeId": "336-0",
+          "label": "记录本",
+          "message": "生活记录本包含本轮的晚餐与通勤记录。记录本与时间线打开同一份内容。"
+        },
+        {
+          "nodeId": "33C-0",
+          "label": "全部记录",
+          "target": "L1"
+        },
+        {
+          "nodeId": "33E-0",
+          "label": "加班晚餐",
+          "target": "L2"
+        },
+        {
+          "nodeId": "33I-0",
+          "label": "筛选",
+          "target": "L2"
+        },
+        {
+          "nodeId": "35Q-0",
+          "label": "加班晚餐",
+          "target": "L3"
+        },
+        {
+          "nodeId": "368-0",
+          "label": "雨天通勤",
+          "message": "本人记录：多走一站，路上没那么挤。发生日期：2026-11-08。"
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "3O8-0",
+          "textFromState": "tagName",
+          "styleByValue": {
+            "confirmed": {
+              "color": "var(--color-success)"
+            },
+            "manual": {
+              "color": "var(--color-primary)"
+            },
+            "excluded": {
+              "color": "var(--color-danger)"
+            }
+          },
+          "key": "tagStatus"
+        },
+        {
+          "nodeId": "3O9-0",
+          "key": "tagStatus",
+          "textByValue": {
+            "pending": "· 待核对",
+            "confirmed": "· 已确认",
+            "manual": "· 已修改",
+            "excluded": "· 已排除"
+          },
+          "styleByValue": {
+            "confirmed": {
+              "color": "var(--color-success)"
+            },
+            "manual": {
+              "color": "var(--color-primary)"
+            },
+            "excluded": {
+              "color": "var(--color-danger)"
+            }
+          }
+        },
+        {
+          "nodeId": "361-0",
+          "key": "tagStatus",
+          "styleByValue": {
+            "confirmed": {
+              "backgroundColor": "var(--color-success-soft)"
+            },
+            "manual": {
+              "backgroundColor": "var(--color-primary-soft)"
+            },
+            "excluded": {
+              "backgroundColor": "var(--color-danger-soft)"
+            }
+          },
+          "visibleByValue": {
+            "pending": true,
+            "confirmed": true,
+            "manual": true,
+            "excluded": false
+          }
+        }
+      ],
+      "jsxFile": "L1.jsx"
+    },
+    {
+      "id": "L2",
+      "title": "记录库 · 组合标签",
+      "nodeId": "2R6-0",
+      "width": 390,
+      "height": 844,
+      "description": "本人、近七天、加班晚餐与省事的组合结果；包括待核对标签。",
+      "actions": [
+        {
+          "nodeId": "2WG-0",
+          "label": "返回时间线",
+          "target": "L1"
+        },
+        {
+          "nodeId": "2WK-0",
+          "label": "清空筛选",
+          "target": "L1"
+        },
+        {
+          "nodeId": "39V-0",
+          "label": "在结果中搜索",
+          "message": "输入关键词后，在本人、近七天与当前标签范围内检索。"
+        },
+        {
+          "nodeId": "3A4-0",
+          "label": "人物：本人",
+          "message": "当前人物范围：本人。"
+        },
+        {
+          "nodeId": "3AB-0",
+          "label": "时间：近七天",
+          "message": "当前发生时间范围：2026-11-03 至 2026-11-09。"
+        },
+        {
+          "nodeId": "3AH-0",
+          "label": "取消加班晚餐筛选",
+          "message": "取消这一条件后，保留“省事”、人物与时间范围。"
+        },
+        {
+          "nodeId": "3AM-0",
+          "label": "取消省事筛选",
+          "message": "取消这一条件后，保留“加班晚餐”、人物与时间范围。"
+        },
+        {
+          "nodeId": "3AV-0",
+          "label": "包含待核对标签",
+          "message": "当前结果包含“省事”的待核对指派。关闭后仅按有效标签匹配。"
+        },
+        {
+          "nodeId": "3C7-0",
+          "label": "加班晚餐",
+          "target": "L3"
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "3OC-0",
+          "textFromState": "tagName",
+          "styleByValue": {
+            "confirmed": {
+              "color": "var(--color-success)"
+            },
+            "manual": {
+              "color": "var(--color-primary)"
+            },
+            "excluded": {
+              "color": "var(--color-danger)"
+            }
+          },
+          "key": "tagStatus"
+        },
+        {
+          "nodeId": "3OD-0",
+          "key": "tagStatus",
+          "textByValue": {
+            "pending": "· 待核对",
+            "confirmed": "· 已确认",
+            "manual": "· 已修改",
+            "excluded": "· 已排除"
+          },
+          "styleByValue": {
+            "confirmed": {
+              "color": "var(--color-success)"
+            },
+            "manual": {
+              "color": "var(--color-primary)"
+            },
+            "excluded": {
+              "color": "var(--color-danger)"
+            }
+          }
+        },
+        {
+          "nodeId": "3CF-0",
+          "key": "tagStatus",
+          "styleByValue": {
+            "confirmed": {
+              "backgroundColor": "var(--color-success-soft)"
+            },
+            "manual": {
+              "backgroundColor": "var(--color-primary-soft)"
+            },
+            "excluded": {
+              "backgroundColor": "var(--color-danger-soft)"
+            }
+          },
+          "visibleByValue": {
+            "pending": true,
+            "confirmed": true,
+            "manual": true,
+            "excluded": false
+          }
+        },
+        {
+          "nodeId": "3C7-0",
+          "key": "tagStatus",
+          "visibleByValue": {
+            "pending": true,
+            "confirmed": true,
+            "manual": false,
+            "excluded": false
+          }
+        },
+        {
+          "nodeId": "3C4-0",
+          "key": "tagStatus",
+          "textByValue": {
+            "pending": "找到一条记录",
+            "confirmed": "找到一条记录",
+            "manual": "没有匹配记录",
+            "excluded": "没有匹配记录"
+          }
+        },
+        {
+          "nodeId": "3C5-0",
+          "key": "tagStatus",
+          "visibleByValue": {
+            "pending": true,
+            "confirmed": true,
+            "manual": false,
+            "excluded": false
+          }
+        }
+      ],
+      "jsxFile": "L2.jsx"
+    },
+    {
+      "id": "L3",
+      "title": "加班晚餐",
+      "nodeId": "2RD-0",
+      "width": 390,
+      "height": 844,
+      "description": "同一记录中的原话、AI 建议、实际反馈和标签。",
+      "actions": [
+        {
+          "nodeId": "2WP-0",
+          "label": "返回记录库",
+          "target": "back"
+        },
+        {
+          "nodeId": "2WT-0",
+          "label": "编辑记录",
+          "message": "可编辑标题、原话和记录本归属；保存形成新修订。"
+        },
+        {
+          "nodeId": "3E4-0",
+          "label": "加班晚餐标签",
+          "target": "L2"
+        },
+        {
+          "nodeId": "3E8-0",
+          "label": "核对省事标签",
+          "target": "L4",
+          "rememberReturn": "tags"
+        },
+        {
+          "nodeId": "3EB-0",
+          "label": "继续对话",
+          "target": "H3"
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "3OG-0",
+          "textFromState": "tagName",
+          "styleByValue": {
+            "confirmed": {
+              "color": "var(--color-success)"
+            },
+            "manual": {
+              "color": "var(--color-primary)"
+            },
+            "excluded": {
+              "color": "var(--color-danger)"
+            }
+          },
+          "key": "tagStatus"
+        },
+        {
+          "nodeId": "3OH-0",
+          "key": "tagStatus",
+          "textByValue": {
+            "pending": "· 待核对",
+            "confirmed": "· 已确认",
+            "manual": "· 已修改",
+            "excluded": "· 已排除"
+          },
+          "styleByValue": {
+            "confirmed": {
+              "color": "var(--color-success)"
+            },
+            "manual": {
+              "color": "var(--color-primary)"
+            },
+            "excluded": {
+              "color": "var(--color-danger)"
+            }
+          }
+        },
+        {
+          "nodeId": "3E8-0",
+          "key": "tagStatus",
+          "styleByValue": {
+            "confirmed": {
+              "backgroundColor": "var(--color-success-soft)"
+            },
+            "manual": {
+              "backgroundColor": "var(--color-primary-soft)"
+            },
+            "excluded": {
+              "backgroundColor": "var(--color-danger-soft)"
+            }
+          },
+          "visibleByValue": {
+            "pending": true,
+            "confirmed": true,
+            "manual": true,
+            "excluded": false
+          }
+        }
+      ],
+      "jsxFile": "L3.jsx"
+    },
+    {
+      "id": "L4",
+      "title": "标签依据与纠正",
+      "nodeId": "2RG-0",
+      "width": 390,
+      "height": 844,
+      "description": "省事标签的原话依据、起源、来源与算法版本；人工确认和排除。",
+      "actions": [
+        {
+          "nodeId": "3FO-0",
+          "label": "关闭标签依据",
+          "target": "return:tags"
+        },
+        {
+          "nodeId": "3G3-0",
+          "label": "来源与算法",
+          "toggleState": "tagDetailsOpen"
+        },
+        {
+          "nodeId": "3GU-0",
+          "label": "确认标签",
+          "target": "return:tags",
+          "message": "已确认“省事”标签。",
+          "setState": {
+            "tagStatus": "confirmed"
+          }
+        },
+        {
+          "nodeId": "3GY-0",
+          "label": "改标签",
+          "message": "已保存标签修改。",
+          "prompt": {
+            "title": "修改标签",
+            "stateKey": "tagName",
+            "initialValue": "省事",
+            "confirmLabel": "保存"
+          },
+          "setState": {
+            "tagStatus": "manual"
+          },
+          "target": "return:tags"
+        },
+        {
+          "nodeId": "3H0-0",
+          "label": "从此记录排除",
+          "target": "return:tags",
+          "message": "已从这条记录排除“省事”；后续自动整理保留该决定。",
+          "setState": {
+            "tagStatus": "excluded"
+          }
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "3OK-0",
+          "textFromState": "tagName",
+          "styleByValue": {
+            "confirmed": {
+              "color": "var(--color-success)"
+            },
+            "manual": {
+              "color": "var(--color-primary)"
+            },
+            "excluded": {
+              "color": "var(--color-danger)"
+            }
+          },
+          "key": "tagStatus"
+        },
+        {
+          "nodeId": "3OL-0",
+          "key": "tagStatus",
+          "textByValue": {
+            "pending": "· 待核对",
+            "confirmed": "· 已确认",
+            "manual": "· 已修改",
+            "excluded": "· 已排除"
+          },
+          "styleByValue": {
+            "confirmed": {
+              "color": "var(--color-success)"
+            },
+            "manual": {
+              "color": "var(--color-primary)"
+            },
+            "excluded": {
+              "color": "var(--color-danger)"
+            }
+          }
+        },
+        {
+          "nodeId": "3FT-0",
+          "key": "tagStatus",
+          "styleByValue": {
+            "confirmed": {
+              "backgroundColor": "var(--color-success-soft)"
+            },
+            "manual": {
+              "backgroundColor": "var(--color-primary-soft)"
+            },
+            "excluded": {
+              "backgroundColor": "var(--color-danger-soft)"
+            }
+          }
+        },
+        {
+          "nodeId": "3GF-0",
+          "key": "tagDetailsOpen",
+          "visibleByValue": {
+            "true": true,
+            "false": false
+          }
+        },
+        {
+          "nodeId": "3G5-0",
+          "key": "tagDetailsOpen",
+          "styleByValue": {
+            "true": {
+              "transform": "rotate(180deg)"
+            },
+            "false": {
+              "transform": "rotate(0deg)"
+            }
+          }
+        },
+        {
+          "nodeId": "3FX-0",
+          "key": "tagStatus",
+          "textByValue": {
+            "pending": "自动整理",
+            "confirmed": "自动整理",
+            "manual": "本人修订",
+            "excluded": "自动整理"
+          }
+        },
+        {
+          "nodeId": "3GG-0",
+          "key": "tagStatus",
+          "textByValue": {
+            "manual": "本人修改 · 保留原始依据"
+          }
+        },
+        {
+          "nodeId": "3GL-0",
+          "key": "tagStatus",
+          "textByValue": {
+            "manual": "初始标签算法"
+          }
+        }
+      ],
+      "jsxFile": "L4.jsx"
+    },
+    {
+      "id": "M1",
+      "title": "设置",
+      "nodeId": "2OR-0",
+      "width": 390,
+      "height": 1397,
+      "description": "设置卡片内直接切换自动整理、推断辅助与文字大小；模型和连接共用配置页，外观与关于分开。",
+      "actions": [
+        {
+          "nodeId": "2PY-0",
+          "label": "返回",
+          "target": "back"
+        },
+        {
+          "nodeId": "2ZK-0",
+          "label": "模型",
+          "target": "M6"
+        },
+        {
+          "nodeId": "30G-0",
+          "label": "连接",
+          "target": "M6"
+        },
+        {
+          "nodeId": "3VG-0",
+          "label": "处理",
+          "target": "H7"
+        },
+        {
+          "nodeId": "2YU-0",
+          "label": "记忆与偏好",
+          "target": "M2"
+        },
+        {
+          "nodeId": "2Z9-0",
+          "label": "标签与规则",
+          "message": "人工排除：零条\n自动标签：场景、主题、行为\n事项触发规则：未开启"
+        },
+        {
+          "nodeId": "300-0",
+          "label": "资料库与人物",
+          "message": "资料库：我的叠石\n位置：本机个人库\n所有者：本人"
+        },
+        {
+          "nodeId": "326-0",
+          "label": "备份与恢复",
+          "target": "M7"
+        },
+        {
+          "nodeId": "32H-0",
+          "label": "关于叠石",
+          "message": "PebblePile · 叠石\n原型版\n项目与 Iconoir：MIT\n字体许可单独管理"
+        },
+        {
+          "nodeId": "3VY-0",
+          "label": "自动整理",
+          "toggle": {
+            "key": "autoOrganize"
+          }
+        },
+        {
+          "nodeId": "3W6-0",
+          "label": "推断辅助",
+          "toggle": {
+            "key": "inferenceAssist"
+          }
+        },
+        {
+          "nodeId": "3WW-0",
+          "label": "标准字号",
+          "choice": {
+            "key": "textSize",
+            "value": "standard"
+          }
+        },
+        {
+          "nodeId": "3WY-0",
+          "label": "较大字号",
+          "choice": {
+            "key": "textSize",
+            "value": "large"
+          }
+        }
+      ],
+      "viewportHeight": 844,
+      "bindings": [
+        {
+          "nodeId": "3W2-0",
+          "key": "autoOrganize",
+          "textByValue": {
+            "true": "已开启",
+            "false": "已关闭"
+          }
+        },
+        {
+          "nodeId": "3W3-0",
+          "key": "autoOrganize",
+          "styleByValue": {
+            "true": {
+              "backgroundColor": "var(--color-primary)",
+              "justifyContent": "flex-end"
+            },
+            "false": {
+              "backgroundColor": "var(--color-text-disabled)",
+              "justifyContent": "flex-start"
+            }
+          }
+        },
+        {
+          "nodeId": "3WE-0",
+          "key": "inferenceAssist",
+          "textByValue": {
+            "true": "已开启",
+            "false": "已关闭"
+          }
+        },
+        {
+          "nodeId": "3WF-0",
+          "key": "inferenceAssist",
+          "styleByValue": {
+            "true": {
+              "backgroundColor": "var(--color-primary)",
+              "justifyContent": "flex-end"
+            },
+            "false": {
+              "backgroundColor": "var(--color-text-disabled)",
+              "justifyContent": "flex-start"
+            }
+          }
+        }
+      ],
+      "jsxFile": "M1.jsx"
+    },
+    {
+      "id": "M2",
+      "title": "记忆与偏好",
+      "nodeId": "2OS-0",
+      "width": 390,
+      "height": 844,
+      "description": "推断辅助开启；一条由两次独立经历形成的条件偏好。",
+      "actions": [
+        {
+          "nodeId": "355-0",
+          "label": "加班时，晚饭优先省事",
+          "target": "M3",
+          "rememberReturn": "memory"
+        },
+        {
+          "nodeId": "2QK-0",
+          "label": "返回",
+          "target": "back"
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "356-0",
+          "key": "memoryUpdated",
+          "textByValue": {
+            "false": "根据经历推断",
+            "true": "本人明确设置"
+          }
+        },
+        {
+          "nodeId": "357-0",
+          "key": "memoryUpdated",
+          "textByValue": {
+            "false": "加班时，晚饭优先省事",
+            "true": "{committedMemoryCondition}"
+          }
+        },
+        {
+          "nodeId": "359-0",
+          "key": "memoryUpdated",
+          "textByValue": {
+            "false": "两次独立经历 · 饮食",
+            "true": "本人明确条件 · 饮食"
+          }
+        },
+        {
+          "nodeId": "33V-0",
+          "key": "inferenceAssist",
+          "textByValue": {
+            "true": "已开启",
+            "false": "已关闭"
+          }
+        }
+      ],
+      "jsxFile": "M2.jsx"
+    },
+    {
+      "id": "M3",
+      "title": "认识与依据",
+      "nodeId": "2OT-0",
+      "width": 390,
+      "height": 844,
+      "description": "条件偏好及11/05、11/07两次本人实际经历；当前使用回到L3。",
+      "actions": [
+        {
+          "nodeId": "39H-0",
+          "label": "查看 11/05 原话",
+          "message": "2026 年 11 月 05 日的本人记录：\n“加班后点了热汤面，省下做饭和洗锅的时间。”\n这条认识采用两次独立实际经历作为依据。"
+        },
+        {
+          "nodeId": "39O-0",
+          "label": "查看 11/07 原话",
+          "message": "2026 年 11 月 07 日的本人记录：\n“加班后选了楼下简餐，很快吃上饭，省心。”\n这条认识采用两次独立实际经历作为依据。"
+        },
+        {
+          "nodeId": "3A1-0",
+          "label": "查看本次原记录",
+          "target": "L3"
+        },
+        {
+          "nodeId": "3AJ-0",
+          "label": "修改条件",
+          "target": "M4"
+        },
+        {
+          "nodeId": "2R8-0",
+          "label": "返回",
+          "target": "back"
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "386-0",
+          "key": "memoryUpdated",
+          "textByValue": {
+            "false": "根据经历推断 · 正在使用",
+            "true": "本人明确设置 · 正在使用"
+          }
+        },
+        {
+          "nodeId": "387-0",
+          "key": "memoryUpdated",
+          "textByValue": {
+            "false": "加班时，晚饭优先省事",
+            "true": "{committedMemoryCondition}"
+          }
+        },
+        {
+          "nodeId": "388-0",
+          "key": "memoryUpdated",
+          "textByValue": {
+            "false": "适用条件：加班后的晚餐选择",
+            "true": "作用范围：以后按此条件"
+          }
+        },
+        {
+          "nodeId": "38B-0",
+          "key": "memoryUpdated",
+          "textByValue": {
+            "false": "依据",
+            "true": "原推断依据"
+          }
+        }
+      ],
+      "jsxFile": "M3.jsx"
+    },
+    {
+      "id": "M4",
+      "title": "纠正这条认识",
+      "nodeId": "2OV-0",
+      "width": 390,
+      "height": 844,
+      "description": "纠正作用范围选择与变更影响确认；仅本次和长期分别提交。",
+      "actions": [
+        {
+          "nodeId": "3D7-0",
+          "label": "仅本次",
+          "setState": {
+            "memoryScope": "once"
+          },
+          "choice": {
+            "key": "memoryScope",
+            "value": "once"
+          }
+        },
+        {
+          "nodeId": "3D9-0",
+          "label": "以后按此条件",
+          "setState": {
+            "memoryScope": "future"
+          },
+          "choice": {
+            "key": "memoryScope",
+            "value": "future"
+          }
+        },
+        {
+          "nodeId": "3DK-0",
+          "label": "取消修改",
+          "target": "M3"
+        },
+        {
+          "nodeId": "3DM-0",
+          "label": "确认修改",
+          "targetByState": {
+            "key": "memoryScope",
+            "cases": {
+              "once": "return:memory",
+              "future": "M5"
+            }
+          },
+          "messageByState": {
+            "key": "memoryScope",
+            "cases": {
+              "once": "仅本次调整，长期偏好保持原设置。"
+            }
+          },
+          "requiresText": "memoryCondition"
+        },
+        {
+          "nodeId": "2SM-0",
+          "label": "返回",
+          "target": "back"
+        }
+      ],
+      "fields": [
+        {
+          "nodeId": "3D2-0",
+          "stateKey": "memoryCondition",
+          "label": "适用条件",
+          "initialValue": "只在工作日加班时优先省事"
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "3DE-0",
+          "key": "memoryScope",
+          "textByValue": {
+            "future": "旧推断立即停用，新条件作为本人明确设置。",
+            "once": "只调整当前晚餐，长期偏好保持原设置。"
+          }
+        },
+        {
+          "nodeId": "3DF-0",
+          "key": "memoryScope",
+          "textByValue": {
+            "future": "保留原记录与推断历史，相关认识继续整理。",
+            "once": "本次条件随当前对话保存。"
+          }
+        },
+        {
+          "nodeId": "3CT-0",
+          "key": "memoryUpdated",
+          "textByValue": {
+            "false": "原认识：加班时，晚饭优先省事",
+            "true": "原认识：{committedMemoryCondition}"
+          }
+        }
+      ],
+      "jsxFile": "M4.jsx"
+    },
+    {
+      "id": "M5",
+      "title": "修改已生效",
+      "nodeId": "2OW-0",
+      "width": 390,
+      "height": 844,
+      "description": "本人明确条件已生效，旧推断停用，相关认识重算；返回来源位置。",
+      "actions": [
+        {
+          "nodeId": "3F7-0",
+          "label": "返回原对话或设置",
+          "target": "return:memory",
+          "setState": {
+            "memoryUpdated": true
+          },
+          "setStateFrom": {
+            "committedMemoryCondition": "memoryCondition"
+          }
+        },
+        {
+          "nodeId": "2U5-0",
+          "label": "返回",
+          "target": "return:memory",
+          "setState": {
+            "memoryUpdated": true
+          },
+          "setStateFrom": {
+            "committedMemoryCondition": "memoryCondition"
+          }
+        }
+      ],
+      "bindings": [
+        {
+          "nodeId": "3EG-0",
+          "textFromState": "memoryCondition"
+        },
+        {
+          "nodeId": "3EH-0",
+          "key": "memoryScope",
+          "textByValue": {
+            "future": "作用范围：以后按此条件",
+            "once": "作用范围：仅本次"
+          }
+        }
+      ],
+      "jsxFile": "M5.jsx"
+    },
+    {
+      "id": "M6",
+      "title": "模型与连接",
+      "nodeId": "40M-0",
+      "width": 390,
+      "height": 844,
+      "viewportHeight": 844,
+      "description": "模型服务配置与客户端授权范围；示例配置仅在导览中保存。",
+      "actions": [
+        {
+          "nodeId": "41I-0",
+          "label": "返回",
+          "target": "back"
+        },
+        {
+          "nodeId": "43C-0",
+          "label": "保存配置",
+          "message": "模型配置已保存（演示）。",
+          "requiresText": "modelName"
+        },
+        {
+          "nodeId": "43O-0",
+          "label": "添加连接",
+          "dialogTitle": "连接授权",
+          "choices": [
+            {
+              "label": "本机命令行 · 只读当前记录",
+              "message": "授权范围：当前记录的结构化内容；不含原始附件。此原型仅展示授权范围。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        }
+      ],
+      "fields": [
+        {
+          "nodeId": "433-0",
+          "stateKey": "modelEndpoint",
+          "label": "服务地址",
+          "initialValue": "https://api.example.com/v1"
+        },
+        {
+          "nodeId": "438-0",
+          "stateKey": "modelName",
+          "label": "模型名称",
+          "initialValue": "example-model"
+        }
+      ],
+      "bindings": [],
+      "jsxFile": "M6.jsx"
+    },
+    {
+      "id": "M7",
+      "title": "备份与恢复",
+      "nodeId": "40N-0",
+      "width": 390,
+      "height": 844,
+      "viewportHeight": 844,
+      "description": "资料库备份范围与恢复校验预览，原型不读写真实备份。",
+      "actions": [
+        {
+          "nodeId": "424-0",
+          "label": "返回",
+          "target": "back"
+        },
+        {
+          "nodeId": "444-0",
+          "label": "创建备份",
+          "message": "备份范围：当前资料库的记录、附件、标签修订、认识与设置。原型不生成真实备份文件。"
+        },
+        {
+          "nodeId": "44M-0",
+          "label": "选择备份",
+          "dialogTitle": "备份校验",
+          "choices": [
+            {
+              "label": "查看通过校验的备份",
+              "dialogTitle": "恢复到新资料库",
+              "message": "校验通过（演示）。\n恢复内容：记录、附件、标签修订、认识与设置。\n当前资料库保留。"
+            },
+            {
+              "label": "查看校验失败",
+              "message": "备份校验失败，当前资料库保持原样。"
+            },
+            {
+              "label": "取消"
+            }
+          ]
+        }
+      ],
+      "bindings": [],
+      "jsxFile": "M7.jsx"
+    }
+  ]
+}
