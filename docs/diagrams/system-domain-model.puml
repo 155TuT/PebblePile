@@ -1,0 +1,65 @@
+@startuml
+!include style.iuml
+top to bottom direction
+abstract class KnowledgeItem {
+  id : Identifier
+  subjectId : Identifier
+  kind : String
+  useEnabled : Boolean
+}
+class Habit
+class Preference
+class KnowledgeVersion {
+  origin : explicit | inferred
+  status : String
+  conditions : StructuredData
+  statisticsOrParameters : StructuredData
+}
+class EvidenceLink {
+  polarity : support | oppose
+  scope : StructuredData
+}
+class Evidence
+class ModelSnapshot {
+  dataRevision : Integer
+  processedThrough : Integer
+  algorithmVersion : String
+  state : String
+}
+class SnapshotItem
+class Record
+class Goal {
+  deadline : Timestamp
+  executor : String
+  status : String
+}
+class Decision {
+  context : StructuredData
+  snapshotId : Identifier
+}
+class DecisionOption {
+  displayOrder : Integer
+  features : StructuredData
+  resourceVersion : Identifier
+}
+class Outcome {
+  initiator : String
+  observedAt : Timestamp
+  receipt : StructuredData
+  userFeedback : StructuredData
+}
+KnowledgeItem <|-- Habit
+KnowledgeItem <|-- Preference
+KnowledgeItem "1" *-- "1..*" KnowledgeVersion
+KnowledgeVersion "1" -- "0..*" EvidenceLink
+Evidence "1" -- "0..*" EvidenceLink
+ModelSnapshot "1" *-- "0..*" SnapshotItem
+KnowledgeVersion "1" -- "0..*" SnapshotItem
+Goal "1" -- "0..*" Decision
+Record "1" -- "0..*" Goal : 事项目标
+ModelSnapshot "1" -- "0..*" Decision
+Decision "1" *-- "0..*" DecisionOption
+Goal "0..1" -- "0..*" Outcome
+Decision "0..1" -- "0..*" Outcome
+EvidenceLink -[hidden]down-> ModelSnapshot
+@enduml

@@ -1,0 +1,49 @@
+@startuml
+!include style.iuml
+left to right direction
+actor "资料库所有者" as User
+actor "系统入口" as OS
+actor "外部 Agent\n扩展" as External
+actor "模型运行时 / 提供方" as Provider
+rectangle "PebblePile 叠石" {
+  usecase "UC01 对话与记录" as U1
+  usecase "UC02 整理标签、事件与证据" as U2
+  usecase "UC03 管理记忆与偏好\n设置 / 回答旁依据" as U3
+  usecase "UC04 跟进事项" as U4
+  usecase "UC05 补记结果与体验" as U5
+  usecase "UC06 纠正 / 停用 / 删除" as U6
+  usecase "UC07 管理处理任务" as U7
+  usecase "UC08 备份与恢复" as U8
+  usecase "UC09 管理模型与授权" as U9
+  usecase "UC10 浏览与整理记录库\n时间线 / 记录本 / 语义标签" as U10
+  usecase "按范围查询有效上下文" as Query
+  usecase "核对人物、时间与解释" as Check
+}
+User -- U1
+User -- U3
+User -- U4
+User -- U5
+User -- U6
+User -- U7
+User -- U8
+User -- U9
+User -- U10
+User -- Check
+OS -- U1
+OS -- Query
+External -- U1
+External -- Query
+External -- U5
+Provider -- U2
+Provider -- U4
+U4 ..> Query : <<include>>
+Check ..> U2 : <<extend>>\n[存在关键歧义]
+note bottom of U1
+记录先完成持久保存，整理按设置或本次请求启动。
+对话、标签与进展回到同一记录。
+end note
+note bottom of External
+访问按来源、人物和工具权限授权。
+本人明确设置与删除使用独立权限。
+end note
+@enduml

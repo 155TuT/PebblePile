@@ -1,0 +1,35 @@
+@startuml
+!include style.iuml
+hide footbox
+autonumber
+actor "用户" as User
+participant "CoreAPI" as API
+database "Repository" as DB
+participant "JobScheduler" as Job
+participant "ContextService" as Context
+User -> API : revise_memory / revise_tags\n(opId, baseRevision, patch)
+API -> DB : 查操作回执与当前修订
+alt 相同请求已提交
+  DB --> API : 原回执
+  API --> User : 原影响范围与修订
+else 基准修订冲突
+  API --> User : 当前修订、冲突位置与待保留输入
+else 可提交
+  critical 同一写事务
+    API -> DB : 写入新版本或标签人工覆盖\n撤回依赖旧输入的自动标签与受影响认识
+    API -> DB : 按影响发布轻量快照，标记待重算\n使标签索引 / 上下文失效，作废旧输入任务
+    API -> DB : 排入局部重算，增加修订并保存回执
+  end
+  API --> User : 已纠正、影响范围、重算任务
+end
+User -> Context : query_context(当前情境)
+Context -> DB : 同一读事务核查有效认识与快照
+DB --> Context : 有效部分、最新修订、重算进度
+Context --> User : 有效依据与“正在更新”状态
+Job -> DB : 读取新证据与人工覆盖，重算后校验发布
+note over DB, Context
+删除沿同一依赖路径处理，并加入无正文删除标记；
+正文、附件和派生副本的物理清理独立报告进度。
+标签纠正保留来源与事件各自版本；事实纠正走对应对象流程。
+end note
+@enduml

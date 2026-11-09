@@ -1,0 +1,58 @@
+@startuml
+!include style.iuml
+top to bottom direction
+class Library {
+  id : Identifier
+  revision : Integer
+  authorityInstanceId : Identifier
+}
+class Subject {
+  id : Identifier
+  identityStatus : String
+}
+class Source {
+  id : Identifier
+  ownerRecordId : Identifier
+  currentVersion : Integer
+}
+class SourceVersion {
+  version : Integer
+  body : String
+  capturedAt : Timestamp
+}
+class Event {
+  id : Identifier
+  currentVersion : Integer
+}
+class EventVersion {
+  occurredAt : Timestamp
+  timePrecision : String
+  observationType : String
+  context : StructuredData
+}
+class EventSource
+class ResourceVersion {
+  schemaRef : String
+  payload : StructuredData
+}
+class Evidence {
+  dimension : String
+  sourceSpan : StructuredData
+  status : String
+}
+Library "1" o-- "0..*" Subject
+Library "1" o-- "0..*" Source
+Source "1" *-- "1..*" SourceVersion
+Event "1" *-- "1..*" EventVersion
+Subject "1" -- "0..*" EventVersion : 经历者
+Subject "0..1" -- "0..*" SourceVersion : 记录者
+EventVersion "1" -- "1..*" EventSource
+SourceVersion "1" -- "0..*" EventSource
+EventVersion "0..*" -- "0..*" ResourceVersion : 精确使用版本
+EventSource "1" -- "0..*" Evidence : 来源位置
+note bottom of Event
+同一真实经历使用同一稳定 Event.id。
+事件合并保存别名与来源关系，独立计数使用归并后的标识。
+全部实体限定在 Library 内。
+end note
+@enduml

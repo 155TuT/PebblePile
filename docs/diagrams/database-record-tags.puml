@@ -1,0 +1,94 @@
+@startuml
+!include style.iuml
+title 图 6 · 记录组织与语义标签
+top to bottom direction
+hide circle
+skinparam linetype ortho
+
+entity "记录本 Notebook\nnotebooks" as Notebook {
+  * id
+  --
+  name / sort_order
+}
+
+entity "记录 Record\nrecords" as Record {
+  * id
+  --
+  notebook_id / title / status
+  revision / last_activity_at
+}
+
+entity "记录材料 RecordSource\nrecord_sources" as RecordSource {
+  * record_id + source_id + source_version
+  --
+  role / display_order
+}
+
+entity "来源版本 SourceVersion\nsource_versions" as SourceVersion {
+  * source_id + version
+}
+
+entity "记录事件 RecordEvent\nrecord_events" as RecordEvent {
+  * record_id + event_id + event_version
+}
+
+entity "事件版本 EventVersion\nevent_versions" as EventVersion {
+  * event_id + version
+}
+
+entity "规范标签 Tag\ntags" as Tag {
+  * id
+  --
+  namespace / kind / canonical_key
+  display_name / merged_into_id
+}
+
+entity "标签别名 TagAlias\ntag_aliases" as TagAlias {
+  * namespace + kind + alias_key
+  --
+  tag_id
+}
+
+entity "标注 TagAssignment\ntag_assignments" as TagAssignment {
+  * id
+  --
+  record_id + target_revision ?
+  event_id + event_version ?
+  origin / confidence / state / revision
+}
+
+entity "标注依据 TagAssignmentInput\ntag_assignment_inputs" as TagAssignmentInput {
+  * assignment_id + input_key
+  --
+  source_id + source_version ?
+  event_id + event_version ?
+  span
+}
+
+entity "算法清单 AlgorithmManifest\nalgorithm_manifests" as AlgorithmManifest {
+  * id
+  --
+  version / config / inference_config
+}
+
+Notebook |o--o{ Record
+Record ||--o{ RecordSource
+SourceVersion ||--o{ RecordSource
+Record ||--o{ RecordEvent
+EventVersion ||--o{ RecordEvent
+Tag ||--o{ TagAlias
+Tag ||--o{ TagAssignment
+Record |o--o{ TagAssignment : 记录目标
+EventVersion |o--o{ TagAssignment : 事件目标
+AlgorithmManifest |o--o{ TagAssignment
+TagAssignment ||--o{ TagAssignmentInput
+SourceVersion |o--o{ TagAssignmentInput : 来源依据
+EventVersion |o--o{ TagAssignmentInput : 事件依据
+
+legend bottom
+  每次标注选择记录或事件目标；一条依据选择来源或事件版本。
+  Agent 与本地算法提出语义标签，人工确认或排除优先。
+  标签用于组织、检索和已启用规则匹配；执行仍检查权限与预算。
+  同名实体跨图共用，全部关联限定同一资料库。
+endlegend
+@enduml

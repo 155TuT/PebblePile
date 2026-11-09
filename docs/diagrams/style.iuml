@@ -1,0 +1,26 @@
+skinparam backgroundColor #FFFFFF
+skinparam defaultFontName Microsoft YaHei
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam roundcorner 10
+skinparam ArrowColor #536E64
+skinparam LineColor #536E64
+skinparam defaultTextAlignment center
+skinparam packageStyle rectangle
+skinparam classAttributeIconSize 0
+skinparam componentStyle rectangle
+skinparam usecaseBackgroundColor #EFF4EF
+skinparam usecaseBorderColor #60776C
+skinparam classBackgroundColor #F6F8F4
+skinparam classBorderColor #60776C
+skinparam objectBackgroundColor #EFF4EF
+skinparam objectBorderColor #60776C
+skinparam componentBackgroundColor #EFF4EF
+skinparam componentBorderColor #60776C
+skinparam activityBackgroundColor #EFF4EF
+skinparam activityBorderColor #60776C
+skinparam sequenceParticipantBackgroundColor #EFF4EF
+skinparam sequenceParticipantBorderColor #60776C
+skinparam noteBackgroundColor #FAF6EB
+skinparam noteBorderColor #BCAD8C
+hide empty members

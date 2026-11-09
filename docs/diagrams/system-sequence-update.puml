@@ -1,0 +1,56 @@
+@startuml
+!include style.iuml
+hide footbox
+autonumber
+participant "JobScheduler" as Job
+participant "MemoryService" as Memory
+participant "TaggingService" as Tags
+database "Repository" as DB
+participant "InferencePort" as Model
+participant "ModelUpdater" as Update
+Job -> DB : 取得任务租约、输入版本与预算
+DB --> Job : 输入清单、基准修订、调用记录
+Job -> Memory : extract(job, inputVersions)
+Memory -> DB : 事务预留预算、保存调用意图
+Memory -> Model : 按场景结构抽取获准材料
+Model --> Memory : 候选事件、语义标签、评价及原文位置
+Memory -> Memory : 校验结构、人物、引用与观察类型
+Memory -> Tags : 归一分类候选与规则匹配标签
+Tags -> DB : 读取词表、别名和人工覆盖
+DB --> Tags : 规范词、确认与排除、关联修订
+Tags --> Memory : 标签候选、依据版本与核对状态
+alt 需要核对或输出无效
+  Memory -> DB : 保存待核对 / 失败检查点
+else 校验通过
+  critical 抽取阶段短写事务
+    Memory -> DB : 重查输入、授权、租约、取消及修订
+    alt 全部有效
+      Memory -> DB : 保存事件、标签关联、依据与阶段检查点
+    else 依赖已变化
+      break 停止本次尝试
+        Memory -> DB : 标记输入过期，保留已提交检查点
+      end
+    end
+  end
+  Memory -> Update : 更新受影响人物、条件和维度
+  Update -> DB : 读取独立事件、支持证据与反例
+  DB --> Update : 有效样本与算法 / 特征版本
+  Update -> Update : 统计或增量更新，形成候选快照
+  critical 短写事务
+    Update -> DB : 重查输入、授权、租约、取消及修订
+    alt 全部有效
+      Update -> DB : 发布认识版本、快照、连续水位与检查点
+    else 依赖已变化
+      Update -> DB : 标记输入过期；按当前输入重新排队
+    end
+  end
+end
+Job -> DB : 按有效标签匹配已启用规则\n校验范围，以触发键去重后排入后继任务
+Job -> DB : 释放租约，记录实际用量
+note over Model, Update
+模型推理在数据库写事务外执行；
+输出校验和发布由确定性程序控制。
+全部阶段及检查点写入均经过提交闸门，
+同时核查删除标记；迟到失败回调保留当前状态。
+end note
+@enduml

@@ -1,0 +1,65 @@
+@startuml
+!include style.iuml
+title 图 2 · 认识与模型快照
+top to bottom direction
+hide circle
+skinparam linetype ortho
+
+entity "人物 Subject\nsubjects" as Subject {
+  * id
+}
+
+entity "认识 KnowledgeItem\nknowledge_items" as KnowledgeItem {
+  * id
+  --
+  kind: habit / preference
+}
+
+entity "认识版本 KnowledgeVersion\nknowledge_versions" as KnowledgeVersion {
+  * knowledge_id + version
+  --
+  origin / conditions / status
+}
+
+entity "证据 Evidence\nevidence" as Evidence {
+  * id
+}
+
+entity "证据关系 EvidenceLink\nevidence_links" as EvidenceLink {
+  * knowledge_id + knowledge_version
+  * evidence_id
+  --
+  polarity / weight / scope
+}
+
+entity "模型快照 ModelSnapshot\nmodel_snapshots" as ModelSnapshot {
+  * id
+  --
+  data_revision / processed_through
+}
+
+entity "快照成员 SnapshotItem\nsnapshot_items" as SnapshotItem {
+  * snapshot_id + knowledge_id
+  --
+  knowledge_version
+}
+
+entity "参数依赖 SnapshotEvidence\nsnapshot_evidence" as SnapshotEvidence {
+  * snapshot_id + evidence_id
+}
+
+Subject ||--o{ KnowledgeItem
+KnowledgeItem ||--|{ KnowledgeVersion
+KnowledgeVersion ||--o{ EvidenceLink
+Evidence ||--o{ EvidenceLink
+KnowledgeVersion ||--o{ SnapshotItem
+ModelSnapshot ||--o{ SnapshotItem
+ModelSnapshot ||--o{ SnapshotEvidence
+Evidence ||--o{ SnapshotEvidence
+EvidenceLink -[hidden]down-> ModelSnapshot
+
+legend bottom
+  认识版本通过 EvidenceLink 关联支持、反例与范围。
+  SnapshotEvidence 保存参数依赖；SnapshotItem 固定认识版本。
+endlegend
+@enduml

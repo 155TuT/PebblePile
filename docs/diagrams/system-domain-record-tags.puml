@@ -1,0 +1,59 @@
+@startuml
+!include style.iuml
+top to bottom direction
+skinparam nodesep 55
+skinparam ranksep 65
+class Notebook {
+  id : Identifier
+  name : String
+}
+class Record {
+  id : Identifier
+  title : String
+  revision : Integer
+}
+class InteractionSession
+class Source
+class SourceVersion
+class EventVersion
+class Goal
+class Tag {
+  namespace : String
+  kind : String
+  canonicalKey : String
+}
+class TagAlias {
+  normalizedAlias : String
+}
+class TagAssignment {
+  origin : manual | agent | rule
+  status : pending | active | rejected | retracted
+  confidence : Number?
+  revision : Integer
+  targetRevision : Integer?
+  algorithmId : Identifier?
+}
+class TagAssignmentInput {
+  sourceSpan : StructuredData
+}
+Notebook "0..1" -- "0..*" Record : 浅层归属
+Record "1" -- "0..*" InteractionSession
+Record "1" -- "0..*" Source : 原材料归属
+Source "1" *-- "1..*" SourceVersion
+Record "0..*" -left- "0..*" SourceVersion : 正文与材料
+Record "0..*" -- "0..*" EventVersion : 实际经历
+Record "1" -- "0..*" Goal : 事项目标
+Tag "1" *-- "0..*" TagAlias
+Tag "1" -- "0..*" TagAssignment
+Record "0..1" -- "0..*" TagAssignment : 记录目标
+EventVersion "0..1" -right- "0..*" TagAssignment : 事件目标
+TagAssignment "1" *-- "0..*" TagAssignmentInput
+SourceVersion "0..1" -down- "0..*" TagAssignmentInput : 原话依据
+EventVersion "0..1" -down- "0..*" TagAssignmentInput : 结构依据
+note bottom of TagAssignment
+每个关联的目标为记录或精确事件版本，二选一。
+每项输入固定来源版本或事件版本，二选一。
+自动标签保存依据；人工排除对稳定目标持续生效。
+标签用于组织检索，事实、偏好与授权分别校验。
+end note
+@enduml

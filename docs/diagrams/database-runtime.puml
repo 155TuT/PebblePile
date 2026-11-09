@@ -1,0 +1,78 @@
+@startuml
+!include style.iuml
+title 图 4 · 处理任务与算法版本
+top to bottom direction
+hide circle
+skinparam linetype ortho
+
+entity "资料库 Library\nlibraries" as Library {
+  * id
+  --
+  authority_id / revision / auth_revision
+}
+
+entity "任务 Job\njobs" as Job {
+  * id
+  --
+  root_job_id / state / budget / consumed
+  trigger_key / rule_ref
+}
+
+entity "任务输入 JobInput\njob_inputs" as JobInput {
+  * job_id + input_key
+  --
+  精确输入版本或修订（六类择一）
+}
+
+entity "任务阶段 JobStep\njob_steps" as JobStep {
+  * job_id + stage + input_digest + algorithm_id
+  --
+  checkpoint / state
+}
+
+entity "调用 JobCall\njob_calls" as JobCall {
+  * id
+  --
+  operation_key / reserved / actual
+}
+
+entity "算法清单 AlgorithmManifest\nalgorithm_manifests" as AlgorithmManifest {
+  * id
+  --
+  version / feature_version / config
+}
+
+entity "场景包 ScenePackage\nscene_packages" as ScenePackage {
+  * namespace + version
+  --
+  schemas / rules / feature_map
+}
+
+entity "算法场景 AlgorithmScene\nalgorithm_scenes" as AlgorithmScene {
+  * algorithm_id + scene_namespace + scene_version
+}
+
+entity "整理设置 LibrarySettings\nlibrary_settings" as LibrarySettings {
+  * library_id
+  --
+  auto_organize / tagging_enabled
+  enabled_rules / processing_budget
+}
+
+Library ||--o{ Job
+Library ||--o{ ScenePackage
+Library ||--|| LibrarySettings
+Job ||--o{ JobInput
+Job ||--o{ JobStep
+JobStep ||--o{ JobCall
+AlgorithmManifest ||--o{ Job
+AlgorithmManifest ||--o{ AlgorithmScene
+ScenePackage ||--o{ AlgorithmScene
+
+legend bottom
+  任务按精确输入版本执行，父子任务共享根任务预算。
+  算法清单通过连接表固定所用场景包版本。
+  规则身份、记录与有效输入构成触发键，同一输入只创建一次后继任务。
+  输入为来源、事件、认识、结果、记录、标注六类之一。
+endlegend
+@enduml

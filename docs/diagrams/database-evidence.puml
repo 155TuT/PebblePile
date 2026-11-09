@@ -1,0 +1,89 @@
+@startuml
+!include style.iuml
+title 图 1 · 材料、事件与证据
+top to bottom direction
+hide circle
+skinparam linetype ortho
+
+entity "记录 Record\nrecords" as Record {
+  * id
+}
+entity "人物 Subject\nsubjects" as Subject {
+  * id
+  --
+  identity_state
+}
+entity "来源 Source\nsources" as Source {
+  * id
+  --
+  owner_record_id / current_version
+}
+entity "来源版本 SourceVersion\nsource_versions" as SourceVersion {
+  * source_id + version
+  --
+  body / captured_at / producer
+}
+entity "附件 Attachment\nattachments" as Attachment {
+  * id
+  --
+  relative_path / sha256
+}
+entity "来源附件 SourceAttachment\nsource_attachments" as SourceAttachment {
+  * source_id + source_version
+  * attachment_id
+}
+entity "事件 Event\nevents" as Event {
+  * id
+  --
+  current_version / merged_into_id
+}
+entity "事件版本 EventVersion\nevent_versions" as EventVersion {
+  * event_id + version
+  --
+  subject_id / observation_type
+}
+entity "事件来源 EventSource\nevent_sources" as EventSource {
+  * event_id + event_version
+  * source_id + source_version
+}
+entity "证据 Evidence\nevidence" as Evidence {
+  * id
+  --
+  span / dimension / validity
+}
+entity "资源 Resource\nresources" as Resource {
+  * id
+  --
+  kind / current_version
+}
+entity "资源版本 ResourceVersion\nresource_versions" as ResourceVersion {
+  * resource_id + version
+  --
+  payload / scene_version
+}
+entity "事件资源 EventResource\nevent_resources" as EventResource {
+  * event_id + event_version
+  * resource_id + resource_version
+}
+
+Record ||--o{ Source : 原记录
+Source ||--|{ SourceVersion
+SourceVersion ||--o{ SourceAttachment
+Attachment ||--o{ SourceAttachment
+Subject ||--o{ EventVersion
+Subject |o--o{ SourceVersion : 记录者
+Event ||--|{ EventVersion
+EventVersion ||--o{ EventSource
+SourceVersion ||--o{ EventSource
+EventSource ||--o{ Evidence
+Resource ||--|{ ResourceVersion
+SourceVersion |o--o{ ResourceVersion : 可选来源
+EventVersion ||--o{ EventResource
+ResourceVersion ||--o{ EventResource
+
+legend bottom
+  图中省略共同的 library_id；全部关联限定同一资料库。
+  竖线：一；圆圈：可选；分叉：多。星号字段构成业务主键。
+  一个事件可有多份来源；每条证据定位精确来源和事件版本。
+endlegend
+@enduml

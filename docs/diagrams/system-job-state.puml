@@ -1,0 +1,36 @@
+@startuml
+!include style.iuml
+hide empty description
+state "排队 queued" as Queued
+state "运行 running" as Running
+state "等待 waiting" as Waiting
+state "待核对 needs_review" as Review
+state "失败 failed" as Failed
+state "输入过期 stale" as Stale
+state "完成 completed" as Completed
+state "取消 cancelled" as Cancelled
+[*] --> Queued : 内容修订与触发键持久提交
+Queued --> Running : 取得租约与执行窗口
+Running --> Waiting : 模型 / 网络 / 预算 / 系统条件或用户暂停
+Queued --> Waiting : 用户暂停
+Waiting --> Queued : 条件恢复；用户暂停须主动继续
+Running --> Review : 关键歧义或执行结果未知
+Review --> Queued : 用户核对后继续
+Running --> Failed : 当前尝试失败
+Failed --> Queued : 可重试且预算允许
+Running --> Stale : 输入或授权版本改变
+Stale --> [*] : 新输入创建后继任务
+Running --> Completed : 全阶段提交成功
+Queued --> Cancelled : 用户取消
+Running --> Cancelled : 取消标记通过提交闸门
+Waiting --> Cancelled : 用户取消
+Review --> Cancelled : 用户取消
+Completed --> [*]
+Cancelled --> [*]
+note right of Waiting
+退后台或进程重建后，
+从最近持久检查点恢复。
+租约过期的任务经输入核查回到排队。
+事项显示下一步，技术阶段留在记录进度与设置。
+end note
+@enduml

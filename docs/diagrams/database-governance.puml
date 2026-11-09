@@ -1,0 +1,81 @@
+@startuml
+!include style.iuml
+title 图 5 · 用户交互与访问管理
+top to bottom direction
+hide circle
+skinparam linetype ortho
+
+entity "资料库 Library\nlibraries" as Library {
+  * id
+  --
+  authority_id / revision / auth_revision
+}
+
+entity "客户端 Client\nclients" as Client {
+  * id
+  --
+  principal_id / revoked_at
+}
+
+entity "授权 AccessGrant\naccess_grants" as AccessGrant {
+  * id
+  --
+  permission / scope
+}
+
+entity "操作回执 OperationReceipt\noperation_receipts" as OperationReceipt {
+  * client_id + operation_id
+  --
+  request_hash / committed_revision
+}
+
+entity "会话 InteractionSession\ninteraction_sessions" as InteractionSession {
+  * id
+  --
+  record_id / last_active_at
+}
+
+entity "记录 Record\nrecords" as Record {
+  * id
+  --
+  notebook_id / revision
+}
+
+entity "交互 Interaction\ninteractions" as Interaction {
+  * id
+  --
+  sequence / role
+}
+
+entity "交互依赖 InteractionDependency\ninteraction_dependencies" as InteractionDependency {
+  * interaction_id + source_id + source_version
+}
+
+entity "来源版本 SourceVersion\nsource_versions" as SourceVersion {
+  * source_id + version
+}
+
+entity "删除标记 DeletionMarker\ndeletion_markers" as DeletionMarker {
+  * object_type + object_id
+  --
+  deleted_revision / cleanup_state
+}
+
+Library ||--o{ Client
+Library ||--o{ DeletionMarker
+Client ||--o{ AccessGrant
+Client ||--o{ OperationReceipt
+Client ||--o{ InteractionSession
+Record ||--o{ InteractionSession
+InteractionSession ||--o{ Interaction
+SourceVersion ||--o{ Interaction : 正文
+Interaction ||--o{ InteractionDependency
+SourceVersion ||--o{ InteractionDependency : 输入依赖
+AccessGrant -[hidden]down-> DeletionMarker
+
+legend bottom
+  交互正文保存在来源版本；生成内容登记实际输入依赖。
+  会话归属记录；记录本与标签视图复用这些内容。
+  同名实体跨图共用，全部业务关系限定同一资料库。
+endlegend
+@enduml

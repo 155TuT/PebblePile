@@ -1,0 +1,79 @@
+@startuml
+!include style.iuml
+title 图 3 · 目标、决策与结果
+top to bottom direction
+hide circle
+skinparam linetype ortho
+
+entity "人物 Subject\nsubjects" as Subject {
+  * id
+}
+
+entity "记录 Record\nrecords" as Record {
+  * id
+}
+
+entity "目标 Goal\ngoals" as Goal {
+  * id
+  --
+  record_id / due_at / status
+}
+
+entity "模型快照 ModelSnapshot\nmodel_snapshots" as ModelSnapshot {
+  * id
+  --
+  data_revision / processed_through
+}
+
+entity "决策 Decision\ndecisions" as Decision {
+  * id
+  --
+  goal_id / snapshot_id
+}
+
+entity "候选 DecisionOption\ndecision_options" as DecisionOption {
+  * id
+  --
+  display_order / features
+}
+
+entity "证据 Evidence\nevidence" as Evidence {
+  * id
+}
+
+entity "当次依据 DecisionEvidence\ndecision_evidence" as DecisionEvidence {
+  * decision_id + evidence_id
+}
+
+entity "结果 Outcome\noutcomes" as Outcome {
+  * id
+  --
+  kind / initiator / status
+}
+
+entity "结果事件 OutcomeEvent\noutcome_events" as OutcomeEvent {
+  * outcome_id + event_id + event_version
+}
+
+entity "事件版本 EventVersion\nevent_versions" as EventVersion {
+  * event_id + version
+}
+
+Subject ||--o{ Goal
+Record ||--o{ Goal : 事项进展
+Goal ||--o{ Decision
+ModelSnapshot ||--o{ Decision
+Decision ||--o{ DecisionOption
+Decision ||--o{ DecisionEvidence
+Evidence ||--o{ DecisionEvidence
+Goal |o--o{ Outcome
+Decision |o--o{ Outcome
+Outcome ||--o{ OutcomeEvent
+EventVersion ||--o{ OutcomeEvent
+
+legend bottom
+  决策固定目标、快照、候选与当次依据。
+  目标、对话和结果回到同一记录；带跟进目标的记录作为事项展示。
+  离线体验可直接关联事件，目标与决策引用允许为空。
+endlegend
+@enduml

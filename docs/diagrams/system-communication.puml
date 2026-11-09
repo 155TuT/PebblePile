@@ -1,0 +1,28 @@
+@startuml
+!include style.iuml
+top to bottom direction
+object "ui : RecordView" as UI
+object "agent : TaskAgent" as Agent
+object "context : ContextService" as Context
+object "scene : SceneRegistry" as Scene
+object "store : Repository" as Store
+object "feedback : OutcomeService" as Feedback
+object "jobs : JobScheduler" as Jobs
+object "decisions : DecisionService" as Decisions
+UI --> Agent : 1: 在记录中提出目标
+Agent --> Context : 1.1: 查询情境上下文
+Context --> Store : 1.1.1: 读取有效快照
+Context --> Scene : 1.1.2: 校验特征与约束
+Context --> Agent : 1.2: 返回依据与未知项
+Agent --> Decisions : 1.3: 保存候选与使用版本
+Decisions --> Store : 1.3.1: 校验快照，关联记录并提交决策
+Agent --> UI : 1.4: 原事项展示候选与解释
+UI --> Feedback : 2: 记录选择与体验
+Feedback --> Store : 2.1: 保存结果、本人材料与记录关联
+Feedback --> Jobs : 2.2: 按输入修订排入标签与模型更新
+Store -[hidden]down-> Jobs
+note bottom of Jobs
+协作图采用“实例名 : 类名”及有向编号消息。
+1.x 为生成建议；2.x 为后续独立反馈。
+end note
+@enduml

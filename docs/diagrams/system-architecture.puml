@@ -1,0 +1,67 @@
+@startuml
+!include style.iuml
+top to bottom direction
+package "入口层" {
+  [移动应用\n对话与记录 · 记录库 · 设置] as App
+  [系统分享 / 系统动作] as Entry
+  [独立命令行] as CLI
+  [外部服务适配\n扩展] as Host
+}
+package "本地业务核心" {
+  [CoreAPI\n身份 · 范围 · 修订 · 幂等] as API
+  [CaptureService\n来源与交互] as Capture
+  [RecordService\n记录本 · 时间线 · 事项] as Records
+  [TaggingService\n语义标签 · 归一 · 人工覆盖] as Tags
+  [MemoryService\n事件 · 证据 · 纠正] as Memory
+  [ContextService\n上下文与任务反馈] as Context
+  [TaskAgent\n分类抽取 · 候选与解释] as Agent
+  [JobScheduler\n触发 · 检查点 · 预算] as Jobs
+  [ModelUpdater\n统计 · 参数 · 快照] as Update
+  [BackupService\n导出与恢复] as Backup
+}
+package "适配与存储层" {
+  [SceneRegistry\n语义 · 特征 · 规则] as Scene
+  [InferencePort\n端侧 / 远程推理] as Infer
+  database "SQLite\n权威状态与持久队列" as DB
+  folder "附件目录" as Files
+  [KeyStorePort\n平台凭据] as Keys
+}
+App --> API
+Entry --> API
+CLI --> API
+Host ..> API
+API --> Capture
+API --> Records
+API --> Tags
+API --> Memory
+API --> Context
+API --> Agent
+API --> Backup
+Capture --> DB
+Capture --> Files
+Capture --> Jobs
+Capture --> Records
+Records --> DB
+Tags --> DB
+Tags --> Scene
+Tags --> Jobs
+Memory --> Jobs
+Memory --> DB
+Context --> DB
+Context --> Scene
+Agent --> Context
+Agent --> Infer
+Jobs --> Tags
+Tags --> Infer
+Jobs --> Update
+Update --> Scene
+Update --> Infer
+Update --> DB
+Infer --> Keys
+Backup --> DB
+Backup --> Files
+note bottom of DB
+同一资料库采用单写入协调器。
+模型调用在事务外进行，发布在事务内校验。
+end note
+@enduml
