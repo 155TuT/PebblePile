@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" role="img" aria-labelledby="ia-title ia-desc" height="753" viewBox="0 0 1440 753">
+  <title id="ia-title">叠石：日常入口、内容与处理能力、系统与扩展</title>
+  <desc id="ia-desc">由 information-architecture.mmd 生成。语义标签由 Agent 与本地算法生成，用于组织和检索内容。</desc>
+  <rect x="0" y="0" width="1440" height="753" rx="24" fill="#F5F3EB" />
+  <text x="720.0" y="48" font-family="LXGW WenKai" font-size="28" font-weight="500" fill="#222C24" text-anchor="middle" style="font-synthesis:none">
+    <tspan font-family="'Leftist Mono Serif', 'Leftist Mono Sans'" font-weight="400">PebblePile </tspan>
+    <tspan>· 叠石</tspan>
+  </text>
+  <text x="720.0" y="80" font-family="LXGW WenKai" font-size="20" font-weight="400" fill="#5E6B5D" text-anchor="middle" style="font-synthesis:none">
+    <tspan>对话与记录驱动的本地事件库</tspan>
+  </text>
+  <path d="M 720.0 96 V 112 M 248.0 112 H 1192.0" stroke="#536D58" stroke-width="1.5" fill="none" />
+  <path d="M 248.0 112 V 132" stroke="#536D58" stroke-width="1.5" fill="none" />
+  <rect x="24" y="132" width="448" height="54" rx="16" fill="#E3EBDD" />
+  <text x="44" y="168" font-family="LXGW WenKai" font-size="24" font-weight="500" fill="#536D58" text-anchor="start" style="font-synthesis:none">
+    <tspan>日常入口</tspan>
+  </text>
+  <text x="44" y="220" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>对话与记录 · 默认首页</tspan>
+  </text>
+  <circle cx="48" cy="258" r="2.5" fill="#536D58" />
+  <text x="62" y="264" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>对话或记录模式 · 图标提交</tspan>
+  </text>
+  <circle cx="48" cy="285" r="2.5" fill="#536D58" />
+  <text x="62" y="291" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>原事项内确认与反馈</tspan>
+  </text>
+  <circle cx="48" cy="312" r="2.5" fill="#536D58" />
+  <text x="62" y="318" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>待回应提示</tspan>
+  </text>
+  <path d="M 44 341 H 452" stroke="#DADDD2" stroke-width="1" />
+  <text x="44" y="365" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>记录库 · 统一内容入口</tspan>
+  </text>
+  <circle cx="48" cy="403" r="2.5" fill="#536D58" />
+  <text x="62" y="409" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>时间线与记录本</tspan>
+  </text>
+  <circle cx="48" cy="430" r="2.5" fill="#536D58" />
+  <text x="62" y="436" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>语义标签与组合检索</tspan>
+  </text>
+  <circle cx="48" cy="457" r="2.5" fill="#536D58" />
+  <text x="62" y="463" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>进行中与待回应筛选</tspan>
+  </text>
+  <path d="M 44 486 H 452" stroke="#DADDD2" stroke-width="1" />
+  <text x="44" y="510" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>设置 · 就地调整</tspan>
+  </text>
+  <circle cx="48" cy="548" r="2.5" fill="#536D58" />
+  <text x="62" y="554" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>智能与连接</tspan>
+  </text>
+  <circle cx="48" cy="575" r="2.5" fill="#536D58" />
+  <text x="62" y="581" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>记录与记忆</tspan>
+  </text>
+  <circle cx="48" cy="602" r="2.5" fill="#536D58" />
+  <text x="62" y="608" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>外观</tspan>
+  </text>
+  <circle cx="48" cy="629" r="2.5" fill="#536D58" />
+  <text x="62" y="635" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>数据</tspan>
+  </text>
+  <circle cx="48" cy="656" r="2.5" fill="#536D58" />
+  <text x="62" y="662" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>关于</tspan>
+  </text>
+  <path d="M 44 685 H 452" stroke="#DADDD2" stroke-width="1" />
+  <path d="M 720.0 112 V 132" stroke="#536D58" stroke-width="1.5" fill="none" />
+  <rect x="496" y="132" width="448" height="54" rx="16" fill="#ECECE3" />
+  <text x="516" y="168" font-family="LXGW WenKai" font-size="24" font-weight="500" fill="#536D58" text-anchor="start" style="font-synthesis:none">
+    <tspan>内容与处理能力</tspan>
+  </text>
+  <text x="516" y="220" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>记录与事项</tspan>
+  </text>
+  <circle cx="520" cy="258" r="2.5" fill="#536D58" />
+  <text x="534" y="264" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>原文、附件、会话与事件</tspan>
+  </text>
+  <circle cx="520" cy="285" r="2.5" fill="#536D58" />
+  <text x="534" y="291" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>目标、进展与实际结果</tspan>
+  </text>
+  <path d="M 516 314 H 924" stroke="#DADDD2" stroke-width="1" />
+  <text x="516" y="338" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>语义标签 · </tspan>
+    <tspan font-family="'Leftist Mono Serif', 'Leftist Mono Sans'" font-weight="400">Agent </tspan>
+    <tspan>与本地算法</tspan>
+  </text>
+  <circle cx="520" cy="376" r="2.5" fill="#536D58" />
+  <text x="534" y="382" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>分类抽取与同义归一</tspan>
+  </text>
+  <circle cx="520" cy="403" r="2.5" fill="#536D58" />
+  <text x="534" y="409" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>依据、版本与人工纠正</tspan>
+  </text>
+  <path d="M 516 432 H 924" stroke="#DADDD2" stroke-width="1" />
+  <text x="516" y="456" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>个人模型</tspan>
+  </text>
+  <circle cx="520" cy="494" r="2.5" fill="#536D58" />
+  <text x="534" y="500" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>证据、习惯与条件偏好</tspan>
+  </text>
+  <circle cx="520" cy="521" r="2.5" fill="#536D58" />
+  <text x="534" y="527" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>回答依据与就近纠正</tspan>
+  </text>
+  <path d="M 516 550 H 924" stroke="#DADDD2" stroke-width="1" />
+  <text x="516" y="574" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>事件触发与恢复</tspan>
+  </text>
+  <circle cx="520" cy="612" r="2.5" fill="#536D58" />
+  <text x="534" y="618" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>新材料、反馈与启用规则</tspan>
+  </text>
+  <circle cx="520" cy="639" r="2.5" fill="#536D58" />
+  <text x="534" y="645" font-family="LXGW WenKai" font-size="17" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>持久任务、预算与检查点</tspan>
+  </text>
+  <path d="M 516 668 H 924" stroke="#DADDD2" stroke-width="1" />
+  <path d="M 1192.0 112 V 132" stroke="#536D58" stroke-width="1.5" fill="none" />
+  <rect x="968" y="132" width="448" height="54" rx="16" fill="#ECECE3" />
+  <text x="988" y="168" font-family="LXGW WenKai" font-size="24" font-weight="500" fill="#536D58" text-anchor="start" style="font-synthesis:none">
+    <tspan>系统与扩展</tspan>
+  </text>
+  <text x="988" y="220" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan font-family="'Leftist Mono Serif', 'Leftist Mono Sans'" font-weight="400">Android </tspan>
+    <tspan>系统分享</tspan>
+  </text>
+  <path d="M 988 260 H 1396" stroke="#DADDD2" stroke-width="1" />
+  <text x="988" y="284" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan font-family="'Leftist Mono Serif', 'Leftist Mono Sans'" font-weight="400">iOS </tspan>
+    <tspan>记录与找回动作</tspan>
+  </text>
+  <path d="M 988 324 H 1396" stroke="#DADDD2" stroke-width="1" />
+  <text x="988" y="348" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>独立命令行接口</tspan>
+  </text>
+  <path d="M 988 388 H 1396" stroke="#DADDD2" stroke-width="1" />
+  <text x="988" y="412" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>完整端侧验证 </tspan>
+    <tspan font-family="'Leftist Mono Serif', 'Leftist Mono Sans'" font-weight="400">A29</tspan>
+  </text>
+  <path d="M 988 452 H 1396" stroke="#DADDD2" stroke-width="1" />
+  <text x="988" y="476" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>默认助理验证 </tspan>
+    <tspan font-family="'Leftist Mono Serif', 'Leftist Mono Sans'" font-weight="400">A36</tspan>
+  </text>
+  <path d="M 988 516 H 1396" stroke="#DADDD2" stroke-width="1" />
+  <text x="988" y="540" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>服务与宿主验证 </tspan>
+    <tspan font-family="'Leftist Mono Serif', 'Leftist Mono Sans'" font-weight="400">A35</tspan>
+  </text>
+  <path d="M 988 580 H 1396" stroke="#DADDD2" stroke-width="1" />
+  <text x="988" y="604" font-family="LXGW WenKai" font-size="20" font-weight="500" fill="#222C24" text-anchor="start" style="font-synthesis:none">
+    <tspan>持续监测与执行</tspan>
+  </text>
+  <path d="M 988 644 H 1396" stroke="#DADDD2" stroke-width="1" />
+  <text x="44" y="721" font-family="LXGW WenKai" font-size="18" font-weight="400" fill="#5E6B5D" text-anchor="start" style="font-synthesis:none">
+    <tspan>日常入口负责操作；记录与事项承载内容；标签、个人模型与持久任务共同支撑处理。</tspan>
+  </text>
+</svg>
