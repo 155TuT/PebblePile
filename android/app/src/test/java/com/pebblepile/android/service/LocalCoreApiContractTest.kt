@@ -138,6 +138,7 @@ class LocalCoreApiContractTest {
         val saved = h.core.recordExperience(E01, "app_home_record", "op-save")
         val recordId = saved.recordId!!
 
+        val previousSnapshot = h.core.queryContext(recordId)!!.snapshotId
         val receipt = h.core.reviseMemory(
             recordId, saved.revision!!, C01, CorrectionScope.FUTURE, "op-c01"
         )
@@ -156,6 +157,7 @@ class LocalCoreApiContractTest {
         assertEquals(recordId, context.futureCondition!!.recordId)
         assertEquals(2L, context.futureCondition!!.revision)
         assertTrue(context.snapshotId.isNotBlank())
+        assertNotEquals(previousSnapshot, context.snapshotId)
         val replay = h.core.reviseMemory(recordId, saved.revision!!, C01, CorrectionScope.FUTURE, "op-c01")
         assertEquals(receipt, replay)
         assertEquals(context, h.core.queryContext(recordId))
@@ -421,7 +423,8 @@ class LocalCoreApiContractTest {
         val repository = SnapshotCoreRepository(DemoLibrary()) {
             if (++attempts == 1) throw RepositoryWriteException()
         }
-        val core: CoreApi = LocalCoreApi(repository, clientId = "issue10-test")
+        val ids = AtomicInteger()
+        val core: CoreApi = LocalCoreApi(repository, clientId = "issue10-test", newId = { "id-${ids.incrementAndGet()}" })
         val key = OperationKey("issue10-test", "retry")
         val failed = core.recordExperience(E01, "app_home_record", key.operationId)
         assertFalse(failed.success)
@@ -429,6 +432,8 @@ class LocalCoreApiContractTest {
         repository.read { tx ->
             assertEquals(0L, tx.revision)
             assertTrue(tx.records().isEmpty())
+            assertTrue(tx.sources("id-1").isEmpty())
+            assertTrue(tx.tasks("id-1").isEmpty())
             assertNull(tx.receipt(key))
         }
 

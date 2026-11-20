@@ -29,7 +29,7 @@ val quote = text.substring(text.offsetByCodePoints(0, start), text.offsetByCodeP
 | --- | --- |
 | `frozen` | 材料与语义预期已冻结，可直接执行 |
 | `pending_baseline` | 等 #9 的候选清单与版本化排序基线 |
-| `pending_contract` | 按 [#6 的回执样例](../../core-api-receipt-examples.json)逐项核对字段和错误码，由 #10 登记结果 |
+| `pending_contract` | 样例冻结时留给 #6 核对的字段和错误码。内存仓储的三种实测回执见[回执记录表](../../issue10-testing.md#33-回执记录表)，接入 SQLite 后按同一预期复验。 |
 | `pending_apk` | 等 #11 的签名 APK 与 SHA-256 |
 
 `scopeMatch` 为 `null` 表示提问发生在 C01 之前。C01 之后，`true` 表示命中本人设置，`false` 表示按本次其他有效条件排序。记录事实中的 `null` 表示原文未交代该信息。
