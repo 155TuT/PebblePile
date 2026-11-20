@@ -32,7 +32,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.pebblepile.android.data.*
+import com.pebblepile.android.model.CorrectionScope
+import com.pebblepile.android.model.ConditionSetting
+import com.pebblepile.android.model.PebbleRecord
+import com.pebblepile.android.service.CoreApi
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -207,6 +210,7 @@ private fun PebbleApp(api: CoreApi, pendingShare: PendingShare?, onShareConsumed
             },
             confirmButton = {
                 TextButton(enabled = !shareSaving, onClick = {
+                    if (shareSaving) return@TextButton
                     shareSaving = true
                     scope.launch {
                         val receipt = api.recordExperience(pendingShare.text, "android_share", pendingShare.operationId)
@@ -256,6 +260,7 @@ private fun HomeEntryScreen(
 ) {
     val scope = rememberCoroutineScope()
     var saving by remember { mutableStateOf(false) }
+    var operationId by rememberSaveable(draft, inputMode) { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
         Spacer(Modifier.height(18.dp))
@@ -297,12 +302,14 @@ private fun HomeEntryScreen(
                 enabled = draft.isNotBlank() && !saving,
                 colors = ButtonDefaults.buttonColors(containerColor = Moss),
                 onClick = {
+                    if (saving) return@Button
                     saving = true
+                    val id = operationId ?: UUID.randomUUID().toString().also { operationId = it }
                     scope.launch {
                         val receipt = api.recordExperience(
                             text = draft,
                             captureMethod = if (inputMode == InputMode.DIALOG) "app_home_dialog" else "app_home_record",
-                            operationId = UUID.randomUUID().toString()
+                            operationId = id
                         )
                         saving = false
                         if (receipt.success && receipt.recordId != null) {
@@ -432,6 +439,9 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
     var choice by rememberSaveable(recordId) { mutableStateOf("") }
     var experience by rememberSaveable(recordId) { mutableStateOf("") }
     var conditionDraft by rememberSaveable(recordId) { mutableStateOf("") }
+    var editingRecordRevision by rememberSaveable(recordId) { mutableLongStateOf(0L) }
+    var editingPreferenceRevision by rememberSaveable(recordId) { mutableLongStateOf(0L) }
+    var futureCondition by remember(recordId) { mutableStateOf<ConditionSetting?>(null) }
     var showCorrection by rememberSaveable { mutableStateOf(false) }
     var correctionScope by rememberSaveable { mutableStateOf(CorrectionScope.THIS_TIME) }
     var status by remember { mutableStateOf<String?>(null) }
@@ -440,7 +450,9 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
 
     suspend fun reload() {
         loading = true
-        record = api.getRecord(recordId)
+        val detail = api.getRecordDetail(recordId)
+        record = detail?.record
+        futureCondition = detail?.futureCondition
         loading = false
     }
     LaunchedEffect(recordId) { reload() }
@@ -453,6 +465,12 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
     if (item == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("没有找到这条记录", color = Muted) }
         return
+    }
+    var feedbackOperation by rememberSaveable(recordId, item.revision, choice, experience) {
+        mutableStateOf<String?>(null)
+    }
+    var correctionOperation by rememberSaveable(recordId, editingRecordRevision, editingPreferenceRevision, conditionDraft, correctionScope) {
+        mutableStateOf<String?>(null)
     }
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
@@ -469,14 +487,16 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
         DetailCard {
             if (item.tags.isEmpty()) Text("暂时没有标签", color = Muted)
             item.tags.forEach { tag ->
+                var tagOperation by rememberSaveable(recordId, tag.id, item.revision) { mutableStateOf<String?>(null) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(if (tag.excluded) "${tag.name} · 已排除" else tag.name, color = if (tag.excluded) Muted else Ink, fontWeight = FontWeight.Medium)
                         Text("依据：${tag.sourceQuote}\n算法：${tag.algorithmVersion}", color = Muted, fontSize = 11.sp)
                     }
                     if (!tag.excluded) TextButton(onClick = {
+                        val id = tagOperation ?: UUID.randomUUID().toString().also { tagOperation = it }
                         scope.launch {
-                            val receipt = api.reviseTags(item.id, item.revision, tag.id, UUID.randomUUID().toString())
+                            val receipt = api.reviseTags(item.id, item.revision, tag.id, id)
                             if (receipt.success) { status = receipt.message; reload(); onChanged() }
                             else if (receipt.conflict) conflictMessage = receipt.message else status = receipt.message
                         }
@@ -518,8 +538,9 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
             OutlinedTextField(value = experience, onValueChange = { experience = it }, label = { Text("实际体验／感受") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             Button(
                 onClick = {
+                    val id = feedbackOperation ?: UUID.randomUUID().toString().also { feedbackOperation = it }
                     scope.launch {
-                        val receipt = api.recordOutcome(item.id, item.revision, choice, experience, UUID.randomUUID().toString())
+                        val receipt = api.recordOutcome(item.id, item.revision, choice, experience, id)
                         if (receipt.success) { choice = ""; experience = ""; status = receipt.message; reload(); onChanged() }
                         else if (receipt.conflict) conflictMessage = receipt.message else status = receipt.message
                     }
@@ -535,6 +556,8 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
             Text("可以选择只调整当前事项，或将条件保存为以后适用的明确偏好。", color = Muted, fontSize = 13.sp)
             Button(onClick = {
                 conditionDraft = item.currentCondition
+                editingRecordRevision = item.revision
+                editingPreferenceRevision = futureCondition?.revision ?: 0L
                 correctionScope = item.conditionScope ?: CorrectionScope.THIS_TIME
                 showCorrection = true
             }, colors = ButtonDefaults.buttonColors(containerColor = Moss)) { Text("修改条件") }
@@ -573,6 +596,9 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (item.currentCondition.isNotBlank()) Text("当前条件：${item.currentCondition}", color = Muted)
+                    if (correctionScope == CorrectionScope.FUTURE) {
+                        futureCondition?.let { Text("当前长期条件：${it.text}", color = Muted) }
+                    }
                     OutlinedTextField(value = conditionDraft, onValueChange = { conditionDraft = it }, label = { Text("新的适用条件") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                     Text("影响范围", fontWeight = FontWeight.Medium)
                     Column(Modifier.selectableGroup()) {
@@ -595,8 +621,12 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
             },
             confirmButton = {
                 TextButton(enabled = conditionDraft.isNotBlank(), onClick = {
+                    val id = correctionOperation ?: UUID.randomUUID().toString().also { correctionOperation = it }
                     scope.launch {
-                        val receipt = api.reviseMemory(item.id, item.revision, conditionDraft, correctionScope, UUID.randomUUID().toString())
+                        val receipt = api.reviseMemory(
+                            item.id, editingRecordRevision, conditionDraft, correctionScope, id,
+                            basePreferenceRevision = editingPreferenceRevision.takeIf { correctionScope == CorrectionScope.FUTURE }
+                        )
                         if (receipt.success) { showCorrection = false; status = receipt.message; reload(); onChanged() }
                         else if (receipt.conflict) conflictMessage = receipt.message else status = receipt.message
                     }
@@ -610,6 +640,8 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
         fun refreshRecord() {
             scope.launch {
                 reload()
+                editingRecordRevision = record?.revision ?: 0L
+                editingPreferenceRevision = futureCondition?.revision ?: 0L
                 conflictMessage = null
             }
         }
