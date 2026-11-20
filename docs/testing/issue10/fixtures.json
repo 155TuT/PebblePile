@@ -1,16 +1,22 @@
 {
   "datasetId": "issue10-dinner-v1",
-  "datasetVersion": "0.1.0",
+  "datasetVersion": "0.1.1",
   "frozenAt": "2026-11-20",
-  "status": "draft_pending_confirmation",
+  "status": "frozen",
   "source": "docs/issue2-research.md",
   "owner": "林叶鑫（Mukyng）",
   "conventions": {
-    "offsetUnit": "utf16-code-unit",
+    "offsetUnit": "unicode-code-point",
     "offsetBase": 0,
     "spanEnd": "exclusive",
     "timezone": "Asia/Shanghai",
     "currency": "CNY"
+  },
+  "offsetExample": {
+    "text": "🍜热汤面",
+    "start": 1,
+    "end": 4,
+    "quote": "热汤面"
   },
   "records": [
     {
@@ -34,7 +40,7 @@
         "priceCny": 18,
         "meal": "热汤面",
         "durationMinutes": 10,
-        "prepNeeded": false,
+        "prepNeeded": null,
         "cleanupNeeded": false,
         "convenienceMentioned": true
       }
@@ -83,10 +89,10 @@
         "scenario": "diet",
         "overtime": false,
         "weekend": true,
-        "budgetCny": 20,
+        "budgetCny": null,
         "meal": "番茄鸡蛋面",
-        "durationMinutes": 40,
-        "cleanupNeeded": true,
+        "willingCookMinutes": 40,
+        "willingToCleanUp": true,
         "exceptionFor": "weekday_overtime_convenience",
         "selfEvaluation": "放松"
       }
@@ -196,7 +202,7 @@
       "id": "R01",
       "text": "室友说：他加班后只想吃面，不想做饭。",
       "expect": {
-        "observationType": "third_party",
+        "observationType": "reported",
         "countedForSelf": false,
         "preferenceUnchanged": true
       }

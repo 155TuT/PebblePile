@@ -1,8 +1,9 @@
 {
   "datasetId": "issue10-dinner-v1",
-  "expectedVersion": "0.1.0",
+  "expectedVersion": "0.1.1",
+  "datasetVersion": "0.1.1",
   "frozenAt": "2026-11-20",
-  "status": "draft_pending_confirmation",
+  "status": "frozen",
   "owner": "林叶鑫（Mukyng）",
   "legend": {
     "frozen": "原文与语义判定已冻结，可直接执行",
@@ -20,11 +21,11 @@
   },
   "spans": {
     "conventions": {
-      "offsetUnit": "utf16-code-unit",
+      "offsetUnit": "unicode-code-point",
       "offsetBase": 0,
       "spanEnd": "exclusive"
     },
-    "mustMatchExactly": true,
+    "fixtureSpansMustMatchExactly": true,
     "records": {
       "E01": [
         { "text": "加班到八点半", "start": 4, "end": 10 },
@@ -134,7 +135,7 @@
     },
     "R01": {
       "text": "室友说：他加班后只想吃面，不想做饭。",
-      "observationType": "third_party",
+      "observationType": "reported",
       "countedForSelf": false,
       "preferenceUnchanged": true,
       "status": "frozen"
@@ -151,7 +152,7 @@
       "id": "K01",
       "kind": "success",
       "operationId": "new",
-      "baseRevision": "current",
+      "preconditions": ["empty_library", "auto_organize_enabled", "worker_paused"],
       "expect": {
         "writes": 1,
         "returns": ["recordId", "sourceId", "sourceVersion", "revision", "jobId"],
@@ -176,7 +177,8 @@
     {
       "id": "K03",
       "kind": "revision_conflict",
-      "operationId": "reuse_with_different_payload_or_stale_baseRevision",
+      "operationId": "new",
+      "baseRevision": "stale_target_revision",
       "expect": {
         "error": "REVISION_CONFLICT",
         "returnsCurrentRevision": true,
@@ -186,15 +188,25 @@
       }
     }
   ],
+  "operationIdReuse": {
+    "operationId": "same_as_K01",
+    "payload": "different_from_K01",
+    "expect": {
+      "requestRejected": true,
+      "preservesOriginalReceipt": true,
+      "partialWrite": false,
+      "status": "pending_contract"
+    }
+  },
   "faultCases": [
     {
       "id": "F01",
       "action": "double_submit",
       "expect": {
-        "records": 1,
-        "sources": 1,
-        "events": 1,
-        "jobs": 1,
+        "recordsAddedByReplay": 0,
+        "sourcesAddedByReplay": 0,
+        "eventsAddedByReplay": 0,
+        "jobsAddedByReplay": 0,
         "returnsOriginalReceipt": true,
         "status": "pending_apk"
       }
@@ -226,7 +238,7 @@
       "expect": {
         "error": "STALE_INPUT",
         "currentConditionUnchanged": true,
-        "currentRevisionUnchanged": true,
+        "correctedObjectRevisionUnchanged": true,
         "status": "pending_apk"
       }
     }
