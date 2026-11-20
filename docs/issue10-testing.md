@@ -4,14 +4,14 @@
 
 依据：[总单 #1](https://github.com/155TuT/PebblePile/issues/1)、[本模块 #10](https://github.com/155TuT/PebblePile/issues/10)、[固定材料 #2](https://github.com/155TuT/PebblePile/issues/2)、[业务契约 #6](https://github.com/155TuT/PebblePile/issues/6)、[算法 #9](https://github.com/155TuT/PebblePile/issues/9)、[候选包 #11](https://github.com/155TuT/PebblePile/issues/11)，以及[系统设计 5.4、7.1、8.2](https://github.com/155TuT/PebblePile/blob/main/docs/system-design.md)。
 
-林金晶和林叶鑫已定好晚餐原话与预期。前端、存储和算法共用这组输入。林叶鑫现在可以从 `main` 调用 #6 的业务接口，按样例核对三种回执。张洋交付 #9 的排序基线后跑算法回放，李宗欣交付 #11 的签名 APK 后做真机验收。[材料冻结记录](https://github.com/155TuT/PebblePile/issues/10#issuecomment-7042008798) · [回执样例](core-api-receipt-examples.json)
+林金晶和林叶鑫已定好晚餐原话与预期。前端、存储和算法共用这组输入。首次保存、同操作重发和修订冲突已在 #6 的内存仓储上逐项核对，结果见 3.3。张洋交付 #9 的排序基线后跑算法回放，李宗欣交付 #11 的签名 APK 后做真机验收。[材料冻结记录](https://github.com/155TuT/PebblePile/issues/10#issuecomment-7042008798) · [回执样例](core-api-receipt-examples.json)
 
 ## 一、交付与接手顺序
 
 | 产物 | 接手人 | 交付条件与进展 |
 | --- | --- | --- |
 | 固定材料与稳定预期 | 林金晶 #2、郑嘉文 #6、张洋 #9、两位前端 | 原文、时间、证据区间和稳定预期已交付。张洋补上版本化候选与名次后，林叶鑫核对排序。 |
-| 三种回执契约用例 | 郑嘉文 #6 已交样例，林叶鑫执行 | 用 E01 验证首次保存和原样重发，再用旧修订提交 C01，逐字段记录回执。 |
+| 三种回执契约用例 | 林叶鑫 #10、周恪玄 #7 | E01 首次保存、原样重发和旧修订提交 C01 已通过内存仓储实测。#7 接 SQLite 后，用同一批请求复验。 |
 | 算法回归表 | 张洋 #9 交候选、价格与版本化排序基线，林叶鑫执行 | 先核对区间、计数、条件，再核对顺序。 |
 | 真机流程验收 | 李宗欣 #11 交候选 APK、提交号和 SHA-256，林叶鑫执行 | 干净环境离线走 A01–A09，含小屏操作。 |
 | 故障注入与复验 | 林叶鑫执行，缺陷负责人修复 | 重复提交、进程中断、人工排除、旧任务迟到四项。 |
@@ -88,7 +88,7 @@
 
 每次新操作分配一个 `operationId`，修改已有对象时携带 `baseRevision`。按 #6 的样例核对资料库、记录、来源版本、对象修订和适用的任务。原样重发后，逐字段比对首次回执。[业务接口与仓储契约](core-api-contract.md)
 
-先跑现有的 `CoreContractTest`，再用这套材料补齐四个写入接口适用的 K 组用例，在 3.3 登记实测回执。#7 接入 SQLite 后重跑同一组请求，核对重开后的原话、来源版本、任务与首次回执。[现有契约测试](../android/app/src/androidTest/java/com/pebblepile/android/CoreContractTest.kt)
+在 `android/` 运行 `.\gradlew.bat testDebugUnitTest`。20 项 JVM 用例直接读取冻结材料，覆盖保存、标签排除、条件纠正、实际反馈，以及任务控制和失败重试。#7 接 SQLite 后重跑 K 组，再结束进程，核对重开后的原话、来源版本、任务与首次回执。[JVM 契约测试](../android/app/src/test/java/com/pebblepile/android/service/LocalCoreApiContractTest.kt) · [设备契约测试](../android/app/src/androidTest/java/com/pebblepile/android/CoreContractTest.kt)
 
 ### 3.2 三种回执
 
@@ -106,9 +106,11 @@
 
 | 编号 | 工具 | `operationId` | `baseRevision` | 实际状态 | `recordId` / `revision` | 与预期差异 | 结论 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| K01 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 |
-| K02 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 |
-| K03 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 | 待实测 |
+| K01 | `record_experience` | `op-save` | 新建 | 已保存，来源 `id-2` 版本 1，任务 `id-3` | `id-1` / 1 | 一致 | 通过 |
+| K02 | `record_experience` | `op-save` | 原样重发 | 逐字段等于首次回执，库修订仍为 1 | `id-1` / 1 | 一致 | 通过 |
+| K03 | `revise_memory` | `op-c01` | 1 | `REVISION_CONFLICT`，下一步 `review_current_revision` | `id-1` / 当前 2 | 一致 | 通过 |
+
+各用例从独立空库开始。JUnit XML 的标准输出保留 K01、K02、K03 的完整回执。Android CI 按提交号上传 XML 与 HTML 报告。
 
 ## 四、算法回归
 
@@ -220,7 +222,7 @@
 
 | 类别 | 用例数 | 通过 | 失败 | 阻塞 | 备注 |
 | --- | --- | --- | --- | --- | --- |
-| 契约 K01–K03 | 3 | 待实测 | 待实测 | 待实测 | 对照已合入的 #6 回执，逐项登记跨模块结果 |
+| 契约 K01–K03 | 3 | 3 | 0 | 0 | JVM / 内存仓储，三种回执见 3.3；SQLite 接入后复验 |
 | 算法 G01–G12 | 12 | 待实测 | 待实测 | 待实测 | 等 #9 基线 |
 | 真机 A01–A09 | 9 | 待实测 | 待实测 | 待实测 | 等 #11 APK |
 | UI 自动化 | 4 | 待实测 | 待实测 | 待实测 | 按本轮测试提交登记页面回归结果 |
@@ -253,7 +255,7 @@
 
 ## 验证与限制
 
-- 固定材料、码点区间和稳定预期已交付，K、G、A、F 组分别按表中依赖开展实测。
+- 固定材料和 16 处码点区间已自检。K 组已完成内存仓储实测，算法、完整故障恢复和真机流程按各自依赖接手。
 - 拿到 #9 的版本化基线后填写预期顺序，再回放同一输入三次。
 - 字段名与错误码按 #6 的样例回执核对。
 - 林金晶与林叶鑫维护同一版材料。调整逐字输入后，同步更新两份 JSON 的版本并重算区间。

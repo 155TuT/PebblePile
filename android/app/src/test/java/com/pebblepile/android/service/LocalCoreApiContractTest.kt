@@ -1,5 +1,8 @@
 package com.pebblepile.android.service
 
+import com.google.gson.Gson
+import com.google.gson.JsonParser
+import com.pebblepile.android.db.DemoLibrary
 import com.pebblepile.android.db.SnapshotCoreRepository
 import com.pebblepile.android.model.CorrectionScope
 import com.pebblepile.android.model.PebbleRecord
@@ -7,6 +10,7 @@ import com.pebblepile.android.model.RecordTag
 import com.pebblepile.android.model.SourceRef
 import com.pebblepile.android.model.TaskAction
 import com.pebblepile.android.model.TaskState
+import com.pebblepile.android.repository.OperationKey
 import com.pebblepile.android.repository.CoreReader
 import com.pebblepile.android.repository.CoreRepository
 import com.pebblepile.android.repository.CoreWriter
@@ -25,7 +29,7 @@ import org.junit.Test
 /**
  * Issue #10 contract cases against the #6 local core.
  *
- * Inputs are the frozen dinner materials from docs/issue2-research.md. The repository is the
+ * Inputs come from the shared docs/testing/issue10/fixtures.json test resource. The repository is the
  * in-memory snapshot implementation, so these tests exercise the business contract without an
  * emulator or SQLite.
  */
@@ -38,6 +42,7 @@ class LocalCoreApiContractTest {
         val receipt = h.core.recordExperience(E01, "app_home_record", "op-save")
 
         assertTrue(receipt.success)
+        println("K01 " + Gson().toJson(receipt))
         assertEquals("已保存", receipt.message)
         assertEquals(1L, receipt.revision!!)
         assertEquals(1L, receipt.libraryRevision!!)
@@ -61,6 +66,8 @@ class LocalCoreApiContractTest {
         val replay = h.core.recordExperience(E01, "app_home_record", "op-save")
 
         assertEquals(first, replay)
+        println("K02 " + Gson().toJson(replay))
+        assertEquals(first, h.repository.read { it.receipt(OperationKey("issue10-test", "op-save"))?.receipt })
         val detail = h.core.getRecordDetail(first.recordId!!)!!
         assertEquals(1, detail.sources.size)
         assertEquals(1, detail.jobIds.size)
@@ -88,13 +95,15 @@ class LocalCoreApiContractTest {
     @Test
     fun reusedOperationIdWithDifferentPayloadIsRejectedWithoutWriting() = runBlocking {
         val h = harness()
-        h.core.recordExperience(E01, "app_home_record", "op-save")
+        val original = h.core.recordExperience(E01, "app_home_record", "op-save")
 
         val rejected = h.core.recordExperience(E02, "app_home_record", "op-save")
 
         assertFalse(rejected.success)
         assertEquals("INVALID_INPUT", rejected.code)
         assertEquals("OPERATION_ID_REUSED", rejected.reason)
+        assertEquals(original, h.core.recordExperience(E01, "app_home_record", "op-save"))
+        assertEquals(E01, h.core.getRecord(original.recordId!!)!!.rawText)
         assertEquals(1L, rejected.libraryRevision!!)
         assertEquals(1, h.core.queryRecords().records.size)
     }
@@ -112,6 +121,7 @@ class LocalCoreApiContractTest {
         )
 
         assertFalse(conflict.success)
+        println("K03 " + Gson().toJson(conflict))
         assertTrue(conflict.conflict)
         assertEquals("REVISION_CONFLICT", conflict.code)
         assertEquals(2L, conflict.currentRevision!!)
@@ -145,7 +155,11 @@ class LocalCoreApiContractTest {
         assertEquals(C01, context.futureCondition!!.text)
         assertEquals(recordId, context.futureCondition!!.recordId)
         assertEquals(2L, context.futureCondition!!.revision)
-        assertEquals("local-$recordId-2-2", context.snapshotId)
+        assertTrue(context.snapshotId.isNotBlank())
+        val replay = h.core.reviseMemory(recordId, saved.revision!!, C01, CorrectionScope.FUTURE, "op-c01")
+        assertEquals(receipt, replay)
+        assertEquals(context, h.core.queryContext(recordId))
+        assertEquals(2, h.core.getRecordDetail(recordId)!!.jobIds.size)
         assertEquals(TaskState.QUEUED, h.core.getTask(receipt.jobId!!)?.state)
     }
 
@@ -159,15 +173,18 @@ class LocalCoreApiContractTest {
             recordId, saved.revision!!, C01, CorrectionScope.FUTURE, "op-c01"
         )
         assertTrue(first.success)
-        val current = h.core.getRecord(recordId)!!
+        val other = h.core.recordExperience(E02, "android_share", "op-second-record")
+        val before = h.core.getRecordDetail(other.recordId!!)!!
 
         val conflict = h.core.reviseMemory(
-            recordId, current.revision, "新条件", CorrectionScope.FUTURE, "op-c01-2",
+            other.recordId!!, other.revision!!, "新条件", CorrectionScope.FUTURE, "op-c01-2",
             basePreferenceRevision = 0L
         )
 
         assertFalse(conflict.success)
         assertEquals("REVISION_CONFLICT", conflict.code)
+        assertEquals(before, h.core.getRecordDetail(other.recordId!!))
+        assertEquals(recordId, conflict.currentPreference?.recordId)
         assertEquals(C01, conflict.currentPreference?.text)
         assertEquals(C01, h.core.queryContext(recordId)!!.futureCondition?.text)
     }
@@ -197,14 +214,15 @@ class LocalCoreApiContractTest {
         val recordId = first.recordId!!
 
         val second = h.core.recordExperience(
-            E01, "system_share", "op-share", recordId = recordId, baseRevision = first.revision
+            E02, "android_share", "op-share", recordId = recordId, baseRevision = first.revision
         )
 
         assertTrue(second.success)
         assertEquals(2L, second.revision!!)
         assertNotEquals(first.source, second.source)
         val detail = h.core.getRecordDetail(recordId)!!
-        assertEquals(2, detail.sources.size)
+        assertEquals(mapOf(first.source to E01, second.source to E02), detail.sources.associate { it.ref to it.text })
+        assertEquals(E02, h.core.getRecordDetail(recordId, second.source!!)!!.sources.single().text)
         assertEquals(2, detail.jobIds.size)
         assertEquals(E01, detail.record.rawText)
     }
@@ -218,6 +236,10 @@ class LocalCoreApiContractTest {
         val detail = h.core.getRecordDetail(recordId, saved.source!!)
         assertNotNull(detail)
         assertEquals(listOf(saved.source), detail!!.sources.map { it.ref })
+        val ref = saved.source!!
+        assertNull(h.core.getRecordDetail(recordId, ref.copy(sourceVersion = ref.sourceVersion + 1)))
+        val other = h.core.recordExperience(E02, "android_share", "op-other")
+        assertNull(h.core.getRecordDetail(other.recordId!!, ref))
         assertNull(h.core.getRecordDetail(recordId, SourceRef("missing-source", 1)))
     }
 
@@ -316,10 +338,10 @@ class LocalCoreApiContractTest {
         val saved = h.core.recordExperience(E01, "app_home_record", "op-save")
 
         val missingBase = h.core.recordExperience(
-            CaptureRequest(E01, "system_share", "op-append", recordId = saved.recordId)
+            CaptureRequest(E01, "android_share", "op-append", recordId = saved.recordId)
         )
         val staleBase = h.core.recordExperience(
-            CaptureRequest(E01, "system_share", "op-append-2", recordId = saved.recordId, baseRevision = 99L)
+            CaptureRequest(E01, "android_share", "op-append-2", recordId = saved.recordId, baseRevision = 99L)
         )
 
         assertFalse(missingBase.success)
@@ -369,6 +391,59 @@ class LocalCoreApiContractTest {
         assertEquals(0L, repository.read { it.revision })
     }
 
+    @Test
+    fun staleTagAndOutcomeWritesKeepSourcesTasksAndRecordIntact() = runBlocking {
+        val tag = RecordTag("tag-food", "饮食", E01.take(10), "test-0.1")
+        val h = harness(decorate = { it.copy(tags = listOf(tag)) })
+        val saved = h.core.recordExperience(E01, "app_home_record", "op-save")
+        val id = saved.recordId!!
+        val revision = saved.revision!!
+        assertTrue(h.core.updateRecordTitle(id, revision, "晚餐", "rename").success)
+        val before = h.core.getRecordDetail(id)!!
+
+        val tagConflict = h.core.reviseTags(id, revision, tag.id, "exclude")
+        val outcomeConflict = h.core.recordOutcome(id, revision, "热汤面", "省事", "feedback")
+        for (conflict in listOf(tagConflict, outcomeConflict)) {
+            assertEquals("REVISION_CONFLICT", conflict.code)
+            assertEquals("review_current_revision", conflict.nextAction)
+            assertEquals(before.record, conflict.currentRecord)
+            assertEquals(before.libraryRevision, conflict.libraryRevision)
+        }
+        assertEquals(before, h.core.getRecordDetail(id))
+        assertTrue(h.core.reviseTags(id, before.record.revision, tag.id, "exclude").success)
+        val current = h.core.getRecord(id)!!
+        assertTrue(h.core.recordOutcome(id, current.revision, "热汤面", "省事", "feedback").success)
+    }
+
+    @Test
+    fun failedCommitCanRetryTheSameOperationWithoutPartialWrites() = runBlocking {
+        var attempts = 0
+        val repository = SnapshotCoreRepository(DemoLibrary()) {
+            if (++attempts == 1) throw RepositoryWriteException()
+        }
+        val core: CoreApi = LocalCoreApi(repository, clientId = "issue10-test")
+        val key = OperationKey("issue10-test", "retry")
+        val failed = core.recordExperience(E01, "app_home_record", key.operationId)
+        assertFalse(failed.success)
+        assertTrue(failed.retryable)
+        repository.read { tx ->
+            assertEquals(0L, tx.revision)
+            assertTrue(tx.records().isEmpty())
+            assertNull(tx.receipt(key))
+        }
+
+        val saved = core.recordExperience(E01, "app_home_record", key.operationId)
+        assertTrue(saved.success)
+        val reopened = LocalCoreApi(repository, clientId = key.clientId)
+        assertEquals(saved, reopened.recordExperience(E01, "app_home_record", key.operationId))
+        val detail = reopened.getRecordDetail(saved.recordId!!)!!
+        assertEquals(listOf(saved.source), detail.sources.map { it.ref })
+        assertEquals(listOf(saved.jobId), detail.jobIds)
+        assertEquals(1L, detail.libraryRevision)
+        assertEquals(saved, repository.read { it.receipt(key)?.receipt })
+        assertEquals(2, attempts)
+    }
+
     private class Harness(val core: CoreApi, val repository: SnapshotCoreRepository)
 
     private fun harness(
@@ -397,8 +472,14 @@ class LocalCoreApiContractTest {
     }
 
     private companion object {
-        const val E01 = "今天周一加班到八点半，晚饭预算二十元。我吃了十八元的热汤面，十分钟就吃上了，不用洗锅。"
-        const val E02 = "今天周三又加班了，晚饭还是想控制在二十元以内。我吃了十六元的盖饭，不用准备食材，也不用洗锅，省事让我很满意。"
-        const val C01 = "以后只在工作日加班时，优先给我推荐省事的晚饭。"
+        val fixtures = requireNotNull(LocalCoreApiContractTest::class.java.getResourceAsStream("/fixtures.json"))
+            .bufferedReader(Charsets.UTF_8).use { JsonParser.parseReader(it).asJsonObject }
+
+        fun text(group: String, id: String): String = fixtures.getAsJsonArray(group)
+            .map { it.asJsonObject }.single { it["id"].asString == id }["text"].asString
+
+        val E01 = text("records", "E01")
+        val E02 = text("records", "E02")
+        val C01 = text("corrections", "C01")
     }
 }
