@@ -33,6 +33,17 @@ app\build\outputs\apk\debug\app-debug.apk
 
 接上一台测试设备，在 `android/` 运行 `.\gradlew.bat connectedDebugAndroidTest`，复验分享确认、来源原话、纠正草稿和修订冲突。
 
+## 单元测试
+
+核心契约测试在 `app/src/test/java/com/pebblepile/android/service/LocalCoreApiContractTest.kt`，覆盖保存回执、重复提交、操作标识复用、修订冲突、来源追加、条件范围、标签排除、任务控制和仓储回滚。
+
+```powershell
+cd android
+.\gradlew.bat testDebugUnitTest
+```
+
+报告在 `app/build/reports/tests/testDebugUnitTest/index.html`。`.github/workflows/android-core-tests.yml` 在推送或 PR 时执行同一命令。
+
 ## 手动验收
 
 ### 首页记录
