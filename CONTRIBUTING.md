@@ -1,6 +1,6 @@
 # 参与协作
 
-PebblePile · 叠石面向移动端个人记忆与偏好建模。仓库当前交付需求、系统与数据库设计、VI、信息架构与移动端原型。应用工程按后续任务推进。
+PebblePile · 叠石面向移动端个人记忆与偏好建模。当前冲刺交付 Android 客户端。需求、系统与数据库设计、VI 和原型约定产品目标，业务接口与仓储契约供各模块联调。
 
 开始前阅读 [README](README.md)、[PRD](docs/prd.md)、[VI 规范](docs/vi-design.md)、[信息架构](docs/information-architecture.md)和 [AI 协作约定](AGENTS.md)。涉及业务与数据时，再阅读[系统设计](docs/system-design.md)和[数据库设计](docs/database-design.md)。
 
@@ -18,7 +18,9 @@ PebblePile · 叠石面向移动端个人记忆与偏好建模。仓库当前交
 
 | 位置 | 内容与维护方式 |
 | --- | --- |
-| `docs/` | 需求、设计和规范正文；变更入口或数据语义时同步相关文档 |
+| `android/` | Android 客户端、业务接口、仓储实现与设备测试 |
+| `.github/workflows/` | 调试构建、候选 APK 签名与验收后的原包发布 |
+| `docs/` | 需求、设计、联调契约与验收材料 |
 | `docs/diagrams/` | PlantUML／Mermaid 源文件及正式 SVG；修改源文件后更新对应图形 |
 | `assets/design-tokens.json` | 语义 token、扩展样式、组件组合与验证状态 |
 | `assets/theme.css`、`assets/components.css` | 与 JSON 对应的主题变量和组件配方 |
@@ -79,7 +81,7 @@ SVG 保留 `viewBox`、必要的路径与层次。功能图标保留上游文件
 git diff --check
 ```
 
-脚本需要 Java；也可将 JAR 放在其默认的 `.build/tools/plantuml.jar`。应用代码引入后，再按真实工程配置补充构建和测试命令。静态样张验证、运行时交互、模拟接口与真机结果分别记录。
+渲染脚本需要 Java，可读取 `.build/tools/plantuml.jar`。Android 改动按[构建与发布说明](docs/android-build-release.md)运行调试构建和 Lint，涉及回执或页面时在设备上跑 `connectedDebugAndroidTest`。
 
 PR 说明以具体结果为主，列出执行过的检查和仍待验证的部分。设计变更附对应 Paper 页或必要的前后对照；新增依赖说明用途并提交相应锁文件。示例使用虚构资料，密钥、真实生活材料、个人路径和环境缓存保持在正式交付之外。
 
