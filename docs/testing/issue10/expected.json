@@ -1,0 +1,244 @@
+{
+  "datasetId": "issue10-dinner-v1",
+  "expectedVersion": "0.1.0",
+  "frozenAt": "2026-11-20",
+  "status": "draft_pending_confirmation",
+  "owner": "林叶鑫（Mukyng）",
+  "legend": {
+    "frozen": "原文与语义判定已冻结，可直接执行",
+    "pending_baseline": "等 #9 的候选清单与版本化排序基线",
+    "pending_contract": "等 #6 的样例回执与错误码",
+    "pending_apk": "等 #11 的签名 APK 与 SHA-256"
+  },
+  "counts": {
+    "independentOvertimeDinners": 2,
+    "weekendExceptions": 1,
+    "supportCounts": {
+      "weekday_overtime_convenience": 2
+    },
+    "status": "frozen"
+  },
+  "spans": {
+    "conventions": {
+      "offsetUnit": "utf16-code-unit",
+      "offsetBase": 0,
+      "spanEnd": "exclusive"
+    },
+    "mustMatchExactly": true,
+    "records": {
+      "E01": [
+        { "text": "加班到八点半", "start": 4, "end": 10 },
+        { "text": "二十元", "start": 15, "end": 18 },
+        { "text": "十八元的热汤面", "start": 22, "end": 29 },
+        { "text": "十分钟就吃上了", "start": 30, "end": 37 },
+        { "text": "不用洗锅", "start": 38, "end": 42 }
+      ],
+      "E02": [
+        { "text": "又加班了", "start": 4, "end": 8 },
+        { "text": "二十元以内", "start": 17, "end": 22 },
+        { "text": "十六元的盖饭", "start": 26, "end": 32 },
+        { "text": "不用准备食材", "start": 33, "end": 39 },
+        { "text": "也不用洗锅", "start": 40, "end": 45 },
+        { "text": "省事", "start": 46, "end": 48 }
+      ],
+      "E03": [
+        { "text": "没有加班", "start": 4, "end": 8 },
+        { "text": "四十分钟", "start": 13, "end": 17 },
+        { "text": "番茄鸡蛋面", "start": 18, "end": 23 },
+        { "text": "愿意洗锅", "start": 25, "end": 29 },
+        { "text": "放松", "start": 38, "end": 40 }
+      ]
+    },
+    "status": "frozen"
+  },
+  "conditions": {
+    "Q01": {
+      "weekday": "thu",
+      "overtime": true,
+      "scopeMatch": null,
+      "mustCite": ["E01", "E02"],
+      "excludedFromPreferenceEvidence": ["E03"],
+      "budgetMaxCny": 20,
+      "status": "frozen"
+    },
+    "Q02": {
+      "weekday": "sun",
+      "overtime": false,
+      "scopeMatch": null,
+      "mustCite": ["E03"],
+      "budgetMaxCny": 20,
+      "cookMinutes": 40,
+      "mustExplainContrastWithOvertime": true,
+      "status": "frozen"
+    },
+    "C01": {
+      "scope": { "weekdays": ["mon", "tue", "wed", "thu", "fri"], "overtime": true },
+      "preference": "convenience",
+      "revisionIncrements": true,
+      "status": "frozen"
+    },
+    "Q03": {
+      "weekday": "sat",
+      "overtime": true,
+      "afterCorrection": "C01",
+      "scopeMatch": false,
+      "mustNotApplyConvenienceRule": true,
+      "budgetMaxCny": 20,
+      "status": "frozen"
+    },
+    "Q01b": {
+      "weekday": "thu",
+      "overtime": true,
+      "afterCorrection": "C01",
+      "scopeMatch": true,
+      "prefer": "convenience",
+      "mustCite": ["E01", "E02"],
+      "budgetMaxCny": 20,
+      "status": "frozen"
+    },
+    "O01": {
+      "target": "Q01",
+      "linksToDecision": true,
+      "showsSuggestionAndActual": true,
+      "actualMeal": "热汤面",
+      "status": "frozen"
+    }
+  },
+  "beforeAfterCorrection": {
+    "Q01": {
+      "scopeMatch": null,
+      "note": "C01 之前没有本人明确设置，只按证据与当前条件排序",
+      "status": "frozen"
+    },
+    "Q01b": {
+      "scopeMatch": true,
+      "prefer": "convenience",
+      "note": "C01 之后命中“工作日且加班”，明确设置优先",
+      "status": "frozen"
+    },
+    "Q03": {
+      "scopeMatch": false,
+      "note": "周六加班不属于“工作日且加班”，不得按该规则优先省事",
+      "status": "frozen"
+    }
+  },
+  "regressions": {
+    "D01": {
+      "action": "share_same_experience",
+      "ref": "E01",
+      "independentOvertimeDinners": 2,
+      "supportCounts": { "weekday_overtime_convenience": 2 },
+      "newSourceAllowed": true,
+      "newEventAllowed": false,
+      "status": "frozen"
+    },
+    "R01": {
+      "text": "室友说：他加班后只想吃面，不想做饭。",
+      "observationType": "third_party",
+      "countedForSelf": false,
+      "preferenceUnchanged": true,
+      "status": "frozen"
+    },
+    "T01": {
+      "action": "exclude_tag_then_filter",
+      "filterReturnsRecord": false,
+      "survivesReprocess": true,
+      "status": "frozen"
+    }
+  },
+  "contractCases": [
+    {
+      "id": "K01",
+      "kind": "success",
+      "operationId": "new",
+      "baseRevision": "current",
+      "expect": {
+        "writes": 1,
+        "returns": ["recordId", "sourceId", "sourceVersion", "revision", "jobId"],
+        "status": "pending_contract"
+      }
+    },
+    {
+      "id": "K02",
+      "kind": "duplicate",
+      "operationId": "same_as_K01",
+      "payload": "identical_to_K01",
+      "expect": {
+        "returnsOriginalReceipt": true,
+        "recordIdUnchanged": true,
+        "newRecords": 0,
+        "newSources": 0,
+        "newEvents": 0,
+        "newJobs": 0,
+        "status": "pending_contract"
+      }
+    },
+    {
+      "id": "K03",
+      "kind": "revision_conflict",
+      "operationId": "reuse_with_different_payload_or_stale_baseRevision",
+      "expect": {
+        "error": "REVISION_CONFLICT",
+        "returnsCurrentRevision": true,
+        "returnsPendingObjects": true,
+        "partialWrite": false,
+        "status": "pending_contract"
+      }
+    }
+  ],
+  "faultCases": [
+    {
+      "id": "F01",
+      "action": "double_submit",
+      "expect": {
+        "records": 1,
+        "sources": 1,
+        "events": 1,
+        "jobs": 1,
+        "returnsOriginalReceipt": true,
+        "status": "pending_apk"
+      }
+    },
+    {
+      "id": "F02",
+      "action": "kill_process_during_processing",
+      "expect": {
+        "sourceReadable": true,
+        "jobResumesOrWaits": true,
+        "duplicateTags": false,
+        "duplicateEvidence": false,
+        "status": "pending_apk"
+      }
+    },
+    {
+      "id": "F03",
+      "action": "manual_exclude_then_reprocess",
+      "expect": {
+        "staysExcluded": true,
+        "filterExcludesRecord": true,
+        "countsConsistent": true,
+        "status": "pending_apk"
+      }
+    },
+    {
+      "id": "F04",
+      "action": "stale_result_after_correction",
+      "expect": {
+        "error": "STALE_INPUT",
+        "currentConditionUnchanged": true,
+        "currentRevisionUnchanged": true,
+        "status": "pending_apk"
+      }
+    }
+  ],
+  "ranking": {
+    "source": "#9",
+    "baselineVersion": null,
+    "scenePackVersion": null,
+    "algorithmVersion": null,
+    "cases": ["Q01", "Q01b", "Q02", "Q03"],
+    "runs": 3,
+    "mustBeStable": true,
+    "status": "pending_baseline"
+  }
+}
