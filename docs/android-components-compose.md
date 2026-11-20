@@ -1,70 +1,39 @@
-# Compose 共用组件交接（马晨曦）
+# Android 共用组件交接
 
-关联 #3，接入方为 #4 陈柏睿（@baiyi060404）、#5 陈柯男（@Rophocale-KBlue）。本次在既有 Compose 工程中交付组件；原先的交接规格见 [PR #12](https://github.com/155TuT/PebblePile/pull/12)。
+马晨曦负责四类 Compose 组件。陈柏睿接首页和记录库，陈柯男接分享、详情和纠正。两位前端在页面的共同父级使用 `PebbleComponentTheme`，由页面持有草稿、选中状态和业务回执。[组件规格](android-components-handoff.md) · [组件源码](../android/app/src/main/java/com/pebblepile/android/PebbleComponents.kt)
 
-## 文件与接口
-
-源码：[PebbleComponents.kt](../android/app/src/main/java/com/pebblepile/android/PebbleComponents.kt)，包名 `com.pebblepile.android`。使用工程已有 Compose UI / Material3 依赖，不新增库。
-
-| 接口 | 使用方与约定 |
+| 组件 | 传什么，怎样接 |
 | --- | --- |
-| `PebbleComponentTheme(cjk, content)` | 两位前端在页面共同父级应用；`cjk` 可注入获许可的真实 400/500 字体。 |
-| `PebbleInput(value, onValueChange, label, modifier, enabled, errorMessage)` | 首页、分享编辑、反馈及条件纠正；最多显示四行，长文内部滚动，状态由调用方持有。 |
-| `PebbleTag(label, selected, onSelectedChange, modifier, origin, needsReview, enabled)` | 记录库筛选、详情标签；回调只表达选择意图，筛选与排除业务由页面调用 CoreAPI。 |
-| `PebbleEvidenceCard(quote, sourceLabel, condition, onOpenSource, onCorrect, modifier, sourceAvailable)` | 详情依据；引用真实原文，通过闭包保留 evidenceId / sourceId / sourceVersion，不把标签当作证据。来源不可用时禁用原文按钮。 |
-| `PebbleFeedback(state, modifier, detail, onRetry)` | 已保存、正在整理、待核对、保存失败；只有失败且提供回调时显示重试。 |
-| `PebbleComponentsPreview()` | Android Studio 两个预览：360dp、360dp + 字体 200%。支持编辑、选择、打开原文、纠正与样例重试。 |
+| `PebbleInput` | 传原文、标签和 `onValueChange`。可传提示、帮助和错误原因。输入框最多显示四行，继续输入时在框内滚动。 |
+| `PebbleTag` | `selected` 表示筛选状态，`origin` 说明标签来自哪里，`needsReview` 标出待核对。点按整项触发 `onSelectedChange`，选中状态同时显示勾选图标。详情中的“排除”由页面按标签编号调用业务接口。 |
+| `PebbleEvidenceCard` | 展示适用条件和认识来源。每条引文放一个 `PebbleEvidenceSource`，将查看动作绑定到该记录、来源版本和码点区间。一张卡片共用一个纠正入口。单条引文也可沿用原有的 `quote`、`sourceLabel` 调用。 |
+| `PebbleFeedback` | 页面收到持久化回执后显示“已保存”，整理任务另显示自己的状态。保存失败时沿用原操作标识重试；整理失败时保留保存回执，按对应任务重试。有继续或取消动作时传入相应回调。 |
 
-首页接入示例（状态由现有页面保存）：
+## 两位前端怎样接
 
-```kotlin
-PebbleComponentTheme {
-    PebbleInput(
-        value = draft,
-        onValueChange = { draft = it },
-        label = "记录原话",
-        enabled = !saving,
-        errorMessage = saveError,
-    )
-}
+**陈柏睿 #4** 接首页输入、记录库标签和保存回执，切换对话与记录模式时保留草稿。选择标签更新筛选，保存成功后按回执里的 `recordId` 打开详情。[#4 交接留言](https://github.com/155TuT/PebblePile/issues/4#issuecomment-7045235933)
+
+**陈柯男 #5** 接分享输入、依据、反馈和条件纠正。每条引文单独绑定查看动作，把 `recordId` 和精确的 `SourceRef` 传给 `CoreApi.getRecordDetail`，按来源版本取回原话，再高亮对应的 Unicode 码点区间。失效引用显示原因并禁用该条的原文按钮，其他引用仍可打开。纠正遇到修订冲突时保留草稿，供用户对照当前条件。[#5 交接留言](https://github.com/155TuT/PebblePile/issues/5#issuecomment-7045252542) · [业务契约](core-api-contract.md)
+
+调试预览给出两条可操作的引文。周一的“十分钟就吃上了”和周三的“也不用洗锅”分别打开各自的原话和版本。预览使用虚构记录，保存在调试源码中。[可运行示例](../android/app/src/debug/java/com/pebblepile/android/PebbleComponentsPreview.kt)
+
+## 视觉与字体
+
+页面用浅砂色，依据卡片和来源弹窗用 `#FFFDF7`。未选标签凸起，输入框与选中标签内凹；焦点用 `#365B44` 描边，主要触点至少 48 × 48 dp。状态沿用 Iconoir 的图形和文字，读屏通过文字、勾选语义和状态播报区分结果。[设计值](../assets/design-tokens.json) · [图标许可](../assets/icons/LICENSE)
+
+组件默认使用随 APK 打包的霞鹜文楷 Regular 400 和 Medium 500。两份文件已按清单核对 SHA-256，OFL 许可随包提供。英文和数字使用系统无衬线 400，Leftist 待嵌入授权确认后接入。[字体清单](../assets/fonts/manifest.json) · [排版实现](../android/app/src/main/java/com/pebblepile/android/PebbleTypography.kt)
+
+## 验证与下一步
+
+Android 16 模拟器使用 360 dp 纵向窗口。100% 字号下 14 项设备测试通过，其中 5 项覆盖这批组件。200% 字号下重跑这 5 项，覆盖长文与错误提示、禁用触点、两条来源回查与高亮、两种重试以及纠正的取消和确认。另在调试预览实际弹出软键盘并打开来源弹窗。[设备测试](../android/app/src/androidTest/java/com/pebblepile/android/PebbleComponentsTest.kt) · [100% 字号](testing/issue3/components-360.png) · [200% 字号](testing/issue3/components-360-large.png) · [放大后的来源弹窗](testing/issue3/source-360-large.png)
+
+在 `android/` 执行：
+
+```powershell
+.\gradlew.bat :app:assembleDebug :app:lintDebug
+.\gradlew.bat :app:connectedDebugAndroidTest
 ```
 
-详情接入示例（`evidence` 与导航函数替换为页面现有对象）：
+陈柏睿、陈柯男各接一处后，在 #4、#5 回写页面位置和提交号。马晨曦和林叶鑫在首测手机上复查中文与英文混排、软键盘、TalkBack 的焦点顺序和实际播报，结果登记到 #3。[#3 验收与分工](https://github.com/155TuT/PebblePile/issues/3#issuecomment-7045266816)
 
-```kotlin
-PebbleEvidenceCard(
-    quote = evidence.quote,
-    sourceLabel = "本人原话",
-    condition = conditionText,
-    onOpenSource = { openEvidence(evidence.evidenceId) },
-    onCorrect = { openCorrection() },
-)
-```
-
-## VI 与字体
-
-依据 [VI](vi-design.md)、[token](../assets/design-tokens.json)、[字体说明](../assets/fonts/README.md)。浅砂 #F5F3EB、苔绿 #536D58、正文 #222C24；控件 16dp、卡片 24dp 圆角，主要触点至少 48dp。正文 16sp/26sp，说明 14sp/20sp，标题 20sp/30sp。凸起与凹陷使用多层绘制近似软阴影，仍需与 VI 样张做设备视觉对照，不宣称像素完全一致。
-
-图标路径来自仓库 Iconoir Regular 的 check.svg / info.svg / warning.svg 对应图形（本文件内联路径），保持 24 视图、1.5 描边和原有 assets/icons 许可。状态同时有文字，图标不重复朗读；标签具有 Checkbox 语义，状态支持 polite live region。
-
-当前默认 **系统字体回退**，没有把回退字形冒充霞鹜文楷或 Leftist。组件主题关闭合成粗斜体。霞鹜文楷在字体文件与许可一并入包后通过 `cjk` 注入；Leftist 嵌入／再分发授权尚未确认，本 PR 不加入字体二进制，英文角色仍待授权后接入。字体与混排验收未完成。
-
-## 两位前端接入与反馈
-
-- 陈柏睿（#4）：首页原话输入、记录库标签及保存回执状态使用上述组件。保留现有草稿和 recordId 导航；只有收到核心持久化成功回执后才显示 SAVED，后台抽取仍用 PROCESSING。
-- 陈柯男（#5）：分享编辑、详情依据、结果反馈和条件纠正使用同一组组件。`onOpenSource` 定位原文版本；`onCorrect` 进入现有纠正流程；失败保留草稿，重试复用业务 operationId，修订冲突不能直接显示成功。
-- 请在对应 Issue 回写接入提交、构建结果及阻塞。组件回调或参数不足时贴出调用场景，由组件方继续调整。
-
-## 验证状态与待验步骤
-
-已完成：接口及静态源码检查、Iconoir 路径核对、空白差异检查。没有执行 Gradle 编译、Compose Preview 渲染、自动 UI 测试或真机操作：当前交付环境没有 JDK 和 Android SDK。源码预览中的所有材料均为虚构，点击重试只切换样例状态，不写入资料库。
-
-有 Android 环境后，在 `android/` 执行 `./gradlew :app:assembleDebug :app:lintDebug`，再打开两个 Preview（交互模式）或运行预览到首测手机。需记录提交、机型、Android 版本与截图：
-
-1. 360dp 宽、系统字号 100% / 200%：长中文、英文数字混排、五行以上输入、键盘弹出后可滚动并完成操作。
-2. 标签切换、disabled 标签不可切换，TalkBack 读出选中状态；输入错误朗读，失败重试回调只执行一次。
-3. 依据卡片打开原文、不可用来源按钮禁用；纠正确认更新样例，取消保留原值。
-4. 真页面保存失败保留草稿，成功状态以 CoreAPI 回执为准；两个入口打开同一 recordId。
-5. 核对真实字体字形、48dp 触点、焦点可见性和凸凹层次；回填截图后才完成 #3 的视觉验收。
-
-本次代码和说明由 AI 辅助编写；不代替负责人及下游同学实际构建和验收。此交付不关闭 #3。
+马晨曦负责组件及交接，Codex 协助实现、审查和回归验证。

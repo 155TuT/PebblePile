@@ -2,7 +2,7 @@
 
 [组件任务 #3](https://github.com/155TuT/PebblePile/issues/3) · [冲刺计划](https://github.com/155TuT/2601-fzu-SoftwareEngineering-YuezhongWu/blob/main/homework/team/task8/plan.md) · [VI 规范](vi-design.md) · [字体说明](../assets/fonts/README.md)
 
-整理于 2026-11-20。
+整理于 2026-11-20。四类组件的调用方式、模拟器截图与设备测试见 [Compose 组件交接](android-components-compose.md)。
 
 ## 一、范围与依赖
 
