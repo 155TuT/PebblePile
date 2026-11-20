@@ -31,12 +31,17 @@
 
 ## 技术栈
 
+Android `v0.1.0` 目标采用 Kotlin 与 Jetpack Compose，本地数据使用 Room/SQLite。当前仓库先交付不依赖 Android SDK 的 Kotlin 调度核心，以及接入 AndroidX WorkManager 的适配源码。
+
 ## 项目架构
 
 ## 目录结构
 
 ```text
 PebblePile/
+├── android/
+│   ├── scheduler-core/      # Issue #8 持久任务、检查点、租约与状态机
+│   └── scheduler-android/   # WorkManager 适配源码
 ├── assets/                  # 品牌图标、设计 token、主题与组件样式
 │   ├── fonts/               # 字体来源、加载方式与许可
 │   ├── icons/               # Iconoir SVG 与语义映射
@@ -52,6 +57,12 @@ PebblePile/
 ```
 
 ## 本地运行
+
+持久任务核心可在没有 Android SDK 的环境中单独验证：
+
+```powershell
+powershell -File android/scheduler-core/check.ps1
+```
 
 ## 常用命令
 
@@ -76,6 +87,7 @@ PebblePile/
 | [系统设计说明书](docs/system-design.md) | 模块与 UML、算法、接口和恢复机制 |
 | [数据库设计说明书](docs/database-design.md) | 实体关系、关系模型、字段约束、对象映射与数据管理 |
 | [第二次团队作业要求](task-requirement.md) | 原型、概要设计与课程提交要求 |
+| [Issue #8 持久任务调度](android/scheduler-core/README.md) | 任务阶段、检查点、恢复、租约和 WorkManager 接入 |
 
 系统与数据库说明书参照 GB/T 8567—2006 编排，当前作为设计基线。历史材料见 [早期菜谱方向](docs/recipe/)。
 
