@@ -83,9 +83,6 @@ FinalIssue4Home   captureMethod=app_home_record
 FinalIssue4Shared captureMethod=android_share
 ```
 
-## 仍待正式联调
+## 后续复验
 
-- `DemoCoreApi` 仍是临时适配器，正式版必须接 Issue #6 的 CoreAPI 和 Issue #7 的 Room/SQLite。
-- 演示标签和候选建议是固定样例，不能作为算法验收结果。
-- Issue #3 正式组件尚未替换当前占位组件。
-- 尚未在首测真机上执行，当前结果为 Pixel 7 / Android 17 模拟器结果。
+上面记录的是 #4 在 Pixel 7 / Android 17 模拟器上的结果。首页已接入 #6 的业务接口。#7 交付 SQLite 后，在首测手机上重做首页保存、系统分享和进程重开，核对两条原话和各自的编号。组件和算法的接手顺序见[工程交接](ISSUE4_HANDOFF.md)。

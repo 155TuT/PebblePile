@@ -25,21 +25,22 @@
 - 记录库路由：`library`
 - 详情路由：`detail/{recordId}`
 - 首页保存、系统分享都调用 `CoreApi.recordExperience`
-- 首页、记录库、详情和分享读取同一 `CoreApi.recentRecords/getRecord`
+- 记录库用 `CoreApi.recentRecords` 取列表，详情用 `getRecordDetail(recordId)` 读记录和长期条件。
 
 ## 接入团队模块
 
-1. 用 Issue #6 的正式 CoreAPI 适配器替换 `DemoCoreApi`。
-2. 用 Issue #7 的 Room/SQLite 仓储实现正式持久化。
-3. 用 Issue #3 的输入、标签、依据和状态组件替换当前 Material 3 占位。
-4. 把首页保存的 `operationId` 交给正式核心生成并持久化，避免进程重启后的重复写入。
-5. 任务进度、证据版本和偏好重算接入详情后，再把 `DemoCoreApi` 移出正式构建。
+首页和分享已通过 `PebblePileApplication.coreApi` 接入 #6 的 `LocalCoreApi`。入口为每次新操作生成 `operationId`，重试时沿用原标识和参数。核心在同一次写入中保存记录、来源、适用的待办和回执。[回执样例](../docs/core-api-receipt-examples.json)
+
+1. #7 实现 `CoreRepository` 后接入 SQLite。#4、#5 分别从首页和分享保存一条原话，重开后逐条核对 `recordId`、原话和首次回执。
+2. #3 交付共用组件后，#4 替换首页输入框和记录库筛选控件，#5 接详情的依据和反馈状态。
+3. #8、#9 交出任务进度和带来源版本的饮食建议后，#5 接到详情，#10 用固定的晚餐材料回放。[业务接口与仓储契约](../docs/core-api-contract.md)
 
 ## 构建入口
 
+配置 JDK 和 Android SDK 后，在仓库根目录运行。环境版本见[构建说明](../docs/android-build-release.md)。
+
 ```powershell
-$env:JAVA_HOME = "D:\Android\OpenJDK21"
-$env:ANDROID_HOME = "D:\Android\Sdk"
+cd android
 .\gradlew.bat clean assembleDebug
 ```
 
