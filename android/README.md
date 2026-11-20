@@ -33,6 +33,17 @@ app\build\outputs\apk\debug\app-debug.apk
 
 接上一台测试设备，在 `android/` 运行 `.\gradlew.bat connectedDebugAndroidTest`。契约测试覆盖回执重放、写入回滚和跨记录的长期条件冲突。页面测试覆盖分享确认、依据回查和纠正草稿。[契约测试](app/src/androidTest/java/com/pebblepile/android/CoreContractTest.kt) · [页面测试](app/src/androidTest/java/com/pebblepile/android/RecordFlowTest.kt)
 
+## 单元测试
+
+JVM 用例直接读取 #10 冻结的晚餐原话，用内存仓储核对首次保存、重发、修订冲突、来源版本、条件、标签和反馈。写入中断后，重试应取回同一次操作的结果。[契约测试](app/src/test/java/com/pebblepile/android/service/LocalCoreApiContractTest.kt) · [固定样例](../docs/testing/issue10/fixtures.json)
+
+```powershell
+cd android
+.\gradlew.bat testDebugUnitTest
+```
+
+报告在 `app/build/reports/tests/testDebugUnitTest/index.html`。Android CI 在相关 PR 和 `main` 推送中运行同一组测试，上传 HTML 报告和逐项 JUnit XML。
+
 ## 手动验收
 
 ### 首页记录
