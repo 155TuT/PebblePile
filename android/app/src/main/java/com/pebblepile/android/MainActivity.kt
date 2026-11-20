@@ -33,6 +33,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.pebblepile.android.model.CorrectionScope
+import com.pebblepile.android.model.ConditionSetting
 import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.service.CoreApi
 import kotlinx.coroutines.launch
@@ -438,6 +439,9 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
     var choice by rememberSaveable(recordId) { mutableStateOf("") }
     var experience by rememberSaveable(recordId) { mutableStateOf("") }
     var conditionDraft by rememberSaveable(recordId) { mutableStateOf("") }
+    var editingRecordRevision by rememberSaveable(recordId) { mutableLongStateOf(0L) }
+    var editingPreferenceRevision by rememberSaveable(recordId) { mutableLongStateOf(0L) }
+    var futureCondition by remember(recordId) { mutableStateOf<ConditionSetting?>(null) }
     var showCorrection by rememberSaveable { mutableStateOf(false) }
     var correctionScope by rememberSaveable { mutableStateOf(CorrectionScope.THIS_TIME) }
     var status by remember { mutableStateOf<String?>(null) }
@@ -446,7 +450,9 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
 
     suspend fun reload() {
         loading = true
-        record = api.getRecord(recordId)
+        val detail = api.getRecordDetail(recordId)
+        record = detail?.record
+        futureCondition = detail?.futureCondition
         loading = false
     }
     LaunchedEffect(recordId) { reload() }
@@ -463,7 +469,7 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
     var feedbackOperation by rememberSaveable(recordId, item.revision, choice, experience) {
         mutableStateOf<String?>(null)
     }
-    var correctionOperation by rememberSaveable(recordId, item.revision, conditionDraft, correctionScope) {
+    var correctionOperation by rememberSaveable(recordId, editingRecordRevision, editingPreferenceRevision, conditionDraft, correctionScope) {
         mutableStateOf<String?>(null)
     }
 
@@ -550,6 +556,8 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
             Text("可以选择只调整当前事项，或将条件保存为以后适用的明确偏好。", color = Muted, fontSize = 13.sp)
             Button(onClick = {
                 conditionDraft = item.currentCondition
+                editingRecordRevision = item.revision
+                editingPreferenceRevision = futureCondition?.revision ?: 0L
                 correctionScope = item.conditionScope ?: CorrectionScope.THIS_TIME
                 showCorrection = true
             }, colors = ButtonDefaults.buttonColors(containerColor = Moss)) { Text("修改条件") }
@@ -588,6 +596,9 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (item.currentCondition.isNotBlank()) Text("当前条件：${item.currentCondition}", color = Muted)
+                    if (correctionScope == CorrectionScope.FUTURE) {
+                        futureCondition?.let { Text("当前长期条件：${it.text}", color = Muted) }
+                    }
                     OutlinedTextField(value = conditionDraft, onValueChange = { conditionDraft = it }, label = { Text("新的适用条件") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                     Text("影响范围", fontWeight = FontWeight.Medium)
                     Column(Modifier.selectableGroup()) {
@@ -612,7 +623,10 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
                 TextButton(enabled = conditionDraft.isNotBlank(), onClick = {
                     val id = correctionOperation ?: UUID.randomUUID().toString().also { correctionOperation = it }
                     scope.launch {
-                        val receipt = api.reviseMemory(item.id, item.revision, conditionDraft, correctionScope, id)
+                        val receipt = api.reviseMemory(
+                            item.id, editingRecordRevision, conditionDraft, correctionScope, id,
+                            basePreferenceRevision = editingPreferenceRevision.takeIf { correctionScope == CorrectionScope.FUTURE }
+                        )
                         if (receipt.success) { showCorrection = false; status = receipt.message; reload(); onChanged() }
                         else if (receipt.conflict) conflictMessage = receipt.message else status = receipt.message
                     }
@@ -626,6 +640,8 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
         fun refreshRecord() {
             scope.launch {
                 reload()
+                editingRecordRevision = record?.revision ?: 0L
+                editingPreferenceRevision = futureCondition?.revision ?: 0L
                 conflictMessage = null
             }
         }

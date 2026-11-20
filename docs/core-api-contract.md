@@ -92,4 +92,10 @@
 
 Android 的 [DemoCoreApi](../android/app/src/main/java/com/pebblepile/android/DemoCoreApi.kt) 将同一个业务服务装配给首页和分享入口。[DemoLibraryStore](../android/app/src/main/java/com/pebblepile/android/db/DemoLibraryStore.kt) 沿用 `pebblepile_issue4_demo` 的记录键，给旧有记录补来源引用，并用一次 SharedPreferences 提交保存记录、版本、任务和回执。任务可查询和控制，执行由后续调度接入。详情显示最后一次提交的条件及其范围，业务查询分别返回当前事项条件与晚餐场景的长期条件。建议区域继续显示 #14 的演示内容。
 
-#10 负责测试 PR，#6 按测试反馈调整接口。
+首页、分享和后续模块从 `PebblePileApplication.coreApi` 取同一个服务。页面用 `getRecordDetail` 一次读取记录和长期条件。用户选择“以后按此条件”时，同时提交打开编辑框时的记录修订和 `basePreferenceRevision`。首次设置长期条件传 0。同一条长期条件可以从不同记录修改，任一方先保存，另一方就先核对当前长期条件，再提交自己的草稿。
+
+从 #14 的演示库升级时，旧记录保留各自的纠正范围。旧库里只有一种明确长期条件时，核心把它带入后续查询。出现多种时，页面保留各条记录的原值，由用户选定今后采用的条件。
+
+在 `android/` 运行 `.\gradlew.bat connectedDebugAndroidTest`，可回放晚餐保存、改标题、重发、冲突和任务控制，核对重开后的原回执，也可复验跨记录修订和写入失败回滚。
+
+#7 接仓储接口，在 SQLite 上重跑事务用例。#8、#9 接候选发布和证据校验，保存每次建议的 `decisionId`；#6 随建议接入把反馈关联到当时的决策。#10 据此验证同一事项收到多次建议、反馈仍属于原建议，以及纠正后迟到的候选如何处理。

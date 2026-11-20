@@ -18,8 +18,13 @@ import com.pebblepile.android.repository.RepositoryWriteException
 import com.pebblepile.android.repository.StoredReceipt
 import java.nio.ByteBuffer
 import java.security.MessageDigest
+import java.time.DateTimeException
+import java.time.Instant
 import java.time.LocalDateTime
+import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoField
 import java.util.UUID
 
 data class CaptureRequest(
@@ -35,7 +40,8 @@ data class RecordDetail(
     val record: PebbleRecord,
     val sources: List<CapturedSource>,
     val jobIds: List<String>,
-    val libraryRevision: Long
+    val libraryRevision: Long,
+    val futureCondition: ConditionSetting?
 )
 
 data class RecordQueryResult(val records: List<PebbleRecord>, val libraryRevision: Long)
@@ -64,7 +70,7 @@ class LocalCoreApi(
         baseRevision: Long?
     ): ApiReceipt = recordExperience(CaptureRequest(text, captureMethod, operationId, recordId, baseRevision))
 
-    fun recordExperience(request: CaptureRequest): ApiReceipt = write(
+    override fun recordExperience(request: CaptureRequest): ApiReceipt = write(
         request.operationId, "record_experience", request.text, request.captureMethod,
         request.recordId, request.baseRevision?.toString(), request.capturedAt
     ) { tx ->
@@ -72,6 +78,9 @@ class LocalCoreApi(
             return@write invalid("请输入 1 至 10000 个字符的原话")
         }
         if (request.captureMethod.isBlank()) return@write invalid("缺少记录来源")
+        if (request.capturedAt != null && captureInstant(request.capturedAt) == null) {
+            return@write invalid("请使用有效的记录时间")
+        }
         if (request.recordId == null && request.baseRevision != null) {
             return@write invalid("新增记录无需提供基准修订")
         }
@@ -93,38 +102,40 @@ class LocalCoreApi(
 
     override suspend fun getRecord(recordId: String): PebbleRecord? = getRecordDetail(recordId)?.record
 
-    fun getRecordDetail(recordId: String, sourceRef: SourceRef? = null): RecordDetail? = repository.read { tx ->
+    override fun getRecordDetail(recordId: String, sourceRef: SourceRef?): RecordDetail? = repository.read { tx ->
         val record = tx.record(recordId) ?: return@read null
         val sources = tx.sources(recordId).filter { sourceRef == null || it.ref == sourceRef }
         if (sourceRef != null && sources.isEmpty()) return@read null
-        RecordDetail(record, sources, tx.tasks(recordId).map { it.id }, tx.revision)
+        RecordDetail(record, sources, tx.tasks(recordId).map { it.id }, tx.revision, tx.futureCondition)
     }
 
     override suspend fun recentRecords(): List<PebbleRecord> = queryRecords().records
 
-    fun queryRecords(tags: Set<String> = emptySet()): RecordQueryResult = repository.read { tx ->
+    override fun queryRecords(tags: Set<String>): RecordQueryResult = repository.read { tx ->
         val records = tx.records().asReversed().filter { record ->
             tags.all { name -> record.tags.any { it.name == name && !it.excluded } }
-        }.sortedByDescending { it.capturedAt }
+        }.map { it to captureInstant(it.capturedAt) }
+            .sortedByDescending { it.second }
+            .map { it.first }
         RecordQueryResult(records, tx.revision)
     }
 
-    fun queryContext(recordId: String): LocalContext? = repository.read { tx ->
+    override fun queryContext(recordId: String): LocalContext? = repository.read { tx ->
         val record = tx.record(recordId) ?: return@read null
         LocalContext(
             record.currentGoalCondition,
             tx.futureCondition,
-            "local-${tx.futureCondition?.revision ?: 0}",
+            "local-${record.id}-${record.revision}-${tx.futureCondition?.revision ?: 0}",
             tx.revision
         )
     }
 
-    fun updateRecordTitle(recordId: String, baseRevision: Long, title: String, operationId: String): ApiReceipt =
+    override fun updateRecordTitle(recordId: String, baseRevision: Long, title: String, operationId: String): ApiReceipt =
         changeRecord(recordId, baseRevision, operationId, "update_record", title) { tx, record ->
             if (title.isBlank()) return@changeRecord invalid("记录标题不能为空")
             val updated = record.copy(title = title, revision = record.revision + 1)
             tx.putRecord(updated)
-            saved(updated, "记录标题已更新")
+            saved(updated, "记录标题已更新").copy(title = updated.title)
         }
 
     override suspend fun reviseTags(recordId: String, baseRevision: Long, tagId: String, operationId: String): ApiReceipt =
@@ -149,9 +160,17 @@ class LocalCoreApi(
     }
 
     override suspend fun reviseMemory(
-        recordId: String, baseRevision: Long, condition: String, scope: CorrectionScope, operationId: String
-    ): ApiReceipt = changeRecord(recordId, baseRevision, operationId, "revise_memory", condition, scope.name) { tx, record ->
+        recordId: String, baseRevision: Long, condition: String, scope: CorrectionScope, operationId: String,
+        basePreferenceRevision: Long?
+    ): ApiReceipt = changeRecord(recordId, baseRevision, operationId, "revise_memory", condition, scope.name,
+        *listOfNotNull(basePreferenceRevision?.takeIf { it != 0L }?.toString()).toTypedArray()) { tx, record ->
         if (condition.isBlank()) return@changeRecord invalid("适用条件不能为空")
+        if (scope == CorrectionScope.FUTURE && (basePreferenceRevision ?: 0L) != (tx.futureCondition?.revision ?: 0L)) {
+            return@changeRecord conflict(recordId, record.revision).copy(
+                currentRecord = record, currentPreference = tx.futureCondition,
+                message = "长期条件已更新，请核对当前条件后再提交。"
+            )
+        }
         val updated = record.copy(
             currentCondition = condition,
             conditionScope = scope,
@@ -167,9 +186,9 @@ class LocalCoreApi(
         }
     }
 
-    fun getTask(jobId: String): CoreTask? = repository.read { it.task(jobId) }
+    override fun getTask(jobId: String): CoreTask? = repository.read { it.task(jobId) }
 
-    fun controlTask(jobId: String, baseRevision: Long, action: TaskAction, operationId: String): ApiReceipt =
+    override fun controlTask(jobId: String, baseRevision: Long, action: TaskAction, operationId: String): ApiReceipt =
         write(operationId, "control_task", jobId, baseRevision.toString(), action.name) { tx ->
             val task = tx.task(jobId) ?: return@write invalid("任务不存在")
             if (task.revision != baseRevision) {
@@ -258,5 +277,13 @@ class LocalCoreApi(
 
     private companion object {
         val dateTimeFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+
+        fun captureInstant(text: String): Instant? = try {
+            val time = DateTimeFormatter.ISO_DATE_TIME.parse(text.replace(' ', 'T'))
+            if (time.isSupported(ChronoField.OFFSET_SECONDS)) OffsetDateTime.from(time).toInstant()
+            else LocalDateTime.from(time).atZone(ZoneId.systemDefault()).toInstant()
+        } catch (_: DateTimeException) {
+            null
+        }
     }
 }

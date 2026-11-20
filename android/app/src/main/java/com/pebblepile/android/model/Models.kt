@@ -44,7 +44,9 @@ data class ApiReceipt(
     val nextAction: String? = null,
     val retryable: Boolean = false,
     val currentRecord: PebbleRecord? = null,
-    val task: CoreTask? = null
+    val task: CoreTask? = null,
+    val title: String? = null,
+    val currentPreference: ConditionSetting? = null
 )
 
 data class SourceRef(val sourceId: String, val sourceVersion: Long)

@@ -46,8 +46,12 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
                 val ref = SourceRef("${record.id}:source", 1)
                 CapturedSource(ref, record.id, record.rawText, record.captureMethod, record.capturedAt)
             }
+            val revision = records.values.maxOfOrNull { it.revision } ?: 0
+            val future = records.values.filter { it.conditionScope == CorrectionScope.FUTURE && it.currentCondition.isNotBlank() }
+                .distinctBy { it.currentCondition }.singleOrNull()
             return DemoLibrary(
-                revision = records.values.maxOfOrNull { it.revision } ?: 0,
+                revision = revision,
+                futureCondition = future?.let { ConditionSetting(it.currentCondition, it.id, revision) },
                 records = records,
                 sources = sources.associateByTo(linkedMapOf()) { it.ref }
             )
@@ -171,11 +175,13 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
         source = if (obj.isNull("sourceId")) null else obj.sourceRef(),
         jobId = obj.optionalString("jobId"),
         outcomeId = obj.optionalString("outcomeId"),
-        task = obj.optJSONObject("task")?.let(::decodeTask)
+        task = obj.optJSONObject("task")?.let(::decodeTask),
+        title = obj.optionalString("title")
     )
 
     private fun encodeReceipt(receipt: ApiReceipt): JSONObject = JSONObject()
         .put("recordId", receipt.recordId).put("recordRevision", receipt.revision).put("message", receipt.message)
+        .put("title", receipt.title)
         .put("libraryRevision", receipt.libraryRevision).put("jobId", receipt.jobId).put("outcomeId", receipt.outcomeId)
         .put("sourceId", receipt.source?.sourceId).put("sourceVersion", receipt.source?.sourceVersion)
         .put("task", receipt.task?.let(::encodeTask))
