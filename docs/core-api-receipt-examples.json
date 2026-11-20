@@ -1,0 +1,143 @@
+{
+  "context": {
+    "clientId": "android-demo",
+    "authorityInstanceId": "local-demo",
+    "libraryId": "library-demo",
+    "autoOrganize": true,
+    "initialLibraryRevision": 0
+  },
+  "steps": [
+    {
+      "name": "保存原话并创建整理任务",
+      "request": {
+        "apiVersion": "0.1.0",
+        "method": "record_experience",
+        "operationId": "save-dinner",
+        "params": {
+          "text": "今天周一加班到八点半，晚饭预算二十元。我吃了十八元的热汤面，十分钟就吃上了，不用洗锅。",
+          "captureMethod": "home",
+          "capturedAt": "2026-11-16T20:30:00+08:00",
+          "mode": "record_only"
+        }
+      },
+      "expectedResponse": {
+        "authorityInstanceId": "local-demo",
+        "libraryId": "library-demo",
+        "revision": 1,
+        "status": "ok",
+        "data": {
+          "recordId": "record-dinner",
+          "recordRevision": 1,
+          "sourceId": "source-dinner",
+          "sourceVersion": 1,
+          "jobId": "job-dinner"
+        }
+      },
+      "expectedState": {"libraryRevision": 1, "recordCount": 1, "sourceVersionCount": 1, "jobCount": 1, "receiptCount": 1}
+    },
+    {
+      "name": "按当前修订更新记录标题",
+      "request": {
+        "apiVersion": "0.1.0",
+        "method": "update_record",
+        "operationId": "rename-dinner",
+        "baseRevision": 1,
+        "params": {"recordId": "record-dinner", "title": "加班晚餐"}
+      },
+      "expectedResponse": {
+        "authorityInstanceId": "local-demo",
+        "libraryId": "library-demo",
+        "revision": 2,
+        "status": "ok",
+        "data": {"recordId": "record-dinner", "recordRevision": 2, "title": "加班晚餐"}
+      },
+      "expectedState": {"libraryRevision": 2, "recordCount": 1, "sourceVersionCount": 1, "jobCount": 1, "receiptCount": 2}
+    },
+    {
+      "name": "重发旧保存请求并返回原回执",
+      "request": {
+        "apiVersion": "0.1.0",
+        "method": "record_experience",
+        "operationId": "save-dinner",
+        "params": {
+          "text": "今天周一加班到八点半，晚饭预算二十元。我吃了十八元的热汤面，十分钟就吃上了，不用洗锅。",
+          "captureMethod": "home",
+          "capturedAt": "2026-11-16T20:30:00+08:00",
+          "mode": "record_only"
+        }
+      },
+      "expectedResponse": {
+        "authorityInstanceId": "local-demo",
+        "libraryId": "library-demo",
+        "revision": 1,
+        "status": "ok",
+        "data": {
+          "recordId": "record-dinner",
+          "recordRevision": 1,
+          "sourceId": "source-dinner",
+          "sourceVersion": 1,
+          "jobId": "job-dinner"
+        }
+      },
+      "expectedState": {"libraryRevision": 2, "recordCount": 1, "sourceVersionCount": 1, "jobCount": 1, "receiptCount": 2}
+    },
+    {
+      "name": "过期的基准修订返回冲突",
+      "request": {
+        "apiVersion": "0.1.0",
+        "method": "update_record",
+        "operationId": "rename-dinner-stale",
+        "baseRevision": 1,
+        "params": {"recordId": "record-dinner", "title": "晚饭备忘"}
+      },
+      "expectedResponse": {
+        "authorityInstanceId": "local-demo",
+        "libraryId": "library-demo",
+        "revision": 2,
+        "status": "error",
+        "error": {
+          "code": "REVISION_CONFLICT",
+          "retryable": false,
+          "nextAction": "review_current_revision",
+          "current": {"recordId": "record-dinner", "recordRevision": 2, "title": "加班晚餐"},
+          "submitted": {"title": "晚饭备忘"}
+        }
+      },
+      "expectedState": {"libraryRevision": 2, "recordCount": 1, "sourceVersionCount": 1, "jobCount": 1, "receiptCount": 2}
+    },
+    {
+      "name": "按记录和来源版本读回已提交内容",
+      "request": {
+        "apiVersion": "0.1.0",
+        "method": "get_record",
+        "params": {
+          "recordId": "record-dinner",
+          "sourceRef": {"sourceId": "source-dinner", "sourceVersion": 1}
+        }
+      },
+      "expectedResponse": {
+        "authorityInstanceId": "local-demo",
+        "libraryId": "library-demo",
+        "revision": 2,
+        "status": "ok",
+        "data": {
+          "recordId": "record-dinner",
+          "recordRevision": 2,
+          "title": "加班晚餐",
+          "sources": [
+            {
+              "sourceId": "source-dinner",
+              "sourceVersion": 1,
+              "text": "今天周一加班到八点半，晚饭预算二十元。我吃了十八元的热汤面，十分钟就吃上了，不用洗锅。"
+            }
+          ],
+          "tags": [],
+          "goals": [],
+          "outcomes": [],
+          "jobIds": ["job-dinner"]
+        }
+      },
+      "expectedState": {"libraryRevision": 2, "recordCount": 1, "sourceVersionCount": 1, "jobCount": 1, "receiptCount": 2}
+    }
+  ]
+}

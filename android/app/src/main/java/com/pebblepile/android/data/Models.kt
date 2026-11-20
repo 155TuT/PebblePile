@@ -16,7 +16,12 @@ data class PebbleRecord(
     val outcomes: List<OutcomeItem> = emptyList(),
     val currentCondition: String = "",
     val status: String = "已保存",
-    val conditionScope: CorrectionScope? = null
+    val conditionScope: CorrectionScope? = null,
+    val title: String = "",
+    // currentCondition and conditionScope describe the last change displayed by the UI.
+    val currentGoalCondition: String? = currentCondition.takeIf {
+        it.isNotBlank() && conditionScope != CorrectionScope.FUTURE
+    }
 )
 
 enum class CorrectionScope(val label: String) {
@@ -29,5 +34,15 @@ data class ApiReceipt(
     val revision: Long? = null,
     val message: String = "",
     val conflict: Boolean = false,
-    val currentRevision: Long? = null
+    val currentRevision: Long? = null,
+    val libraryRevision: Long? = null,
+    val source: SourceRef? = null,
+    val jobId: String? = null,
+    val outcomeId: String? = null,
+    val code: String? = null,
+    val reason: String? = null,
+    val nextAction: String? = null,
+    val retryable: Boolean = false,
+    val currentRecord: PebbleRecord? = null,
+    val task: CoreTask? = null
 )

@@ -1,146 +1,213 @@
 package com.pebblepile.android.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
 
-/** Local demo adapter only. It persists sample records in SharedPreferences for UI testing.
- * It is NOT the final team SQLite/CoreAPI implementation. */
-class DemoCoreApi(context: Context) : CoreApi {
-    private val prefs = context.getSharedPreferences("pebblepile_issue4_demo", Context.MODE_PRIVATE)
-    private val records = LinkedHashMap<String, PebbleRecord>()
-    private val receipts = HashMap<String, ApiReceipt>()
-    private val lock = Any()
+/** Android assembly for the demo. SQLite can use the same CoreRepository interface. */
+class DemoCoreApi(context: Context) : CoreApi by coreFor(context) {
+    private companion object {
+        fun coreFor(context: Context): LocalCoreApi {
+            val preferences = context.getSharedPreferences("pebblepile_issue4_demo", Context.MODE_PRIVATE)
+            val store = DemoLibraryStore(preferences)
+            return LocalCoreApi(store.repository(), decorateSampleRecord = ::withDemoContent)
+        }
 
-    init { load() }
-
-    override suspend fun recordExperience(text: String, captureMethod: String, operationId: String, recordId: String?): ApiReceipt = synchronized(lock) {
-        receipts[operationId]?.let { return it }
-        if (text.isBlank()) return ApiReceipt(false, message = "内容不能为空")
-        val id = recordId ?: UUID.randomUUID().toString()
-        val record = PebbleRecord(
-            id = id,
-            rawText = text,
-            capturedAt = now(),
-            captureMethod = captureMethod,
-            tags = listOf(
-                RecordTag(UUID.randomUUID().toString(), "饮食", text.take(36), "local-rules-0.1"),
-                RecordTag(UUID.randomUUID().toString(), "加班", text.take(36), "local-rules-0.1")
-            ),
-            suggestions = listOf(
-                SuggestionItem(
-                    UUID.randomUUID().toString(), "优先选择准备简单的晚餐",
-                    "示例依据：记录中提到了时间紧张或希望省事。正式建议由团队任务模块提供。",
-                    listOf(EvidenceItem(UUID.randomUUID().toString(), "本条记录", text.take(100), nowDate(), id))
+        fun withDemoContent(record: PebbleRecord): PebbleRecord {
+            val snippetLength = record.rawText.codePointCount(0, record.rawText.length)
+            fun snippet(limit: Int): String = record.rawText.substring(
+                0, record.rawText.offsetByCodePoints(0, minOf(limit, snippetLength))
+            )
+            return record.copy(
+                tags = listOf(
+                    RecordTag("${record.id}:dinner", "饮食", snippet(36), "local-rules-0.1"),
+                    RecordTag("${record.id}:overtime", "加班", snippet(36), "local-rules-0.1")
+                ),
+                suggestions = listOf(
+                    SuggestionItem(
+                        "${record.id}:suggestion", "优先选择准备简单的晚餐",
+                        "示例依据：记录中提到了时间紧张或希望省事。正式建议由团队任务模块提供。",
+                        listOf(EvidenceItem("${record.id}:evidence", "本条记录", snippet(100), record.capturedAt.take(10), record.id))
+                    )
                 )
             )
-        )
-        records[id] = record
-        if (!persist()) {
-            records.remove(id)
-            return ApiReceipt(false, message = "保存失败，请重试")
         }
-        return ApiReceipt(true, id, record.revision, "已保存") .also { receipts[operationId] = it }
     }
+}
 
-    override suspend fun getRecord(recordId: String): PebbleRecord? = synchronized(lock) { records[recordId] }
-
-    override suspend fun reviseTags(recordId: String, baseRevision: Long, tagId: String, operationId: String): ApiReceipt = synchronized(lock) {
-        receipts[operationId]?.let { return it }
-        val old = records[recordId] ?: return ApiReceipt(false, message = "记录不存在")
-        if (old.revision != baseRevision) return ApiReceipt(false, message = "记录已被其他操作修改，请检查当前版本。", conflict = true, currentRevision = old.revision)
-        val changed = old.copy(revision = old.revision + 1, tags = old.tags.map { if (it.id == tagId) it.copy(excluded = true) else it })
-        records[recordId] = changed
-        if (!persist()) {
-            records[recordId] = old
-            return ApiReceipt(false, message = "标签保存失败，请重试", currentRevision = old.revision)
+private class DemoLibraryStore(private val preferences: SharedPreferences) {
+    fun repository(): CoreRepository {
+        val loaded = try {
+            load()
+        } catch (_: JSONException) {
+            null
         }
-        return ApiReceipt(true, recordId, changed.revision, "已排除标签").also { receipts[operationId] = it }
-    }
-
-    override suspend fun recordOutcome(recordId: String, baseRevision: Long, choice: String, experience: String, operationId: String): ApiReceipt = synchronized(lock) {
-        receipts[operationId]?.let { return it }
-        val old = records[recordId] ?: return ApiReceipt(false, message = "记录不存在")
-        if (old.revision != baseRevision) return ApiReceipt(false, message = "记录已更新，反馈草稿已保留。", conflict = true, currentRevision = old.revision)
-        val outcome = OutcomeItem(UUID.randomUUID().toString(), choice, experience, now())
-        val changed = old.copy(revision = old.revision + 1, outcomes = old.outcomes + outcome)
-        records[recordId] = changed
-        if (!persist()) {
-            records[recordId] = old
-            return ApiReceipt(false, message = "反馈保存失败，请重试", currentRevision = old.revision)
+        return SnapshotCoreRepository(loaded ?: DemoLibrary()) { library ->
+            // Keep unreadable data intact so a later save cannot overwrite it.
+            if (loaded == null) throw RepositoryWriteException()
+            persist(library)
         }
-        return ApiReceipt(true, recordId, changed.revision, "实际反馈已保存").also { receipts[operationId] = it }
     }
 
-    override suspend fun reviseMemory(recordId: String, baseRevision: Long, condition: String, scope: CorrectionScope, operationId: String): ApiReceipt = synchronized(lock) {
-        receipts[operationId]?.let { return it }
-        val old = records[recordId] ?: return ApiReceipt(false, message = "记录不存在")
-        if (old.revision != baseRevision) return ApiReceipt(false, message = "条件已被其他操作修改。草稿已保留，请核对当前条件后重试。", conflict = true, currentRevision = old.revision)
-        val changed = old.copy(revision = old.revision + 1, currentCondition = condition, conditionScope = scope)
-        records[recordId] = changed
-        if (!persist()) {
-            records[recordId] = old
-            return ApiReceipt(false, message = "条件保存失败，请重试", currentRevision = old.revision)
-        }
-        return ApiReceipt(true, recordId, changed.revision, "已保存条件 · ${scope.label}").also { receipts[operationId] = it }
-    }
-
-    override suspend fun recentRecords(): List<PebbleRecord> = synchronized(lock) {
-        records.values.toList().asReversed().sortedByDescending { it.capturedAt }
-    }
-
-    private fun load() {
-        val raw = prefs.getString("records", null) ?: return
-        runCatching {
-            val arr = JSONArray(raw)
-            for (i in 0 until arr.length()) {
-                val obj = arr.getJSONObject(i)
-                val recordId = obj.getString("id")
-                val tags = obj.optJSONArray("tags") ?: JSONArray()
-                val tagList = (0 until tags.length()).map { j -> tags.getJSONObject(j).let { RecordTag(it.getString("id"), it.getString("name"), it.optString("quote"), it.optString("algorithm"), it.optBoolean("excluded")) } }
-                val outcomes = obj.optJSONArray("outcomes") ?: JSONArray()
-                val outcomeList = (0 until outcomes.length()).map { j -> outcomes.getJSONObject(j).let { OutcomeItem(it.getString("id"), it.optString("choice"), it.optString("experience"), it.optString("createdAt")) } }
-                val suggestions = obj.optJSONArray("suggestions") ?: JSONArray()
-                val suggestionList = (0 until suggestions.length()).map { j ->
-                    val s = suggestions.getJSONObject(j); val ev = s.optJSONArray("evidence") ?: JSONArray()
-                    val evidence = (0 until ev.length()).map { k ->
-                        val entry = ev.getJSONObject(k)
-                        EvidenceItem(entry.getString("id"), entry.optString("title"), entry.optString("quote"),
-                            entry.optString("date"), entry.optString("sourceRecordId", recordId))
-                    }
-                    SuggestionItem(s.getString("id"), s.optString("title"), s.optString("reason"), evidence)
-                }
-                val conditionScope = CorrectionScope.entries.firstOrNull { it.name == obj.optString("conditionScope") }
-                val r = PebbleRecord(recordId, obj.getString("rawText"), obj.optString("capturedAt"), obj.optString("captureMethod"), obj.optLong("revision", 1), tagList, suggestionList, outcomeList, obj.optString("condition"), obj.optString("status", "已保存"), conditionScope)
-                records[r.id] = r
+    private fun load(): DemoLibrary {
+        val records = JSONArray(preferences.getString("records", null) ?: "[]").objects()
+            .map(::decodeRecord).associateByTo(linkedMapOf()) { it.id }
+        val state = preferences.getString("core_state", null)?.let { JSONObject(it) }
+        if (state == null) {
+            // Records written by the original demo had only one source and no stored receipts.
+            val sources = records.values.map { record ->
+                val ref = SourceRef("${record.id}:source", 1)
+                CapturedSource(ref, record.id, record.rawText, record.captureMethod, record.capturedAt)
             }
+            return DemoLibrary(
+                revision = records.values.maxOfOrNull { it.revision } ?: 0,
+                records = records,
+                sources = sources.associateByTo(linkedMapOf()) { it.ref }
+            )
         }
+        val sources = state.objects("sources").map { source ->
+            CapturedSource(
+                source.sourceRef(), source.getString("recordId"), source.getString("text"),
+                source.getString("captureMethod"), source.getString("capturedAt")
+            )
+        }.associateByTo(linkedMapOf()) { it.ref }
+        val tasks = state.objects("tasks").map(::decodeTask).associateByTo(linkedMapOf()) { it.id }
+        val receipts = state.objects("receipts").associateTo(linkedMapOf()) { stored ->
+            val key = OperationKey(stored.getString("clientId"), stored.getString("operationId"))
+            key to StoredReceipt(stored.getString("requestHash"), decodeReceipt(stored.getJSONObject("receipt")))
+        }
+        val condition = state.optJSONObject("futureCondition")?.let {
+            ConditionSetting(it.getString("text"), it.getString("recordId"), it.getLong("revision"))
+        }
+        return DemoLibrary(state.getLong("revision"), records, sources, tasks, receipts, condition)
     }
 
-    private fun persist(): Boolean {
-        val arr = JSONArray()
-        records.values.forEach { r ->
-            val obj = JSONObject().put("id", r.id).put("rawText", r.rawText).put("capturedAt", r.capturedAt).put("captureMethod", r.captureMethod).put("revision", r.revision).put("condition", r.currentCondition).put("status", r.status)
-            r.conditionScope?.let { obj.put("conditionScope", it.name) }
-            obj.put("tags", JSONArray().also { a -> r.tags.forEach { a.put(JSONObject().put("id", it.id).put("name", it.name).put("quote", it.sourceQuote).put("algorithm", it.algorithmVersion).put("excluded", it.excluded)) } })
-            obj.put("outcomes", JSONArray().also { a -> r.outcomes.forEach { a.put(JSONObject().put("id", it.id).put("choice", it.choice).put("experience", it.experience).put("createdAt", it.createdAt)) } })
-            obj.put("suggestions", JSONArray().also { a -> r.suggestions.forEach { s ->
-                val evidence = JSONArray()
-                s.evidence.forEach { item ->
-                    evidence.put(JSONObject().put("id", item.id).put("title", item.title).put("quote", item.quote)
-                        .put("date", item.recordDate).put("sourceRecordId", item.sourceRecordId))
-                }
-                a.put(JSONObject().put("id", s.id).put("title", s.title).put("reason", s.reason).put("evidence", evidence))
-            } })
-            arr.put(obj)
-        }
-        return prefs.edit().putString("records", arr.toString()).commit()
+    private fun persist(library: DemoLibrary) {
+        val state = JSONObject()
+            .put("revision", library.revision)
+            .put("sources", library.sources.values.jsonArray { source ->
+                JSONObject()
+                    .put("sourceId", source.ref.sourceId).put("sourceVersion", source.ref.sourceVersion)
+                    .put("recordId", source.recordId).put("text", source.text)
+                    .put("captureMethod", source.captureMethod).put("capturedAt", source.capturedAt)
+            })
+            .put("tasks", library.tasks.values.jsonArray(::encodeTask))
+            .put("receipts", library.receipts.entries.jsonArray { (key, stored) ->
+                JSONObject().put("clientId", key.clientId).put("operationId", key.operationId)
+                    .put("requestHash", stored.requestHash).put("receipt", encodeReceipt(stored.receipt))
+            })
+            .put("futureCondition", library.futureCondition?.let {
+                JSONObject().put("text", it.text).put("recordId", it.recordId).put("revision", it.revision)
+            })
+        val committed = preferences.edit()
+            .putString("records", library.records.values.jsonArray(::encodeRecord).toString())
+            .putString("core_state", state.toString())
+            .commit()
+        if (!committed) throw RepositoryWriteException()
     }
 
-    private fun now(): String = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(Date())
-    private fun nowDate(): String = SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).format(Date())
+    private fun decodeRecord(obj: JSONObject): PebbleRecord {
+        val id = obj.getString("id")
+        val condition = obj.optString("condition")
+        val conditionScope = CorrectionScope.entries.firstOrNull { it.name == obj.optString("conditionScope") }
+        return PebbleRecord(
+            id = id,
+            rawText = obj.getString("rawText"),
+            capturedAt = obj.optString("capturedAt"),
+            captureMethod = obj.optString("captureMethod"),
+            revision = obj.optLong("revision", 1),
+            tags = obj.objects("tags").map {
+                RecordTag(it.getString("id"), it.getString("name"), it.optString("quote"), it.optString("algorithm"), it.optBoolean("excluded"))
+            },
+            suggestions = obj.objects("suggestions").map { suggestion ->
+                SuggestionItem(
+                    suggestion.getString("id"), suggestion.optString("title"), suggestion.optString("reason"),
+                    suggestion.objects("evidence").map {
+                        EvidenceItem(
+                            it.getString("id"), it.optString("title"), it.optString("quote"),
+                            it.optString("date"), it.optString("sourceRecordId", id)
+                        )
+                    }
+                )
+            },
+            outcomes = obj.objects("outcomes").map {
+                OutcomeItem(it.getString("id"), it.optString("choice"), it.optString("experience"), it.optString("createdAt"))
+            },
+            currentCondition = condition,
+            status = obj.optString("status", "已保存"),
+            conditionScope = conditionScope,
+            title = obj.optString("title"),
+            currentGoalCondition = obj.optionalString("currentGoalCondition") ?: condition.takeIf {
+                it.isNotBlank() && conditionScope != CorrectionScope.FUTURE
+            }
+        )
+    }
+
+    private fun encodeRecord(record: PebbleRecord): JSONObject = JSONObject()
+        .put("id", record.id).put("rawText", record.rawText).put("capturedAt", record.capturedAt)
+        .put("captureMethod", record.captureMethod).put("revision", record.revision).put("title", record.title)
+        .put("condition", record.currentCondition).put("status", record.status)
+        .put("conditionScope", record.conditionScope?.name).put("currentGoalCondition", record.currentGoalCondition)
+        .put("tags", record.tags.jsonArray {
+            JSONObject().put("id", it.id).put("name", it.name).put("quote", it.sourceQuote)
+                .put("algorithm", it.algorithmVersion).put("excluded", it.excluded)
+        })
+        .put("outcomes", record.outcomes.jsonArray {
+            JSONObject().put("id", it.id).put("choice", it.choice)
+                .put("experience", it.experience).put("createdAt", it.createdAt)
+        })
+        .put("suggestions", record.suggestions.jsonArray { suggestion ->
+            JSONObject().put("id", suggestion.id).put("title", suggestion.title).put("reason", suggestion.reason)
+                .put("evidence", suggestion.evidence.jsonArray {
+                    JSONObject().put("id", it.id).put("title", it.title).put("quote", it.quote)
+                        .put("date", it.recordDate).put("sourceRecordId", it.sourceRecordId)
+                })
+        })
+
+    private fun decodeTask(task: JSONObject): CoreTask = CoreTask(
+        task.getString("id"), task.getString("recordId"), readEnum<TaskKind>(task, "kind"),
+        task.getLong("inputRevision"), task.getLong("revision"), readEnum<TaskState>(task, "state"),
+        task.optionalString("waitReason")
+    )
+
+    private fun encodeTask(task: CoreTask): JSONObject = JSONObject()
+        .put("id", task.id).put("recordId", task.recordId).put("kind", task.kind.name)
+        .put("inputRevision", task.inputRevision).put("revision", task.revision)
+        .put("state", task.state.name).put("waitReason", task.waitReason)
+
+    private fun decodeReceipt(obj: JSONObject): ApiReceipt = ApiReceipt(
+        success = true,
+        recordId = obj.optionalString("recordId"),
+        revision = if (obj.isNull("recordRevision")) null else obj.getLong("recordRevision"),
+        message = obj.optString("message"),
+        libraryRevision = obj.getLong("libraryRevision"),
+        source = if (obj.isNull("sourceId")) null else obj.sourceRef(),
+        jobId = obj.optionalString("jobId"),
+        outcomeId = obj.optionalString("outcomeId"),
+        task = obj.optJSONObject("task")?.let(::decodeTask)
+    )
+
+    private fun encodeReceipt(receipt: ApiReceipt): JSONObject = JSONObject()
+        .put("recordId", receipt.recordId).put("recordRevision", receipt.revision).put("message", receipt.message)
+        .put("libraryRevision", receipt.libraryRevision).put("jobId", receipt.jobId).put("outcomeId", receipt.outcomeId)
+        .put("sourceId", receipt.source?.sourceId).put("sourceVersion", receipt.source?.sourceVersion)
+        .put("task", receipt.task?.let(::encodeTask))
+
+    private fun JSONObject.sourceRef() = SourceRef(getString("sourceId"), getLong("sourceVersion"))
+
+    private fun JSONObject.optionalString(key: String): String? = if (isNull(key)) null else getString(key)
+
+    private fun JSONObject.objects(key: String): List<JSONObject> = optJSONArray(key)?.objects().orEmpty()
+
+    private fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
+
+    private fun <T> Iterable<T>.jsonArray(encode: (T) -> JSONObject): JSONArray =
+        JSONArray().also { array -> forEach { array.put(encode(it)) } }
+
+    private inline fun <reified E : Enum<E>> readEnum(obj: JSONObject, key: String): E {
+        val value = obj.getString(key)
+        return enumValues<E>().firstOrNull { it.name == value } ?: throw JSONException("Invalid value for $key")
+    }
 }
