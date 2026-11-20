@@ -4,14 +4,14 @@
 
 依据：[总单 #1](https://github.com/155TuT/PebblePile/issues/1)、[本模块 #10](https://github.com/155TuT/PebblePile/issues/10)、[固定材料 #2](https://github.com/155TuT/PebblePile/issues/2)、[业务契约 #6](https://github.com/155TuT/PebblePile/issues/6)、[算法 #9](https://github.com/155TuT/PebblePile/issues/9)、[候选包 #11](https://github.com/155TuT/PebblePile/issues/11)，以及[系统设计 5.4、7.1、8.2](https://github.com/155TuT/PebblePile/blob/main/docs/system-design.md)。
 
-林金晶提供晚餐材料，林叶鑫已在 #10 确认逐字输入和稳定预期。前端、存储和算法共用同一组材料。拿到 #6 的回执样例就能跑契约用例，拿到 #9 的基线后核对排序，拿到 #11 的签名 APK 后做真机验收。各组实测后填写结果。[材料交接](issue2-research.md) · [冻结记录](https://github.com/155TuT/PebblePile/issues/10#issuecomment-7042008798)
+林金晶和林叶鑫已定好晚餐原话与预期。前端、存储和算法共用这组输入。林叶鑫现在可以从 `main` 调用 #6 的业务接口，按样例核对三种回执。张洋交付 #9 的排序基线后跑算法回放，李宗欣交付 #11 的签名 APK 后做真机验收。[材料冻结记录](https://github.com/155TuT/PebblePile/issues/10#issuecomment-7042008798) · [回执样例](core-api-receipt-examples.json)
 
 ## 一、交付与接手顺序
 
 | 产物 | 接手人 | 交付条件与进展 |
 | --- | --- | --- |
 | 固定材料与稳定预期 | 林金晶 #2、郑嘉文 #6、张洋 #9、两位前端 | 原文、时间、证据区间和稳定预期已交付。张洋补上版本化候选与名次后，林叶鑫核对排序。 |
-| 三种回执契约用例 | 郑嘉文 #6 交样例回执，林叶鑫执行 | 拿到 `operationId`、基准修订和错误码后逐字段对照。 |
+| 三种回执契约用例 | 郑嘉文 #6 已交样例，林叶鑫执行 | 用 E01 验证首次保存和原样重发，再用旧修订提交 C01，逐字段记录回执。 |
 | 算法回归表 | 张洋 #9 交候选、价格与版本化排序基线，林叶鑫执行 | 先核对区间、计数、条件，再核对顺序。 |
 | 真机流程验收 | 李宗欣 #11 交候选 APK、提交号和 SHA-256，林叶鑫执行 | 干净环境离线走 A01–A09，含小屏操作。 |
 | 故障注入与复验 | 林叶鑫执行，缺陷负责人修复 | 重复提交、进程中断、人工排除、旧任务迟到四项。 |
@@ -86,9 +86,9 @@
 
 ### 3.1 口径
 
-字段名以 #6 的样例回执为准，本表只固定语义：写入携带 `operationId`；修改携带 `baseRevision`；回执至少能确认资料库、记录、来源版本、对象修订和任务。重发请求后，逐字段比对首次回执。
+每次新操作分配一个 `operationId`，修改已有对象时携带 `baseRevision`。按 #6 的样例核对资料库、记录、来源版本、对象修订和适用的任务。原样重发后，逐字段比对首次回执。[业务接口与仓储契约](core-api-contract.md)
 
-用 #6 可调用的实现核对 K 组回执，接上 #7 的 SQLite 后重跑，补查重开后的记录、来源与任务。张洋交付 #9 算法及基线后即可用同一材料跑 G 组。使用 `DemoCoreApi` 的 Debug 包时，单独登记界面入口、回显、草稿和冲突提示。
+先跑现有的 `CoreContractTest`，再用这套材料补齐四个写入接口适用的 K 组用例，在 3.3 登记实测回执。#7 接入 SQLite 后重跑同一组请求，核对重开后的原话、来源版本、任务与首次回执。[现有契约测试](../android/app/src/androidTest/java/com/pebblepile/android/CoreContractTest.kt)
 
 ### 3.2 三种回执
 
@@ -98,7 +98,7 @@
 | K02 | 重复 | 保留 K01 的 `operationId`、入口和完整参数，原样重发同一次请求 | 返回原回执；记录、来源、事件、任务均不新增；`recordId` 与首次一致 | 两次回执对比 |
 | K03 | 修订冲突 | 先更新目标对象，再用新 `operationId` 和旧 `baseRevision` 提交 C01 | 返回 `REVISION_CONFLICT`；带当前修订和待核对对象；无半写，条件与计数不变 | 冲突回执、冲突前后详情 |
 
-另测操作标识误用：沿用 K01 的 `operationId`，将正文换成 E02。核对该请求被拒绝，原回执和已保存数据保持原值；具体错误字段按 #6 样例比对。D01 模拟用户重新发起分享，使用新 `operationId`，由事件归并检查支持次数。
+另测同一标识提交不同内容。沿用 K01 的 `operationId`，将正文换成 E02，核对返回 `INVALID_INPUT` 和 `reason=OPERATION_ID_REUSED`，原回执和记录保持原值。D01 模拟用户再次发起分享，使用新 `operationId`，由事件归并检查支持次数。
 
 三种回执都要覆盖 `record_experience`、`revise_memory`、`revise_tags`、`record_outcome` 中的适用工具；不适用时在记录表写“不适用”和原因。
 
@@ -181,7 +181,7 @@
 | A08 | 按 A04 的 `decisionId` 回填 O01 | 原事项同时显示当时建议与实际“热汤面” | `decisionId`、反馈详情 | 待实测 |
 | A09 | 退出重开，回查原文、纠正与反馈 | 原文与反馈可回查，当前条件保留 C01 的修订 | 重开后的详情 | 待实测 |
 
-现有 `RecordFlowTest` 可先跑一遍界面回归：在 `android/` 执行 `.\gradlew.bat connectedDebugAndroidTest`，覆盖分享确认跨重建、依据打开来源、纠正草稿保留和修订冲突重载。该组跑在 Demo 适配器上，结果只记入 UI 流程，不计入 K 组或 G 组的通过率。
+接上设备，在 `android/` 执行 `.\gradlew.bat connectedDebugAndroidTest`，会同时运行契约和页面测试。`RecordFlowTest` 的四项结果记入 UI 自动化，覆盖页面重建后的分享确认、依据回查、草稿保留和冲突重载。[页面测试](../android/app/src/androidTest/java/com/pebblepile/android/RecordFlowTest.kt)
 
 ### 5.3 小屏与可访问性
 
@@ -220,10 +220,10 @@
 
 | 类别 | 用例数 | 通过 | 失败 | 阻塞 | 备注 |
 | --- | --- | --- | --- | --- | --- |
-| 契约 K01–K03 | 3 | 待实测 | 待实测 | 待实测 | 等 #6 回执 |
+| 契约 K01–K03 | 3 | 待实测 | 待实测 | 待实测 | 对照已合入的 #6 回执，逐项登记跨模块结果 |
 | 算法 G01–G12 | 12 | 待实测 | 待实测 | 待实测 | 等 #9 基线 |
 | 真机 A01–A09 | 9 | 待实测 | 待实测 | 待实测 | 等 #11 APK |
-| UI 自动化（Demo） | 4 | 待实测 | 待实测 | 待实测 | 只作流程参考，不计通过率 |
+| UI 自动化 | 4 | 待实测 | 待实测 | 待实测 | 按本轮测试提交登记页面回归结果 |
 | 故障 F01–F04 | 4 | 待实测 | 待实测 | 待实测 | 接上真实仓储与调度后核对，候选包上复验 |
 
 ### 8.2 发布建议

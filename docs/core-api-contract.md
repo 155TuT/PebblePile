@@ -82,7 +82,7 @@
 | K01 保存 E01 | 首页记录用 `captureMethod=app_home_record`。新建记录使用新 `operationId`，省略 `baseRevision`。保存返回记录、来源版本、对象修订和适用的任务。 |
 | K02 重发 E01 | 用同一标识和同一载荷重发，逐字段比对首次回执。样例在修改标题后再重发，检查回执中的原提交修订。 |
 | K03 用旧修订提交 C01 | 返回 `REVISION_CONFLICT`，附当前记录、当前对象修订及 `nextAction=review_current_revision`。草稿由调用方保留。 |
-| K03 中的操作标识误复用 | 用同一个标识提交不同载荷时，返回 `INVALID_INPUT` 和 `reason=OPERATION_ID_REUSED`。记录、回执和资料库修订保持原值。 |
+| 补充用例：同一操作标识提交不同内容 | 返回 `INVALID_INPUT` 和 `reason=OPERATION_ID_REUSED`。记录、回执和资料库修订保持原值。 |
 
 ## Kotlin 接入
 

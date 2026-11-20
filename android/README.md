@@ -12,7 +12,7 @@ Android 工程、首页输入、记录库和详情路由的可构建基线。
 - 记录库为独立页面，可回到首页、按标签筛选并按时间分组。
 - 详情路由为 `detail/{recordId}`，记录库和首页都通过同一 ID 打开。
 - Android `ACTION_SEND` 纯文本分享进入同一资料库，保存后打开同一详情。
-- 本地演示仓储使用同步提交的 SharedPreferences，支持离线保存和进程重开。
+- `LocalCoreApi` 通过 SharedPreferences 仓储保存记录、原话版本、任务和回执。重开应用后重发同一次请求，可以取回首次保存的回执。
 
 ## 构建
 
@@ -31,7 +31,7 @@ app\build\outputs\apk\debug\app-debug.apk
 
 工程路径允许包含中文，配置中已开启 `android.overridePathCheck=true`。
 
-接上一台测试设备，在 `android/` 运行 `.\gradlew.bat connectedDebugAndroidTest`，复验分享确认、来源原话、纠正草稿和修订冲突。
+接上一台测试设备，在 `android/` 运行 `.\gradlew.bat connectedDebugAndroidTest`。契约测试覆盖回执重放、写入回滚和跨记录的长期条件冲突。页面测试覆盖分享确认、依据回查和纠正草稿。[契约测试](app/src/androidTest/java/com/pebblepile/android/CoreContractTest.kt) · [页面测试](app/src/androidTest/java/com/pebblepile/android/RecordFlowTest.kt)
 
 ## 单元测试
 
@@ -89,8 +89,8 @@ adb shell am start -a android.intent.action.SEND -t text/plain --es android.inte
 adb shell run-as com.pebblepile.android cat shared_prefs/pebblepile_issue4_demo.xml
 ```
 
-## 联调边界
+## 模块接手
 
-`DemoCoreApi` 是可运行的临时适配器。正式联调时必须替换为 Issue #6 的 CoreAPI 和 Issue #7 的 Room/SQLite 仓储。演示标签和建议仍是固定样例；正式回执、幂等、任务、证据版本和偏好重算由正式核心负责。
-
-Issue #3 的正式视觉组件尚未合入，当前页面使用可运行的 Material 3 占位组件。
+- #7 按 `CoreRepository` 接 SQLite，用同一组请求核对重开后的记录、任务和回执。[仓储交接](../docs/core-api-contract.md)
+- #8 接任务调度，#9 接饮食标签、建议和证据。详情当前展示固定的晚餐样例，联调时按原话区间核对每条依据。[晚餐验收材料](../docs/issue10-testing.md)
+- #3 交付共用组件后，#4、#5 将页面中的 Material 3 基础控件换成对应组件，在纵向小屏上复验输入、依据和反馈。[组件交接](../docs/android-components-handoff.md)

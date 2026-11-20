@@ -91,13 +91,10 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-
-      - name: Install Android 35 build dependencies
-        shell: bash
-        run: |
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Install Android SDK packages for the candidate
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;34.0.0 build-tools;35.0.0'
 
       - name: Build signed release APK
         working-directory: android
@@ -120,15 +117,14 @@ jobs:
           apk_source="app/build/outputs/apk/release/app-release.apk"
           test -f "$apk_source"
 
-          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
-          aapt="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -n 1)"
-          "$apksigner" verify --verbose --print-certs "$apk_source" | tee "$RUNNER_TEMP/apk-certificate.txt"
+          build_tools="$ANDROID_HOME/build-tools/35.0.0"
+          "$build_tools/apksigner" verify --verbose --print-certs "$apk_source" | tee "$RUNNER_TEMP/apk-certificate.txt"
           if grep -q "CN=Android Debug" "$RUNNER_TEMP/apk-certificate.txt"; then
             echo "Refusing to release an APK signed with the Android debug certificate." >&2
             exit 1
           fi
 
-          badging="$("$aapt" dump badging "$apk_source")"
+          badging="$("$build_tools/aapt" dump badging "$apk_source")"
           grep -F "name='com.pebblepile.android'" <<< "$badging"
           grep -F "versionCode='$VERSION_CODE'" <<< "$badging"
           grep -F "versionName='$VERSION_NAME'" <<< "$badging"
