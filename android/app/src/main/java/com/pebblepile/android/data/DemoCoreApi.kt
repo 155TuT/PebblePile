@@ -11,7 +11,7 @@ import java.util.UUID
 /** Local demo adapter only. It persists sample records in SharedPreferences for UI testing.
  * It is NOT the final team SQLite/CoreAPI implementation. */
 class DemoCoreApi(context: Context) : CoreApi {
-    private val prefs = context.getSharedPreferences("pebblepile_issue5_demo", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("pebblepile_issue4_demo", Context.MODE_PRIVATE)
     private val records = LinkedHashMap<String, PebbleRecord>()
     private val receipts = HashMap<String, ApiReceipt>()
     private val lock = Any()
@@ -40,7 +40,10 @@ class DemoCoreApi(context: Context) : CoreApi {
             )
         )
         records[id] = record
-        persist()
+        if (!persist()) {
+            records.remove(id)
+            return ApiReceipt(false, message = "保存失败，请重试")
+        }
         return ApiReceipt(true, id, record.revision, "已保存") .also { receipts[operationId] = it }
     }
 
@@ -52,7 +55,10 @@ class DemoCoreApi(context: Context) : CoreApi {
         if (old.revision != baseRevision) return ApiReceipt(false, message = "记录已被其他操作修改，请检查当前版本。", conflict = true, currentRevision = old.revision)
         val changed = old.copy(revision = old.revision + 1, tags = old.tags.map { if (it.id == tagId) it.copy(excluded = true) else it })
         records[recordId] = changed
-        persist()
+        if (!persist()) {
+            records[recordId] = old
+            return ApiReceipt(false, message = "标签保存失败，请重试", currentRevision = old.revision)
+        }
         return ApiReceipt(true, recordId, changed.revision, "已排除标签").also { receipts[operationId] = it }
     }
 
@@ -63,7 +69,10 @@ class DemoCoreApi(context: Context) : CoreApi {
         val outcome = OutcomeItem(UUID.randomUUID().toString(), choice, experience, now())
         val changed = old.copy(revision = old.revision + 1, outcomes = old.outcomes + outcome)
         records[recordId] = changed
-        persist()
+        if (!persist()) {
+            records[recordId] = old
+            return ApiReceipt(false, message = "反馈保存失败，请重试", currentRevision = old.revision)
+        }
         return ApiReceipt(true, recordId, changed.revision, "实际反馈已保存").also { receipts[operationId] = it }
     }
 
@@ -73,7 +82,10 @@ class DemoCoreApi(context: Context) : CoreApi {
         if (old.revision != baseRevision) return ApiReceipt(false, message = "条件已被其他操作修改。草稿已保留，请核对当前条件后重试。", conflict = true, currentRevision = old.revision)
         val changed = old.copy(revision = old.revision + 1, currentCondition = condition)
         records[recordId] = changed
-        persist()
+        if (!persist()) {
+            records[recordId] = old
+            return ApiReceipt(false, message = "条件保存失败，请重试", currentRevision = old.revision)
+        }
         val scopeText = if (scope == CorrectionScope.THIS_TIME) "仅本次条件已更新" else "已保存为以后适用的明确偏好；旧推断不再参与本次演示"
         return ApiReceipt(true, recordId, changed.revision, scopeText).also { receipts[operationId] = it }
     }
@@ -103,7 +115,7 @@ class DemoCoreApi(context: Context) : CoreApi {
         }
     }
 
-    private fun persist() {
+    private fun persist(): Boolean {
         val arr = JSONArray()
         records.values.forEach { r ->
             val obj = JSONObject().put("id", r.id).put("rawText", r.rawText).put("capturedAt", r.capturedAt).put("captureMethod", r.captureMethod).put("revision", r.revision).put("condition", r.currentCondition).put("status", r.status)
@@ -112,7 +124,7 @@ class DemoCoreApi(context: Context) : CoreApi {
             obj.put("suggestions", JSONArray().also { a -> r.suggestions.forEach { s -> a.put(JSONObject().put("id", s.id).put("title", s.title).put("reason", s.reason).put("evidence", JSONArray().also { ev -> s.evidence.forEach { ev.put(JSONObject().put("id", it.id).put("title", it.title).put("quote", it.quote).put("date", it.recordDate)) } })) } })
             arr.put(obj)
         }
-        prefs.edit().putString("records", arr.toString()).apply()
+        return prefs.edit().putString("records", arr.toString()).commit()
     }
 
     private fun now(): String = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(Date())

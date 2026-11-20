@@ -3,7 +3,6 @@ package com.pebblepile.android
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -13,9 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -25,15 +23,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.pebblepile.android.data.*
 import kotlinx.coroutines.launch
 import java.util.UUID
+
+private const val HOME_ROUTE = "home"
+private const val LIBRARY_ROUTE = "library"
+private const val DETAIL_ROUTE = "detail/{recordId}"
 
 private val Sand = Color(0xFFF3F0E8)
 private val CardSand = Color(0xFFFAF8F2)
 private val Moss = Color(0xFF657B60)
 private val Ink = Color(0xFF343A32)
 private val Muted = Color(0xFF777B70)
+
+private enum class InputMode { DIALOG, RECORD }
 
 class MainActivity : ComponentActivity() {
     private lateinit var api: CoreApi
@@ -83,38 +93,81 @@ private fun PebbleTheme(content: @Composable () -> Unit) {
 @Composable
 private fun PebbleApp(api: CoreApi, sharedText: String?, onShareConsumed: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var records by remember { mutableStateOf<List<PebbleRecord>>(emptyList()) }
-    var selectedRecordId by remember { mutableStateOf<String?>(null) }
+    val navController = rememberNavController()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route ?: HOME_ROUTE
     var refreshKey by remember { mutableIntStateOf(0) }
-    var banner by remember { mutableStateOf<String?>(null) }
     var shareSaving by remember { mutableStateOf(false) }
     var conflictMessage by remember { mutableStateOf<String?>(null) }
+    var draft by rememberSaveable { mutableStateOf("") }
+    var inputMode by rememberSaveable { mutableStateOf(InputMode.RECORD) }
 
-    LaunchedEffect(refreshKey) { records = api.recentRecords() }
-
-    LaunchedEffect(sharedText) {
-        if (!sharedText.isNullOrBlank()) banner = "收到来自其他应用的分享内容，请确认后保存"
+    fun showMessage(message: String) {
+        scope.launch { snackbarHostState.showSnackbar(message) }
     }
 
-    BackHandler(enabled = selectedRecordId != null) { selectedRecordId = null; refreshKey++ }
+    fun openRecord(recordId: String) {
+        refreshKey++
+        navController.navigate("detail/$recordId") { launchSingleTop = true }
+    }
 
     Scaffold(
+        modifier = Modifier.fillMaxSize().safeDrawingPadding(),
         containerColor = Sand,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBarSimple(
-                title = if (selectedRecordId == null) "叠石 · PebblePile" else "记录详情",
-                showBack = selectedRecordId != null,
-                onBack = { selectedRecordId = null; refreshKey++ }
+                title = when {
+                    currentRoute == HOME_ROUTE -> "叠石 · PebblePile"
+                    currentRoute == LIBRARY_ROUTE -> "记录库"
+                    else -> "记录详情"
+                },
+                showBack = currentRoute != HOME_ROUTE,
+                onBack = { navController.popBackStack() },
+                onOpenLibrary = if (currentRoute == HOME_ROUTE) {
+                    { navController.navigate(LIBRARY_ROUTE) { launchSingleTop = true } }
+                } else null
             )
         }
     ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            if (selectedRecordId == null) {
-                HomeScreen(records = records, onOpen = { selectedRecordId = it }, onRefresh = { refreshKey++ })
-            } else {
+        NavHost(
+            navController = navController,
+            startDestination = HOME_ROUTE,
+            modifier = Modifier.fillMaxSize().padding(padding)
+        ) {
+            composable(HOME_ROUTE) {
+                HomeEntryScreen(
+                    api = api,
+                    draft = draft,
+                    onDraftChange = { draft = it },
+                    inputMode = inputMode,
+                    onInputModeChange = { inputMode = it },
+                    onOpenLibrary = { navController.navigate(LIBRARY_ROUTE) { launchSingleTop = true } },
+                    onMessage = ::showMessage,
+                    onSaved = { recordId ->
+                        draft = ""
+                        showMessage("已保存 · $recordId")
+                        openRecord(recordId)
+                    }
+                )
+            }
+            composable(LIBRARY_ROUTE) {
+                LibraryScreen(
+                    api = api,
+                    refreshKey = refreshKey,
+                    onOpen = ::openRecord,
+                    onMessage = ::showMessage
+                )
+            }
+            composable(
+                route = DETAIL_ROUTE,
+                arguments = listOf(navArgument("recordId") { type = NavType.StringType })
+            ) { entry ->
+                val recordId = entry.arguments?.getString("recordId").orEmpty()
                 RecordDetailScreen(
                     api = api,
-                    recordId = selectedRecordId!!,
+                    recordId = recordId,
                     onChanged = { refreshKey++ },
                     onConflict = { conflictMessage = it }
                 )
@@ -124,7 +177,7 @@ private fun PebbleApp(api: CoreApi, sharedText: String?, onShareConsumed: () -> 
 
     if (!sharedText.isNullOrBlank()) {
         AlertDialog(
-            onDismissRequest = { onShareConsumed(); banner = null },
+            onDismissRequest = onShareConsumed,
             title = { Text("保存分享内容") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -141,11 +194,11 @@ private fun PebbleApp(api: CoreApi, sharedText: String?, onShareConsumed: () -> 
                         val receipt = api.recordExperience(sharedText, "android_share", UUID.randomUUID().toString())
                         shareSaving = false
                         if (receipt.success && receipt.recordId != null) {
-                            selectedRecordId = receipt.recordId
                             refreshKey++
                             onShareConsumed()
-                            banner = "已保存，可在记录库中再次找到这条原话"
-                        } else banner = receipt.message
+                            showMessage("已保存 · ${receipt.recordId}")
+                            openRecord(receipt.recordId)
+                        } else showMessage(receipt.message)
                     }
                 }) { Text(if (shareSaving) "保存中…" else "确认保存") }
             },
@@ -164,77 +217,191 @@ private fun PebbleApp(api: CoreApi, sharedText: String?, onShareConsumed: () -> 
         )
     }
 
-    if (banner != null) {
-        LaunchedEffect(banner) {
-            kotlinx.coroutines.delay(2800)
-            banner = null
-        }
-        Surface(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-            color = Moss, shape = MaterialTheme.shapes.large, shadowElevation = 5.dp
-        ) { Text(banner!!, Modifier.padding(14.dp), color = Color.White, fontSize = 13.sp) }
-    }
 }
 
 @Composable
-private fun TopAppBarSimple(title: String, showBack: Boolean, onBack: () -> Unit) {
+private fun TopAppBarSimple(
+    title: String,
+    showBack: Boolean,
+    onBack: () -> Unit,
+    onOpenLibrary: (() -> Unit)? = null
+) {
     Surface(color = Sand, shadowElevation = 1.dp) {
         Row(Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
             if (showBack) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回") }
-            Text(title, color = Ink, fontSize = 19.sp, fontWeight = FontWeight.SemiBold)
+            Text(title, color = Ink, fontSize = 19.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            if (onOpenLibrary != null) TextButton(onClick = onOpenLibrary) { Text("记录库") }
         }
     }
 }
 
 @Composable
-private fun HomeScreen(records: List<PebbleRecord>, onOpen: (String) -> Unit, onRefresh: () -> Unit) {
-    var selectedTag by rememberSaveable { mutableStateOf<String?>(null) }
-    val availableTags = records.flatMap { it.tags }.filterNot { it.excluded }.map { it.name }.distinct().sorted()
-    val filteredRecords = if (selectedTag == null) records else records.filter { record ->
-        record.tags.any { !it.excluded && it.name == selectedTag }
-    }
+private fun HomeEntryScreen(
+    api: CoreApi,
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    inputMode: InputMode,
+    onInputModeChange: (InputMode) -> Unit,
+    onOpenLibrary: () -> Unit,
+    onMessage: (String) -> Unit,
+    onSaved: (String) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var saving by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
         Spacer(Modifier.height(18.dp))
-        Text("记录库", fontSize = 25.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-        Text("从其他应用分享文字，或打开一条已有记录。", color = Muted, fontSize = 14.sp)
+        Text("留下今天的原话", fontSize = 25.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+        Text("切换对话或记录不会清空正在输入的内容。", color = Muted, fontSize = 14.sp)
         Spacer(Modifier.height(18.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilterChip(
+                selected = inputMode == InputMode.DIALOG,
+                onClick = { onInputModeChange(InputMode.DIALOG) },
+                label = { Text("对话") }
+            )
+            FilterChip(
+                selected = inputMode == InputMode.RECORD,
+                onClick = { onInputModeChange(InputMode.RECORD) },
+                label = { Text("记录") }
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = draft,
+            onValueChange = onDraftChange,
+            modifier = Modifier.fillMaxWidth().weight(1f),
+            label = { Text(if (inputMode == InputMode.DIALOG) "想说什么" else "记录原话") },
+            placeholder = { Text("写下此刻真实经历或想法") },
+            minLines = 6,
+            enabled = !saving
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onOpenLibrary, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Default.BookmarkBorder, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("打开记录库")
+            }
+            Button(
+                enabled = draft.isNotBlank() && !saving,
+                colors = ButtonDefaults.buttonColors(containerColor = Moss),
+                onClick = {
+                    saving = true
+                    scope.launch {
+                        val receipt = api.recordExperience(
+                            text = draft,
+                            captureMethod = if (inputMode == InputMode.DIALOG) "app_home_dialog" else "app_home_record",
+                            operationId = UUID.randomUUID().toString()
+                        )
+                        saving = false
+                        if (receipt.success && receipt.recordId != null) {
+                            onSaved(receipt.recordId)
+                        } else {
+                            onMessage(receipt.message.ifBlank { "保存失败，请重试" })
+                        }
+                    }
+                }
+            ) {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text(if (inputMode == InputMode.DIALOG) "发送并保存" else "保存记录")
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun LibraryScreen(
+    api: CoreApi,
+    refreshKey: Int,
+    onOpen: (String) -> Unit,
+    onMessage: (String) -> Unit
+) {
+    var records by remember { mutableStateOf<List<PebbleRecord>>(emptyList()) }
+    var selectedTag by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(refreshKey) {
+        runCatching { api.recentRecords() }
+            .onSuccess { records = it }
+            .onFailure { onMessage("记录库读取失败：${it.message ?: "未知错误"}") }
+    }
+
+    val availableTags = records
+        .flatMap { it.tags }
+        .filterNot { it.excluded }
+        .map { it.name }
+        .distinct()
+        .sorted()
+    val filtered = if (selectedTag == null) {
+        records
+    } else {
+        records.filter { record -> record.tags.any { !it.excluded && it.name == selectedTag } }
+    }
+
+    Column(Modifier.fillMaxSize().padding(horizontal = 18.dp)) {
+        Spacer(Modifier.height(16.dp))
+        Text("时间线", fontSize = 25.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+        Text("记录与系统分享共用同一资料库。", color = Muted, fontSize = 14.sp)
+        Spacer(Modifier.height(12.dp))
+
         if (availableTags.isNotEmpty()) {
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                FilterChip(selected = selectedTag == null, onClick = { selectedTag = null }, label = { Text("全部") })
+                FilterChip(
+                    selected = selectedTag == null,
+                    onClick = { selectedTag = null },
+                    label = { Text("全部") }
+                )
                 availableTags.forEach { tag ->
-                    FilterChip(selected = selectedTag == tag, onClick = { selectedTag = tag }, label = { Text(tag) })
+                    FilterChip(
+                        selected = selectedTag == tag,
+                        onClick = { selectedTag = tag },
+                        label = { Text(tag) }
+                    )
                 }
             }
-            Spacer(Modifier.height(8.dp))
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("最近记录", fontWeight = FontWeight.Medium, color = Ink, modifier = Modifier.weight(1f))
-            TextButton(onClick = onRefresh) { Text("刷新") }
-        }
-        if (filteredRecords.isEmpty()) {
+        Spacer(Modifier.height(12.dp))
+
+        if (filtered.isEmpty()) {
             Surface(color = CardSand, shape = MaterialTheme.shapes.large, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Default.BookmarkBorder, contentDescription = null, tint = Moss, modifier = Modifier.size(34.dp))
                     Spacer(Modifier.height(8.dp))
                     Text(if (records.isEmpty()) "还没有记录" else "这个标签下没有记录", fontWeight = FontWeight.Medium, color = Ink)
-                    Text("可以从任意支持文字分享的应用发送一段内容到叠石。", color = Muted, fontSize = 13.sp)
+                    Text("可以从首页输入，或通过系统分享保存。", color = Muted, fontSize = 13.sp)
                 }
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
-                items(filteredRecords, key = { it.id }) { record ->
-                    Card(onClick = { onOpen(record.id) }, colors = CardDefaults.cardColors(containerColor = CardSand), elevation = CardDefaults.cardElevation(2.dp)) {
-                        Column(Modifier.fillMaxWidth().padding(15.dp)) {
-                            Text(record.rawText, color = Ink, maxLines = 3, fontSize = 15.sp)
-                            Spacer(Modifier.height(8.dp))
-                            Text("${record.capturedAt} · ${record.status}", color = Muted, fontSize = 12.sp)
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                record.tags.filterNot { it.excluded }.take(4).forEach { tag ->
-                                    AssistChip(onClick = { selectedTag = tag.name }, label = { Text(tag.name) })
+                filtered.groupBy { it.capturedAt.take(10) }.forEach { (date, dateRecords) ->
+                    item(key = "date_$date") {
+                        Text(date, color = Moss, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
+                    }
+                    items(dateRecords, key = { it.id }) { record ->
+                        Card(
+                            onClick = { onOpen(record.id) },
+                            colors = CardDefaults.cardColors(containerColor = CardSand),
+                            elevation = CardDefaults.cardElevation(2.dp)
+                        ) {
+                            Column(Modifier.fillMaxWidth().padding(15.dp)) {
+                                Text(record.rawText, color = Ink, maxLines = 3, fontSize = 15.sp)
+                                Spacer(Modifier.height(8.dp))
+                                Text("${record.capturedAt.take(16)} · ${record.status}", color = Muted, fontSize = 12.sp)
+                                Spacer(Modifier.height(6.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    record.tags.filterNot { it.excluded }.take(4).forEach { tag ->
+                                        AssistChip(
+                                            onClick = { selectedTag = tag.name },
+                                            label = { Text(tag.name) }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -244,7 +411,6 @@ private fun HomeScreen(records: List<PebbleRecord>, onOpen: (String) -> Unit, on
         }
     }
 }
-
 @Composable
 private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> Unit, onConflict: (String) -> Unit) {
     val scope = rememberCoroutineScope()
@@ -256,7 +422,6 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
     var showCorrection by rememberSaveable { mutableStateOf(false) }
     var correctionScope by rememberSaveable { mutableStateOf(CorrectionScope.THIS_TIME) }
     var status by remember { mutableStateOf<String?>(null) }
-    var selectedEvidence by remember { mutableStateOf<EvidenceItem?>(null) }
 
     suspend fun reload() {
         loading = true
@@ -314,11 +479,7 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
                 Text(suggestion.title, fontWeight = FontWeight.Medium, color = Ink)
                 Text(suggestion.reason, color = Muted, fontSize = 13.sp)
                 suggestion.evidence.forEach { evidence ->
-                    Card(
-                        onClick = { selectedEvidence = evidence },
-                        colors = CardDefaults.cardColors(containerColor = Sand),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
+                    Surface(color = Sand, shape = MaterialTheme.shapes.medium) {
                         Column(Modifier.fillMaxWidth().padding(10.dp)) {
                             Text("${evidence.title} · ${evidence.recordDate}", color = Moss, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             Text("“${evidence.quote}”", color = Ink, fontSize = 13.sp)
@@ -396,23 +557,6 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
                 }) { Text("确认修改") }
             },
             dismissButton = { TextButton(onClick = { showCorrection = false }) { Text("取消") } },
-            containerColor = CardSand
-        )
-    }
-
-    if (selectedEvidence != null) {
-        val evidence = selectedEvidence!!
-        AlertDialog(
-            onDismissRequest = { selectedEvidence = null },
-            title = { Text("来源与原话") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(evidence.title, color = Moss, fontWeight = FontWeight.Medium)
-                    Text(evidence.recordDate, color = Muted, fontSize = 12.sp)
-                    Text("“${evidence.quote}”", color = Ink)
-                }
-            },
-            confirmButton = { TextButton(onClick = { selectedEvidence = null }) { Text("关闭") } },
             containerColor = CardSand
         )
     }
