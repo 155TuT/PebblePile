@@ -46,13 +46,10 @@ jobs:
           java-version: "17"
           cache: gradle
 
-      - name: Set up Android SDK
+      - name: Install Android SDK packages for the debug build
         uses: android-actions/setup-android@v3
-
-      - name: Install Android 35 build dependencies
-        shell: bash
-        run: |
-          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+        with:
+          packages: 'platform-tools platforms;android-35 build-tools;34.0.0'
 
       - name: Build, test and lint
         working-directory: android
