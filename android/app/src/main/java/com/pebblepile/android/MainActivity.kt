@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -20,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,17 +48,26 @@ private val Muted = Color(0xFF777B70)
 
 private enum class InputMode { DIALOG, RECORD }
 
+private data class PendingShare(val text: String, val operationId: String)
+
 class MainActivity : ComponentActivity() {
-    private lateinit var api: CoreApi
-    private var sharedText by mutableStateOf<String?>(null)
+    private var pendingShare by mutableStateOf<PendingShare?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        api = DemoCoreApi(applicationContext)
-        acceptShare(intent)
+        val api = (application as PebblePileApplication).coreApi
+        if (savedInstanceState == null) {
+            acceptShare(intent)
+        } else {
+            val text = savedInstanceState.getString("shareText")
+            val id = savedInstanceState.getString("shareOperationId")
+            if (text != null && id != null) pendingShare = PendingShare(text, id)
+        }
         setContent {
             PebbleTheme {
-                PebbleApp(api = api, sharedText = sharedText, onShareConsumed = { sharedText = null })
+                PebbleApp(api, pendingShare) { consumed ->
+                    if (pendingShare == consumed) pendingShare = null
+                }
             }
         }
     }
@@ -66,10 +78,18 @@ class MainActivity : ComponentActivity() {
         acceptShare(intent)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        pendingShare?.let {
+            outState.putString("shareText", it.text)
+            outState.putString("shareOperationId", it.operationId)
+        }
+    }
+
     private fun acceptShare(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND && intent.type?.startsWith("text/") == true) {
             val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
-            if (!text.isNullOrBlank()) sharedText = text
+            if (!text.isNullOrBlank()) pendingShare = PendingShare(text, UUID.randomUUID().toString())
         }
     }
 }
@@ -91,7 +111,7 @@ private fun PebbleTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun PebbleApp(api: CoreApi, sharedText: String?, onShareConsumed: () -> Unit) {
+private fun PebbleApp(api: CoreApi, pendingShare: PendingShare?, onShareConsumed: (PendingShare) -> Unit) {
     val scope = rememberCoroutineScope()
     val navController = rememberNavController()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -99,7 +119,6 @@ private fun PebbleApp(api: CoreApi, sharedText: String?, onShareConsumed: () -> 
     val currentRoute = backStackEntry?.destination?.route ?: HOME_ROUTE
     var refreshKey by remember { mutableIntStateOf(0) }
     var shareSaving by remember { mutableStateOf(false) }
-    var conflictMessage by remember { mutableStateOf<String?>(null) }
     var draft by rememberSaveable { mutableStateOf("") }
     var inputMode by rememberSaveable { mutableStateOf(InputMode.RECORD) }
 
@@ -168,22 +187,21 @@ private fun PebbleApp(api: CoreApi, sharedText: String?, onShareConsumed: () -> 
                 RecordDetailScreen(
                     api = api,
                     recordId = recordId,
-                    onChanged = { refreshKey++ },
-                    onConflict = { conflictMessage = it }
+                    onChanged = { refreshKey++ }
                 )
             }
         }
     }
 
-    if (!sharedText.isNullOrBlank()) {
+    if (pendingShare != null) {
         AlertDialog(
-            onDismissRequest = onShareConsumed,
+            onDismissRequest = { if (!shareSaving) onShareConsumed(pendingShare) },
             title = { Text("保存分享内容") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("以下文字将作为一条新记录保存：", color = Muted, fontSize = 13.sp)
                     Surface(color = Sand, shape = MaterialTheme.shapes.medium) {
-                        Text(sharedText, Modifier.padding(12.dp), color = Ink, maxLines = 8)
+                        Text(pendingShare.text, Modifier.padding(12.dp), color = Ink, maxLines = 8)
                     }
                 }
             },
@@ -191,28 +209,18 @@ private fun PebbleApp(api: CoreApi, sharedText: String?, onShareConsumed: () -> 
                 TextButton(enabled = !shareSaving, onClick = {
                     shareSaving = true
                     scope.launch {
-                        val receipt = api.recordExperience(sharedText, "android_share", UUID.randomUUID().toString())
+                        val receipt = api.recordExperience(pendingShare.text, "android_share", pendingShare.operationId)
                         shareSaving = false
                         if (receipt.success && receipt.recordId != null) {
                             refreshKey++
-                            onShareConsumed()
+                            onShareConsumed(pendingShare)
                             showMessage("已保存 · ${receipt.recordId}")
                             openRecord(receipt.recordId)
                         } else showMessage(receipt.message)
                     }
                 }) { Text(if (shareSaving) "保存中…" else "确认保存") }
             },
-            dismissButton = { TextButton(onClick = onShareConsumed) { Text("取消") } },
-            containerColor = CardSand
-        )
-    }
-
-    if (conflictMessage != null) {
-        AlertDialog(
-            onDismissRequest = { conflictMessage = null },
-            title = { Text("检测到修订冲突") },
-            text = { Text("${conflictMessage}\n\n当前输入草稿仍保留。请核对最新内容后再提交。") },
-            confirmButton = { TextButton(onClick = { conflictMessage = null; refreshKey++ }) { Text("查看最新版本") } },
+            dismissButton = { TextButton(enabled = !shareSaving, onClick = { onShareConsumed(pendingShare) }) { Text("取消") } },
             containerColor = CardSand
         )
     }
@@ -326,7 +334,12 @@ private fun LibraryScreen(
 
     LaunchedEffect(refreshKey) {
         runCatching { api.recentRecords() }
-            .onSuccess { records = it }
+            .onSuccess { loaded ->
+                records = loaded
+                if (loaded.none { record -> record.tags.any { !it.excluded && it.name == selectedTag } }) {
+                    selectedTag = null
+                }
+            }
             .onFailure { onMessage("记录库读取失败：${it.message ?: "未知错误"}") }
     }
 
@@ -412,7 +425,7 @@ private fun LibraryScreen(
     }
 }
 @Composable
-private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> Unit, onConflict: (String) -> Unit) {
+private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> Unit) {
     val scope = rememberCoroutineScope()
     var record by remember(recordId) { mutableStateOf<PebbleRecord?>(null) }
     var loading by remember { mutableStateOf(true) }
@@ -422,11 +435,12 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
     var showCorrection by rememberSaveable { mutableStateOf(false) }
     var correctionScope by rememberSaveable { mutableStateOf(CorrectionScope.THIS_TIME) }
     var status by remember { mutableStateOf<String?>(null) }
+    var conflictMessage by rememberSaveable(recordId) { mutableStateOf<String?>(null) }
+    var evidenceId by rememberSaveable(recordId) { mutableStateOf<String?>(null) }
 
     suspend fun reload() {
         loading = true
         record = api.getRecord(recordId)
-        conditionDraft = record?.currentCondition.orEmpty()
         loading = false
     }
     LaunchedEffect(recordId) { reload() }
@@ -464,7 +478,7 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
                         scope.launch {
                             val receipt = api.reviseTags(item.id, item.revision, tag.id, UUID.randomUUID().toString())
                             if (receipt.success) { status = receipt.message; reload(); onChanged() }
-                            else if (receipt.conflict) onConflict(receipt.message) else status = receipt.message
+                            else if (receipt.conflict) conflictMessage = receipt.message else status = receipt.message
                         }
                     }) { Text("排除") }
                 }
@@ -479,10 +493,11 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
                 Text(suggestion.title, fontWeight = FontWeight.Medium, color = Ink)
                 Text(suggestion.reason, color = Muted, fontSize = 13.sp)
                 suggestion.evidence.forEach { evidence ->
-                    Surface(color = Sand, shape = MaterialTheme.shapes.medium) {
+                    Surface(onClick = { evidenceId = evidence.id }, color = Sand, shape = MaterialTheme.shapes.medium) {
                         Column(Modifier.fillMaxWidth().padding(10.dp)) {
                             Text("${evidence.title} · ${evidence.recordDate}", color = Moss, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             Text("“${evidence.quote}”", color = Ink, fontSize = 13.sp)
+                            Text("查看来源与原话", color = Moss, fontSize = 13.sp)
                         }
                     }
                 }
@@ -506,7 +521,7 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
                     scope.launch {
                         val receipt = api.recordOutcome(item.id, item.revision, choice, experience, UUID.randomUUID().toString())
                         if (receipt.success) { choice = ""; experience = ""; status = receipt.message; reload(); onChanged() }
-                        else if (receipt.conflict) onConflict(receipt.message) else status = receipt.message
+                        else if (receipt.conflict) conflictMessage = receipt.message else status = receipt.message
                     }
                 }, enabled = choice.isNotBlank() || experience.isNotBlank(), colors = ButtonDefaults.buttonColors(containerColor = Moss)
             ) { Text("保存实际反馈") }
@@ -516,33 +531,64 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
         Text("纠正适用条件", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = Ink)
         DetailCard {
             Text(if (item.currentCondition.isBlank()) "尚未设置当前事项条件" else item.currentCondition, color = Ink)
+            item.conditionScope?.let { Text("适用范围：${it.label}", color = Moss, fontSize = 13.sp) }
             Text("可以选择只调整当前事项，或将条件保存为以后适用的明确偏好。", color = Muted, fontSize = 13.sp)
-            Button(onClick = { conditionDraft = item.currentCondition; showCorrection = true }, colors = ButtonDefaults.buttonColors(containerColor = Moss)) { Text("修改条件") }
+            Button(onClick = {
+                conditionDraft = item.currentCondition
+                correctionScope = item.conditionScope ?: CorrectionScope.THIS_TIME
+                showCorrection = true
+            }, colors = ButtonDefaults.buttonColors(containerColor = Moss)) { Text("修改条件") }
         }
         if (status != null) Text(status!!, color = Moss, modifier = Modifier.padding(vertical = 12.dp))
         Spacer(Modifier.height(28.dp))
     }
 
-    if (showCorrection) {
+    val evidence = item.suggestions.flatMap { it.evidence }.firstOrNull { it.id == evidenceId }
+    if (evidence != null) {
+        var source by remember(api, evidence.sourceRecordId) { mutableStateOf<PebbleRecord?>(null) }
+        LaunchedEffect(api, evidence.sourceRecordId) {
+            source = api.getRecord(evidence.sourceRecordId)
+        }
+        AlertDialog(
+            onDismissRequest = { evidenceId = null },
+            title = { Text("来源与原话") },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${evidence.title} · ${evidence.recordDate}", color = Moss)
+                    Text("“${evidence.quote}”")
+                    source?.let {
+                        Text("来源记录", fontWeight = FontWeight.Medium)
+                        Text(it.rawText)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { evidenceId = null }) { Text("关闭") } }
+        )
+    }
+
+    if (showCorrection && conflictMessage == null) {
         AlertDialog(
             onDismissRequest = { showCorrection = false },
             title = { Text("纠正条件") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (item.currentCondition.isNotBlank()) Text("当前条件：${item.currentCondition}", color = Muted)
                     OutlinedTextField(value = conditionDraft, onValueChange = { conditionDraft = it }, label = { Text("新的适用条件") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
                     Text("影响范围", fontWeight = FontWeight.Medium)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = correctionScope == CorrectionScope.THIS_TIME, onClick = { correctionScope = CorrectionScope.THIS_TIME })
-                        Column {
-                            Text("仅本次", color = Ink)
-                            Text("只修改当前事项，不改变长期认识", color = Muted, fontSize = 11.sp)
-                        }
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = correctionScope == CorrectionScope.FUTURE, onClick = { correctionScope = CorrectionScope.FUTURE })
-                        Column {
-                            Text("以后按此条件", color = Ink)
-                            Text("保存为明确偏好，停用受影响的旧推断", color = Muted, fontSize = 11.sp)
+                    Column(Modifier.selectableGroup()) {
+                        CorrectionScope.entries.forEach { option ->
+                            Row(
+                                Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
+                                    selected = correctionScope == option,
+                                    role = Role.RadioButton,
+                                    onClick = { correctionScope = option }
+                                ),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(selected = correctionScope == option, onClick = null)
+                                Spacer(Modifier.width(12.dp))
+                                Text(option.label, color = Ink)
+                            }
                         }
                     }
                 }
@@ -552,11 +598,26 @@ private fun RecordDetailScreen(api: CoreApi, recordId: String, onChanged: () -> 
                     scope.launch {
                         val receipt = api.reviseMemory(item.id, item.revision, conditionDraft, correctionScope, UUID.randomUUID().toString())
                         if (receipt.success) { showCorrection = false; status = receipt.message; reload(); onChanged() }
-                        else if (receipt.conflict) onConflict(receipt.message) else status = receipt.message
+                        else if (receipt.conflict) conflictMessage = receipt.message else status = receipt.message
                     }
                 }) { Text("确认修改") }
             },
             dismissButton = { TextButton(onClick = { showCorrection = false }) { Text("取消") } },
+            containerColor = CardSand
+        )
+    }
+    conflictMessage?.let { message ->
+        fun refreshRecord() {
+            scope.launch {
+                reload()
+                conflictMessage = null
+            }
+        }
+        AlertDialog(
+            onDismissRequest = ::refreshRecord,
+            title = { Text("检测到修订冲突") },
+            text = { Text(message) },
+            confirmButton = { TextButton(onClick = ::refreshRecord) { Text("查看最新版本") } },
             containerColor = CardSand
         )
     }

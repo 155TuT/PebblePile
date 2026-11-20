@@ -4,7 +4,7 @@ Android 工程、首页输入、记录库和详情路由的可构建基线。
 
 ## 已覆盖
 
-- Kotlin + Jetpack Compose 单 `app` 工程和 Gradle Wrapper 8.9。
+- Kotlin + Jetpack Compose 单 `app` 工程和 Gradle Wrapper 8.9。首页、记录库、系统分享和详情共用纵向界面。
 - 首页直接输入，对话／记录模式切换时保留同一草稿。
 - 首页提交后显示带 `recordId` 的保存回执并进入详情。
 - 记录库为独立页面，可回到首页、按标签筛选并按时间分组。
@@ -14,11 +14,10 @@ Android 工程、首页输入、记录库和详情路由的可构建基线。
 
 ## 构建
 
-要求 JDK 17 或 21，以及 Android SDK Platform 35。
+使用 JDK 17 或 21、Android SDK Platform 35。将 `JAVA_HOME` 和 `ANDROID_HOME` 指向本机安装目录，在仓库根目录执行：
 
 ```powershell
-$env:JAVA_HOME = "D:\Android\OpenJDK21"
-$env:ANDROID_HOME = "D:\Android\Sdk"
+cd android
 .\gradlew.bat clean assembleDebug
 ```
 
@@ -29,6 +28,8 @@ app\build\outputs\apk\debug\app-debug.apk
 ```
 
 工程路径允许包含中文，配置中已开启 `android.overridePathCheck=true`。
+
+接上一台测试设备，在 `android/` 运行 `.\gradlew.bat connectedDebugAndroidTest`，复验分享确认、来源原话、纠正草稿和修订冲突。
 
 ## 手动验收
 

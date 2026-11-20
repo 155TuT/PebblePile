@@ -36,4 +36,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended:1.7.5")
     implementation("androidx.navigation:navigation-compose:2.8.4")
     debugImplementation("androidx.compose.ui:ui-tooling:1.7.5")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.7.5")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
 }

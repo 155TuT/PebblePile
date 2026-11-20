@@ -35,7 +35,7 @@ class DemoCoreApi(context: Context) : CoreApi {
                 SuggestionItem(
                     UUID.randomUUID().toString(), "优先选择准备简单的晚餐",
                     "示例依据：记录中提到了时间紧张或希望省事。正式建议由团队任务模块提供。",
-                    listOf(EvidenceItem(UUID.randomUUID().toString(), "本条记录", text.take(100), nowDate()))
+                    listOf(EvidenceItem(UUID.randomUUID().toString(), "本条记录", text.take(100), nowDate(), id))
                 )
             )
         )
@@ -80,18 +80,17 @@ class DemoCoreApi(context: Context) : CoreApi {
         receipts[operationId]?.let { return it }
         val old = records[recordId] ?: return ApiReceipt(false, message = "记录不存在")
         if (old.revision != baseRevision) return ApiReceipt(false, message = "条件已被其他操作修改。草稿已保留，请核对当前条件后重试。", conflict = true, currentRevision = old.revision)
-        val changed = old.copy(revision = old.revision + 1, currentCondition = condition)
+        val changed = old.copy(revision = old.revision + 1, currentCondition = condition, conditionScope = scope)
         records[recordId] = changed
         if (!persist()) {
             records[recordId] = old
             return ApiReceipt(false, message = "条件保存失败，请重试", currentRevision = old.revision)
         }
-        val scopeText = if (scope == CorrectionScope.THIS_TIME) "仅本次条件已更新" else "已保存为以后适用的明确偏好；旧推断不再参与本次演示"
-        return ApiReceipt(true, recordId, changed.revision, scopeText).also { receipts[operationId] = it }
+        return ApiReceipt(true, recordId, changed.revision, "已保存条件 · ${scope.label}").also { receipts[operationId] = it }
     }
 
     override suspend fun recentRecords(): List<PebbleRecord> = synchronized(lock) {
-        records.values.toList().sortedByDescending { it.capturedAt }
+        records.values.toList().asReversed().sortedByDescending { it.capturedAt }
     }
 
     private fun load() {
@@ -100,6 +99,7 @@ class DemoCoreApi(context: Context) : CoreApi {
             val arr = JSONArray(raw)
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
+                val recordId = obj.getString("id")
                 val tags = obj.optJSONArray("tags") ?: JSONArray()
                 val tagList = (0 until tags.length()).map { j -> tags.getJSONObject(j).let { RecordTag(it.getString("id"), it.getString("name"), it.optString("quote"), it.optString("algorithm"), it.optBoolean("excluded")) } }
                 val outcomes = obj.optJSONArray("outcomes") ?: JSONArray()
@@ -107,9 +107,15 @@ class DemoCoreApi(context: Context) : CoreApi {
                 val suggestions = obj.optJSONArray("suggestions") ?: JSONArray()
                 val suggestionList = (0 until suggestions.length()).map { j ->
                     val s = suggestions.getJSONObject(j); val ev = s.optJSONArray("evidence") ?: JSONArray()
-                    SuggestionItem(s.getString("id"), s.optString("title"), s.optString("reason"), (0 until ev.length()).map { k -> ev.getJSONObject(k).let { EvidenceItem(it.getString("id"), it.optString("title"), it.optString("quote"), it.optString("date")) } })
+                    val evidence = (0 until ev.length()).map { k ->
+                        val entry = ev.getJSONObject(k)
+                        EvidenceItem(entry.getString("id"), entry.optString("title"), entry.optString("quote"),
+                            entry.optString("date"), entry.optString("sourceRecordId", recordId))
+                    }
+                    SuggestionItem(s.getString("id"), s.optString("title"), s.optString("reason"), evidence)
                 }
-                val r = PebbleRecord(obj.getString("id"), obj.getString("rawText"), obj.optString("capturedAt"), obj.optString("captureMethod"), obj.optLong("revision", 1), tagList, suggestionList, outcomeList, obj.optString("condition"), obj.optString("status", "已保存"))
+                val conditionScope = CorrectionScope.entries.firstOrNull { it.name == obj.optString("conditionScope") }
+                val r = PebbleRecord(recordId, obj.getString("rawText"), obj.optString("capturedAt"), obj.optString("captureMethod"), obj.optLong("revision", 1), tagList, suggestionList, outcomeList, obj.optString("condition"), obj.optString("status", "已保存"), conditionScope)
                 records[r.id] = r
             }
         }
@@ -119,9 +125,17 @@ class DemoCoreApi(context: Context) : CoreApi {
         val arr = JSONArray()
         records.values.forEach { r ->
             val obj = JSONObject().put("id", r.id).put("rawText", r.rawText).put("capturedAt", r.capturedAt).put("captureMethod", r.captureMethod).put("revision", r.revision).put("condition", r.currentCondition).put("status", r.status)
+            r.conditionScope?.let { obj.put("conditionScope", it.name) }
             obj.put("tags", JSONArray().also { a -> r.tags.forEach { a.put(JSONObject().put("id", it.id).put("name", it.name).put("quote", it.sourceQuote).put("algorithm", it.algorithmVersion).put("excluded", it.excluded)) } })
             obj.put("outcomes", JSONArray().also { a -> r.outcomes.forEach { a.put(JSONObject().put("id", it.id).put("choice", it.choice).put("experience", it.experience).put("createdAt", it.createdAt)) } })
-            obj.put("suggestions", JSONArray().also { a -> r.suggestions.forEach { s -> a.put(JSONObject().put("id", s.id).put("title", s.title).put("reason", s.reason).put("evidence", JSONArray().also { ev -> s.evidence.forEach { ev.put(JSONObject().put("id", it.id).put("title", it.title).put("quote", it.quote).put("date", it.recordDate)) } })) } })
+            obj.put("suggestions", JSONArray().also { a -> r.suggestions.forEach { s ->
+                val evidence = JSONArray()
+                s.evidence.forEach { item ->
+                    evidence.put(JSONObject().put("id", item.id).put("title", item.title).put("quote", item.quote)
+                        .put("date", item.recordDate).put("sourceRecordId", item.sourceRecordId))
+                }
+                a.put(JSONObject().put("id", s.id).put("title", s.title).put("reason", s.reason).put("evidence", evidence))
+            } })
             arr.put(obj)
         }
         return prefs.edit().putString("records", arr.toString()).commit()

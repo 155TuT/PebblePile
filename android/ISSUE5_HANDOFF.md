@@ -15,7 +15,7 @@
 
 ## 与团队协作的待办
 
-- [ ] 与 Issue #4 负责人确定 Compose 版本、导航方式、包名和详情路由参数。
+- [x] 与 #4 统一到纵向 Compose 工程，包名为 `com.pebblepile.android`，首页、记录库和系统分享按 `detail/{recordId}` 打开详情。
 - [ ] 从 Issue #6 取得正式 `CoreAPI` 版本、请求／回执 DTO 和错误码样例。
 - [ ] 从 Issue #7 取得真实仓储实现；确认 `operationId` 幂等和 `baseRevision` 冲突语义。
 - [ ] 从 Issue #3 接入正式输入框、标签、依据卡片和反馈状态组件。
@@ -25,4 +25,4 @@
 
 ## 当前限制
 
-`DemoCoreApi` 使用 SharedPreferences 和 JSON，仅用于独立开发阶段；不代表正式数据库模型。Demo 的标签和建议是演示数据，不能作为算法正确性的证据。正式版需由 CoreAPI 处理事务、版本、幂等、权限、人工排除优先级和偏好快照失效／重算。
+`DemoCoreApi` 用 SharedPreferences 保存原话、反馈、排除的标签和纠正范围。页面用固定的晚餐建议核对来源。#6、#7 接入事务、版本与幂等回执，#8、#9 用真实证据和偏好快照验证下一次建议如何变化。
