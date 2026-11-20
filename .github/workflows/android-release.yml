@@ -25,7 +25,7 @@ on:
         required: false
         type: string
       expected_sha256:
-        description: "promote 模式：验收时记录的 APK SHA-256（可留空）"
+        description: "promote 模式：验收时记录的 APK SHA-256（promote 必填）"
         required: false
         type: string
 
@@ -129,6 +129,7 @@ jobs:
           fi
 
           badging="$("$aapt" dump badging "$apk_source")"
+          grep -F "name='com.pebblepile.android'" <<< "$badging"
           grep -F "versionCode='$VERSION_CODE'" <<< "$badging"
           grep -F "versionName='$VERSION_NAME'" <<< "$badging"
 
@@ -157,6 +158,12 @@ jobs:
           echo "APK_PATH=$GITHUB_WORKSPACE/dist/$apk_name" >> "$GITHUB_ENV"
           echo "APK_FILE=$apk_name" >> "$GITHUB_ENV"
 
+      - name: Enable KVM for the candidate emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Run connected tests and signed APK smoke test
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -164,18 +171,8 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: |
-            set -euo pipefail
-            cd "${GITHUB_WORKSPACE}/android"
-            ./gradlew --no-daemon :app:connectedDebugAndroidTest
-
-            adb uninstall com.pebblepile.android >/dev/null 2>&1 || true
-            adb install -r "$APK_PATH"
-            adb shell pm clear com.pebblepile.android
-            adb shell am start -W -n com.pebblepile.android/.MainActivity
-            sleep 5
-            pid="$(adb shell pidof com.pebblepile.android | tr -d '\r')"
-            test -n "$pid"
+          working-directory: android
+          script: bash ../.github/scripts/android-candidate-smoke.sh
 
       - name: Write release notes
         shell: bash
@@ -218,7 +215,7 @@ jobs:
       - name: Upload signed candidate
         uses: actions/upload-artifact@v4
         with:
-          name: PebblePile-android-${{ steps.version.outputs.name }}-${{ github.sha }}
+          name: PebblePile-android-${{ steps.version.outputs.name }}-${{ github.sha }}-${{ github.run_attempt }}
           path: dist/
           if-no-files-found: error
           retention-days: 90
@@ -236,7 +233,8 @@ jobs:
             echo "Candidate publication requires an alpha, beta or rc version." >&2
             exit 1
           fi
-          gh release create "$TAG" \
+          bash .github/scripts/android-release-tag.sh "$TAG" "$GITHUB_SHA"
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
             "dist/$APK_FILE" \
             dist/SHA256SUMS.txt \
             dist/build-info.json \
@@ -252,7 +250,7 @@ jobs:
           VERSION_NAME: ${{ steps.version.outputs.name }}
         run: |
           set -euo pipefail
-          artifact_name="PebblePile-android-${VERSION_NAME}-${GITHUB_SHA}"
+          artifact_name="PebblePile-android-${VERSION_NAME}-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
           sha256="$(cut -d' ' -f1 dist/SHA256SUMS.txt)"
           {
             echo "## Android candidate"
@@ -271,15 +269,24 @@ jobs:
     timeout-minutes: 15
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
       - name: Validate promotion inputs
         shell: bash
         env:
           SOURCE_RUN_ID: ${{ inputs.source_run_id }}
           SOURCE_ARTIFACT: ${{ inputs.source_artifact }}
+          EXPECTED_SHA256: ${{ inputs.expected_sha256 }}
         run: |
           set -euo pipefail
           if [[ ! "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]; then
             echo "source_run_id must be a numeric Actions run ID." >&2
+            exit 1
+          fi
+          if [[ ! "$EXPECTED_SHA256" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo "Enter the 64-digit SHA-256 from the acceptance record." >&2
             exit 1
           fi
           if [[ -z "$SOURCE_ARTIFACT" ]]; then
@@ -303,45 +310,9 @@ jobs:
             --name "$SOURCE_ARTIFACT" \
             --dir dist
 
-          test -f dist/SHA256SUMS.txt
-          test -f dist/build-info.json
-          test -f dist/release-notes.md
-          (
-            cd dist
-            sha256sum --check SHA256SUMS.txt
-          )
-
-          version_name="$(jq -r '.versionName' dist/build-info.json)"
-          commit="$(jq -r '.commit' dist/build-info.json)"
-          sha256="$(jq -r '.sha256' dist/build-info.json)"
-          sum_sha256="$(cut -d' ' -f1 dist/SHA256SUMS.txt)"
-          run_commit="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" --jq '.head_sha')"
-          run_conclusion="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" --jq '.conclusion')"
-          if [[ ! "$version_name" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]; then
-            echo "Promote mode requires a final, alpha, beta or rc version." >&2
-            exit 1
-          fi
-          if [[ ! "$commit" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Candidate build-info.json contains an invalid commit." >&2
-            exit 1
-          fi
-          if [[ "$run_conclusion" != "success" || "$run_commit" != "$commit" ]]; then
-            echo "Candidate run is not successful or does not match build-info.json commit." >&2
-            exit 1
-          fi
-          if [[ "$sha256" != "$sum_sha256" ]]; then
-            echo "build-info.json SHA-256 does not match SHA256SUMS.txt." >&2
-            exit 1
-          fi
-          test -f "dist/PebblePile-${version_name}.apk"
-          if [[ -n "$EXPECTED_SHA256" && "${EXPECTED_SHA256,,}" != "${sha256,,}" ]]; then
-            echo "Expected SHA-256 does not match the candidate artifact." >&2
-            exit 1
-          fi
-
-          echo "version_name=$version_name" >> "$GITHUB_OUTPUT"
-          echo "commit=$commit" >> "$GITHUB_OUTPUT"
-          echo "sha256=$sha256" >> "$GITHUB_OUTPUT"
+          export RUN_JSON="$RUNNER_TEMP/android-source-run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > "$RUN_JSON"
+          python3 .github/scripts/android-promote.py
 
       - name: Publish tested candidate
         shell: bash
@@ -358,7 +329,8 @@ jobs:
           else
             release_flag="--prerelease"
           fi
-          gh release create "$tag" \
+          bash .github/scripts/android-release-tag.sh "$tag" "$CANDIDATE_COMMIT"
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag \
             "dist/PebblePile-${VERSION_NAME}.apk" \
             dist/SHA256SUMS.txt \
             dist/build-info.json \

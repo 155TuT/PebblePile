@@ -1,6 +1,6 @@
 # Android 构建、签名与发布
 
-本文说明 PebblePile Android 0.1.0 的构建、签名、候选包验证和 GitHub Release 流程。版本、构建命令、产物和校验值必须对得上；正式版发布的是已验收的同一个 APK，不在发布前重新构建。
+李宗欣交付签名 APK、提交号和 SHA-256。林金晶和林叶鑫用同一份包做用户试用和真机回归，王智壹确认后，将验收通过的原文件发布到团队仓库。
 
 ## 环境基线
 
@@ -16,7 +16,7 @@
 | Kotlin | 2.0.21 |
 | CI 模拟器 | Android 35 Google APIs，x86_64 |
 
-仓库已有首页、记录库、系统分享和详情的模拟器验证记录，见 [Issue #5 验证](../android/ISSUE5_VERIFICATION.md)。该记录早于签名发布流程，不能替代对候选 APK、真机安装和真实晚餐流程的最终验收。
+首页、记录库、系统分享和详情已在模拟器上走通。首测手机安装后，李宗欣登记机型、系统版本和 APK 校验值，林叶鑫按同一份包回归晚餐流程。[Issue #5 验证](../android/ISSUE5_VERIFICATION.md)
 
 ## 版本规则
 
@@ -34,7 +34,7 @@ versionCode=1
 - 普通构建可用 `-PpebblepileVersionName` 和 `-PpebblepileVersionCode` 临时覆盖，但正式候选包只使用提交中的版本文件。
 - 每次构建候选包前更新 [`android/release-notes.md`](../android/release-notes.md) 的支持范围、样例和已知问题；CI 会把这些内容附到自动生成的版本信息后。
 
-## 无签名构建
+## 调试构建
 
 Windows PowerShell：
 
@@ -84,9 +84,9 @@ keytool -genkeypair -v `
   -validity 10000
 ```
 
-密钥文件、store password 和 key password 只由发布负责人保管，不进入仓库、Issue、PR、聊天记录或构建日志。密钥丢失后，使用同一包名的新 APK 无法覆盖安装旧版本。
+发布负责人离线保管密钥和密码，后续版本用同一把密钥签名，让已安装的用户可以直接升级。
 
-在 `Ki-K4/PebblePile` 的 **Settings → Secrets and variables → Actions** 添加：
+在团队发布仓库 `155TuT/PebblePile` 的 **Settings → Secrets and variables → Actions** 配置以下四项。
 
 | Secret | 内容 |
 | --- | --- |
@@ -95,7 +95,7 @@ keytool -genkeypair -v `
 | `PEBBLEPILE_KEY_ALIAS` | 通常为 `pebblepile` |
 | `PEBBLEPILE_KEY_PASSWORD` | key password |
 
-Windows 可生成 Base64；只把结果粘贴到 GitHub Secret，不要存进仓库：
+在 Windows 上用下列命令把 Base64 复制到剪贴板，粘贴到对应的 GitHub Secret。
 
 ```powershell
 [Convert]::ToBase64String(
@@ -119,12 +119,12 @@ cd android
 .\gradlew.bat clean assembleRelease
 ```
 
-若签名变量不完整，`assembleRelease` 会直接失败，避免误把未签名包或调试签名包当成交付文件。
+运行 `assembleRelease` 前，在同一终端设置上面四个签名变量。
 
 产物与校验：
 
 ```powershell
-$version = ((Get-Content version.properties | Where-Object { $_ -like 'versionName=*' }) -replace '^versionName=', '')[0]
+$version = (ConvertFrom-StringData (Get-Content version.properties -Raw)).versionName
 $source = "app\build\outputs\apk\release\app-release.apk"
 $target = "..\dist\PebblePile-$version.apk"
 
@@ -132,7 +132,7 @@ New-Item -ItemType Directory -Force ..\dist | Out-Null
 Copy-Item $source $target
 Get-FileHash $target -Algorithm SHA256 |
   ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
-  Set-Content ..\dist\SHA256SUMS.txt
+  Set-Content ..\dist\SHA256SUMS.txt -Encoding ascii
 ```
 
 检查签名与包信息：
@@ -159,10 +159,10 @@ Get-FileHash $target -Algorithm SHA256 |
 在仓库 Actions 中选择 **Android release → Run workflow**：
 
 1. `mode` 选 `candidate`。
-2. 默认保持 `publish=false`，先取得可下载的候选 artifact；外部试用和真机回归结束后再用 promote 发布同一文件。只有只需 CI 自动检查便可公开时，才把 `publish` 设为 `true`。
+2. 保持 `publish=false`，把候选 artifact 交给试用和真机回归负责人。首页和分享接通正式读写后可发 alpha；真实晚餐流程和中断恢复通过后可发 rc。发布负责人已核对本轮预发布条件时，也可以选 `publish=true`，由 CI 直接发布本次 alpha 或 rc。
 3. 工作流读取提交中的 `version.properties`，用 GitHub Secrets 临时还原密钥。
 4. CI 构建签名 APK，检查签名证书、`versionCode` 和 `versionName`。
-5. 在 Android 35 模拟器运行 connected tests，再安装并启动签名包。
+5. 在 API 35 模拟器上先跑 Debug 仪器测试，再安装签名 APK，启动首页并检查应用进程。
 6. 生成 `PebblePile-<版本>.apk`、`SHA256SUMS.txt`、`build-info.json` 和发布说明，上传 90 天。
 
 Candidate 结果的 `GITHUB_STEP_SUMMARY` 会列出：
@@ -181,9 +181,9 @@ Candidate 结果的 `GITHUB_STEP_SUMMARY` 会列出：
 1. `mode` 选 `promote`。
 2. 填写验收包的 `source_run_id`。
 3. 填写同一包的 `source_artifact`。
-4. 填写验收记录中的 `expected_sha256`。
+4. 把验收记录中的 64 位 APK SHA-256 填入 `expected_sha256`。
 
-Promote 不构建 APK。它从原 Actions run 下载 artifact，校验成功状态、提交号、`SHA256SUMS.txt` 和期望值，然后在原提交创建标签并上传同一个 APK。若校验不一致，工作流停止且不创建 Release。
+Promote 从团队仓库成功的 Android release 运行中下载指定候选包，核对运行编号、尝试次数、提交号和版本，再对 APK 本身计算 SHA-256。摘要与构建信息、校验文件和验收记录一致后，工作流在原提交上创建标签，发布同一个 APK。重试时，同名标签须指向该提交。
 
 命令行入口与网页相同：
 
@@ -194,7 +194,7 @@ gh workflow run android-release.yml `
   -f mode=promote `
   -f publish=false `
   -f source_run_id=<RUN_ID> `
-  -f source_artifact=PebblePile-android-<VERSION>-<COMMIT_SHA> `
+  -f source_artifact=PebblePile-android-<VERSION>-<COMMIT_SHA>-<RUN_ATTEMPT> `
   -f expected_sha256=<SHA256>
 ```
 
@@ -208,7 +208,7 @@ gh workflow run android-release.yml `
 - [ ] 真机安装启动成功，测试人下载的就是登记哈希的 APK。
 - [ ] 首页、系统分享、记录库、详情、进程恢复和真实晚餐流程已按对应 Issue 回归。
 - [ ] alpha／rc 发布说明列出支持范围、安装步骤、样例和已知问题。
-- [ ] 最终 Release 使用 promote 的同一 APK，没有重新构建。
+- [ ] 正式版用 promote 发布已验收的 APK，下载后的 SHA-256 与报告一致。
 
 ## 常见问题
 
@@ -222,8 +222,8 @@ gh workflow run android-release.yml `
 
 **GitHub Release 创建失败，提示 tag 已存在**
 
-检查是否已发布过同名版本。不要移动已公开的 Release tag；修复后递增预发布编号或 `versionCode` 并生成新候选包。
+核对已有版本的提交。已有标签指向其他提交时，递增版本并生成新候选包。
 
 **最终候选与 Release 哈希不同**
 
-停止发布。Promote 过程不得重新构建 APK，应重新下载候选 artifact 并核对 run ID、artifact 名称和 SHA-256。
+重新下载验收记录对应的候选 artifact，逐项核对运行编号、尝试次数、文件名和 SHA-256，再用同一文件发布。

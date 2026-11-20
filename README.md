@@ -118,11 +118,11 @@ cd android
 | --- | --- |
 | [构建、签名与发布](docs/android-build-release.md) | 环境基线、版本规则、签名材料、候选包验证与原文件 Release 流程 |
 | [Android 工程说明](android/README.md) | 当前功能、调试构建和模拟器复验命令 |
-| [Issue #5 验证](android/ISSUE5_VERIFICATION.md) | 登录、分享、持久化和进程恢复的模拟器验证记录 |
+| [Issue #5 验证](android/ISSUE5_VERIFICATION.md) | 首页输入、系统分享、记录保存和进程恢复的模拟器验证记录 |
 
 ## 部署
 
-Android Release 通过 [`.github/workflows/android-release.yml`](.github/workflows/android-release.yml) 手动执行。候选包由 CI 签名、测试并记录 SHA-256；最终版本使用 `promote` 模式发布同一份已验收 APK，不重新构建。签名材料只保存在发布负责人处和 GitHub Actions Secrets 中。
+发布负责人手动启动 Android release 工作流。CI 签名并启动候选包，记录提交号与 SHA-256。真机回归和用户试用通过后，用 `promote` 发布验收过的原文件。[Android release 工作流](.github/workflows/android-release.yml)
 
 ## 参与协作
 
