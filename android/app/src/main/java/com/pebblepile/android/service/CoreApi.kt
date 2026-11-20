@@ -1,4 +1,8 @@
-package com.pebblepile.android.data
+package com.pebblepile.android.service
+
+import com.pebblepile.android.model.ApiReceipt
+import com.pebblepile.android.model.CorrectionScope
+import com.pebblepile.android.model.PebbleRecord
 
 /**
  * UI-facing contract implemented by the local core. The Android assembly supplies a repository.

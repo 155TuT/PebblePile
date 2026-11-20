@@ -39,9 +39,35 @@
 3. 新保存同时写入记录和来源版本、适用的待办与操作回执，并递增资料库修订。任一步写入失败则整体回滚。并发收到同一操作时，回执唯一键和事务保证只有一个提交，另一次调用读取此前提交的回执。
 4. 列表、详情和上下文在一致读范围内取数。回执只持久化状态和必要标识。回查原话时，根据回执所指的来源版本重新校验授权并读取正文。
 
+### 交给 #7 的 SQLite 仓储契约
+
+#7 在 `db/` 实现 [CoreRepository、CoreReader 和 CoreWriter](../android/app/src/main/java/com/pebblepile/android/repository/CoreRepository.kt)。每个仓储实例绑定一个资料库。#6 定义业务判断、请求摘要和回执，SQLite 实现负责事务、持久化与对象映射。Room 与显式 SQL 的选型由 #7 记录。
+
+| 约定 | SQLite 实现要求 |
+| --- | --- |
+| 一致读取 | 每次 `read` 提供同一个读取视图。按记录 ID 读记录和关联任务，按来源 ID 与精确版本定位原话。 |
+| 原子提交 | 每次 `write` 用一个写事务执行整个回调。回调先查原回执，再读目标修订，随后写记录、来源及适用的待办，递增库修订并登记回执。事务提交后返回结果，失败回滚并抛出 `RepositoryWriteException`。 |
+| 操作唯一键 | 在同一资料库内，`(clientId, operationId)` 唯一。持久保存 `requestHash` 和原成功回执所需的标识、状态及修订。重开后用这些值复原当时的回执。 |
+| 三种版本号 | `PebbleRecord.revision` 是记录修订，`CoreReader.revision` 是资料库修订，`SourceRef.sourceVersion` 是原话版本。任务的 `inputRevision` 在当前接口中指输入记录修订，`CoreTask.revision` 是任务自身修订。 |
+| 任务数据 | 保存首个待办的 `jobId`、记录引用、输入修订、类型与状态。调度阶段、输入版本集合和持久检查点由 #7 与 [#8](https://github.com/155TuT/PebblePile/issues/8) 对齐后接入。 |
+
+从空库开启自动整理，跑[回执样例](core-api-receipt-examples.json)。以下补充场景各用一份独立的空库：
+
+| 操作 | 预期 |
+| --- | --- |
+| 保存后关闭并重新打开库 | 同一 `recordId` 可查，按精确来源版本读回原话，同时读回待办与原回执。 |
+| 重开后重发保存请求，或并发提交两次同一操作 | 返回同一 `recordId`、来源、`jobId` 和原提交修订。库中只有一条记录、一份来源版本、一份待办和一份回执。 |
+| 同一操作标识携带不同输入 | 由核心返回 `INVALID_INPUT`，已有记录和回执仍可读。 |
+| 用旧修订修改记录 | 由核心返回 `REVISION_CONFLICT`、当前对象修订和下一步，库修订与记录内容保持原值。 |
+| 写入来源之后、回执提交之前触发失败 | 重开后查不到本次写入的记录、来源、任务或回执。 |
+
+#7 的交付包含仓储实现入口及可重跑的验证步骤。#6 根据 #10 的测试 PR 中发现的接口问题更新契约或实现。
+
 ## 算法候选与纠正
 
 候选携带 `jobId`、目标及输入修订、来源版本和所用 `snapshotId`。证据位置以 `sourceId`、`sourceVersion` 和 Unicode 码点半开区间 `[start,end)` 表达。若证据来自其他记录，回查入口使用该来源所属或已关联的 `recordId`。例如在原型的原话「今天加班，晚饭想省事一点，预算二十元。」里，`[8,10)` 定位「省事」。
+
+#10 的 E01–E03 样例中，码点和 UTF-16 码元偏移一致。含「🍜热汤面」等文本时，「热汤面」的码点区间为 `[1,4)`。Kotlin 用 `offsetByCodePoints` 换算为 UTF-16 的 `[2,5)` 后再调用 `substring`，接口仍返回码点区间。 [#9 证据约定](https://github.com/155TuT/PebblePile/issues/9) · [#10 测试 PR](https://github.com/155TuT/PebblePile/pull/15)
 
 候选发布时在写事务中复查目标和来源版本、人工排除、授权和任务状态。任务带租约时也核对租约。失效输入产生 `STALE_INPUT`，将仍属于该次执行的任务标为 `stale`，已经取消的任务保持 `cancelled`。成功发布的建议保存证据引用与所用快照。
 
@@ -49,14 +75,21 @@
 
 ## 样例回放
 
-[晚餐回执样例](core-api-receipt-examples.json)使用一份开启自动整理的空资料库，回放期间保持整理任务排队。数组按顺序列出请求、预期回执与持久状态。先保存原话，再修改记录标题。随后重发原操作，应收到初次保存回执。最后用旧记录修订提交新编辑，应收到冲突，详情仍读到已提交的标题与原话。实现生成的标识可与样例标识逐一绑定，用于后续请求与结果比较。
+[晚餐回执样例](core-api-receipt-examples.json)使用一份开启自动整理的空资料库，回放期间保持整理任务排队。数组按顺序列出请求、预期回执与持久状态。实现生成的标识可与样例标识逐一绑定，用于后续请求与结果比较。
+
+| #10 用例 | #6 回执约定 |
+| --- | --- |
+| K01 保存 E01 | 首页记录用 `captureMethod=app_home_record`。新建记录使用新 `operationId`，省略 `baseRevision`。保存返回记录、来源版本、对象修订和适用的任务。 |
+| K02 重发 E01 | 用同一标识和同一载荷重发，逐字段比对首次回执。样例在修改标题后再重发，检查回执中的原提交修订。 |
+| K03 用旧修订提交 C01 | 返回 `REVISION_CONFLICT`，附当前记录、当前对象修订及 `nextAction=review_current_revision`。草稿由调用方保留。 |
+| K03 中的操作标识误复用 | 用同一个标识提交不同载荷时，返回 `INVALID_INPUT` 和 `reason=OPERATION_ID_REUSED`。记录、回执和资料库修订保持原值。 |
 
 ## Kotlin 接入
 
-[LocalCoreApi](../android/app/src/main/java/com/pebblepile/android/data/LocalCoreApi.kt) 实现页面现有的 `CoreApi`，并提供按来源版本读详情、记录筛选、条件查询和任务控制。一次 `CoreRepository.write` 内检查重复请求和对象修订，写入记录、来源、适用的任务与成功回执。写操作的请求摘要包含调用方法及业务参数。对象修订通过 `ApiReceipt.revision` 返回，资料库修订通过 `libraryRevision` 返回，来源引用在 `source` 中。
+[LocalCoreApi](../android/app/src/main/java/com/pebblepile/android/service/LocalCoreApi.kt) 实现页面现有的 `CoreApi`，并提供按来源版本读详情、记录筛选、条件查询和任务控制。一次 `CoreRepository.write` 内检查重复请求和对象修订，写入记录、来源、适用的任务与成功回执。写操作的请求摘要包含调用方法及业务参数。对象修订通过 `ApiReceipt.revision` 返回，资料库修订通过 `libraryRevision` 返回，来源引用在 `source` 中。
 
-独立接入时可用 `LocalCoreApi(SnapshotCoreRepository())` 从空内存库开始。用同一份 `CaptureRequest` 两次调用 `recordExperience` 检查回执一致性，用 `updateRecordTitle` 追加一次修改，再传旧修订检查 `REVISION_CONFLICT`。JSON 样例展示序列化后的预期值，Kotlin 调用直接使用类型化参数和回执。
+独立接入时可用 `LocalCoreApi(SnapshotCoreRepository())` 从空内存库开始。[内存仓储实现](../android/app/src/main/java/com/pebblepile/android/db/SnapshotCoreRepository.kt)位于 `db/`。用 `recordExperience` 保存原话，用 `updateRecordTitle` 修改标题，再重发首次请求检查回执一致性。最后用旧修订提交纠正检查 `REVISION_CONFLICT`。JSON 样例展示序列化后的预期值，Kotlin 调用直接使用类型化参数和回执。
 
-Android 的 [DemoCoreApi](../android/app/src/main/java/com/pebblepile/android/data/DemoCoreApi.kt) 负责将同一个业务核心装配给首页和分享入口。它沿用 `pebblepile_issue4_demo` 的记录键，给旧有记录补来源引用。演示库用一次 SharedPreferences 提交保存记录、版本、任务和回执。任务可查询和控制，执行由后续调度接入。详情显示最后一次提交的条件及其范围，业务查询分别返回当前事项条件与晚餐场景的长期条件。建议区域继续显示 #14 的演示内容。
+Android 的 [DemoCoreApi](../android/app/src/main/java/com/pebblepile/android/DemoCoreApi.kt) 将同一个业务服务装配给首页和分享入口。[DemoLibraryStore](../android/app/src/main/java/com/pebblepile/android/db/DemoLibraryStore.kt) 沿用 `pebblepile_issue4_demo` 的记录键，给旧有记录补来源引用，并用一次 SharedPreferences 提交保存记录、版本、任务和回执。任务可查询和控制，执行由后续调度接入。详情显示最后一次提交的条件及其范围，业务查询分别返回当前事项条件与晚餐场景的长期条件。建议区域继续显示 #14 的演示内容。
 
-接入 #7 时替换为 SQLite 的 [CoreRepository](../android/app/src/main/java/com/pebblepile/android/data/CoreRepository.kt) 实现。算法候选发布、完整上下文检索、正式偏好重算和真机验收属于后续联调。
+#10 负责测试 PR，#6 按测试反馈调整接口。
