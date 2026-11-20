@@ -9,6 +9,14 @@
 - Android 系统分享和首页共用 `CoreApi` 与本地资料库。
 - 已验证进程结束重开后记录仍可找回。
 
+## 界面方案
+
+- 前端框架选定 Kotlin + Jetpack Compose。
+- 页面层使用 Compose Navigation；组件层按团队
+  [`docs/android-components-handoff.md`](../docs/android-components-handoff.md)
+  约定的输入、标签、依据和状态契约接入。
+- 当前使用 Material 3 基础组件作为可运行占位，Issue #3 交付后再替换视觉组件。
+
 ## 依赖约定
 
 - 包名：`com.pebblepile.android`
