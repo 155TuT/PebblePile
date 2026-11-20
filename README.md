@@ -7,6 +7,7 @@
 
 <p align="center">
   <a href="#快速开始">原型预览</a> ·
+  <a href="docs/android-build-release.md">Android 构建与发布</a> ·
   <a href="#项目文档">项目文档</a> ·
   <a href="LICENSE">MIT License</a>
 </p>
@@ -31,17 +32,25 @@
 
 ## 技术栈
 
+Kotlin 与 Jetpack Compose 构建 Android 客户端，使用 Navigation Compose 串联首页、记录库和详情。当前 `DemoCoreApi` 通过 SharedPreferences 提供可运行的本地流程，正式 CoreAPI 与 Room/SQLite 仓储仍按 Issue #6、#7 接入。
+
+构建链为 Gradle Wrapper 8.9、Android Gradle Plugin 8.7.3、JDK 17、compileSdk 35，最低支持 Android 8.0（API 26）。CI 使用 JDK 17 和 Android SDK 35。
+
 ## 项目架构
+
+Android 客户端位于 `android/app`。界面只依赖 `CoreApi`，由 `PebblePileApplication` 注入当前的数据适配器；替换演示仓储时保留稳定的 `recordId`、回执、反馈和纠正语义。产品、系统与数据边界分别以 `docs/` 下的 PRD、系统设计和数据库设计为依据。
 
 ## 目录结构
 
 ```text
 PebblePile/
+├── .github/workflows/       # Android 检查、签名候选包与 Release 晋级
 ├── assets/                  # 品牌图标、设计 token、主题与组件样式
 │   ├── fonts/               # 字体来源、加载方式与许可
 │   ├── icons/               # Iconoir SVG 与语义映射
 │   ├── prototype/           # 点击导览、Paper 导出源与动作清单
 │   └── vi/                  # 正式设计快照
+├── android/                 # Kotlin + Jetpack Compose Android 工程
 ├── docs/                    # 产品需求、调研与设计说明
 │   ├── diagrams/            # PlantUML／Mermaid 源文件与 SVG
 │   └── recipe/              # 早期菜谱方向的研究和需求
@@ -53,6 +62,15 @@ PebblePile/
 
 ## 本地运行
 
+构建调试 APK：
+
+```powershell
+cd android
+.\gradlew.bat clean testDebugUnitTest lintDebug assembleDebug
+```
+
+产物为 `android/app/build/outputs/apk/debug/app-debug.apk`。运行前设置 JDK 17 或 21 的 `JAVA_HOME` 与 Android SDK 35 的 `ANDROID_HOME`，详见 [Android 构建、签名与发布](docs/android-build-release.md)。
+
 ## 常用命令
 
 在仓库根目录运行以下命令，维护原型导览与设计图。
@@ -63,6 +81,7 @@ PebblePile/
 | `python scripts/build-prototype-preview.py --check` | 检查原型画板与动作映射 |
 | `python scripts/render-information-architecture.py` | 从 Mermaid 思维导图与 VI token 生成信息架构 SVG |
 | `./scripts/render-diagrams.ps1 -PlantUmlJar "JAR 路径"` | 使用 Java 与官方 PlantUML JAR 渲染系统和数据库图 |
+| `.\android\gradlew.bat -p android :app:assembleDebug` | 在仓库根目录构建 Android 调试包 |
 
 ## 项目文档
 
@@ -93,7 +112,17 @@ PebblePile/
 | [设计 token](assets/design-tokens.json) · [CSS 主题](assets/theme.css) · [组件配方](assets/components.css) | 122 项主题值，以及阴影、顶栏、输入区、标签、对话框与提示 |
 | [VI 快照](assets/vi/) | 正式排版、基础组件与系统组件样张 |
 
+### Android 构建与发布
+
+| 文档 | 内容 |
+| --- | --- |
+| [构建、签名与发布](docs/android-build-release.md) | 环境基线、版本规则、签名材料、候选包验证与原文件 Release 流程 |
+| [Android 工程说明](android/README.md) | 当前功能、调试构建和模拟器复验命令 |
+| [Issue #5 验证](android/ISSUE5_VERIFICATION.md) | 首页输入、系统分享、记录保存和进程恢复的模拟器验证记录 |
+
 ## 部署
+
+发布负责人手动启动 Android release 工作流。CI 签名并启动候选包，记录提交号与 SHA-256。真机回归和用户试用通过后，用 `promote` 发布验收过的原文件。[Android release 工作流](.github/workflows/android-release.yml)
 
 ## 参与协作
 

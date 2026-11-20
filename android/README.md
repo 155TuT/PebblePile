@@ -1,6 +1,8 @@
-# PebblePile Android · Issue #4
+# PebblePile Android
 
 Android 工程、首页输入、记录库和详情路由的可构建基线。
+
+正式构建、签名、候选包和 Release 流程见 [Android 构建、签名与发布](../docs/android-build-release.md)。版本由 [`version.properties`](version.properties) 维护，签名发布必须使用环境变量或 GitHub Actions Secrets 提供密钥。
 
 ## 已覆盖
 
