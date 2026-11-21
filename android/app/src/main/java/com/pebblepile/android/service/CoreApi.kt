@@ -3,6 +3,8 @@ package com.pebblepile.android.service
 import com.pebblepile.android.model.ApiReceipt
 import com.pebblepile.android.model.CorrectionScope
 import com.pebblepile.android.model.CoreTask
+import com.pebblepile.android.model.DeleteRequest
+import com.pebblepile.android.model.DeleteTarget
 import com.pebblepile.android.model.SourceRef
 import com.pebblepile.android.model.TaskAction
 import com.pebblepile.android.model.PebbleRecord
@@ -16,6 +18,9 @@ interface CoreApi {
     fun queryRecords(tags: Set<String> = emptySet()): RecordQueryResult
     fun queryContext(recordId: String): LocalContext?
     fun updateRecordTitle(recordId: String, baseRevision: Long, title: String, operationId: String): ApiReceipt
+    fun previewDeleteMemory(target: DeleteTarget): ApiReceipt
+    fun deleteMemory(request: DeleteRequest): ApiReceipt
+    fun removeSourceReference(recordId: String, baseRevision: Long, sourceRef: SourceRef, operationId: String): ApiReceipt
     fun getTask(jobId: String): CoreTask?
     fun controlTask(jobId: String, baseRevision: Long, action: TaskAction, operationId: String): ApiReceipt
     suspend fun recordExperience(

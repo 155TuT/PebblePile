@@ -28,7 +28,70 @@
 | `revise_tags` | 标签指派或添加目标的标识、相应 `baseRevision`，以及确认、添加、排除或撤销覆盖的意图。 | 有效标签及修订、人工覆盖状态和受影响范围。 |
 | `update_goal` | 当前 `goalId`、事项修订和新条件。用于「仅本次」。 | 事项新修订及适用的重算任务。 |
 | `revise_memory` | `knowledgeItemId`、认识修订、明确条件与纠正意图。用于「以后按此条件」。 | 新认识修订、影响范围、有效快照与适用的重算任务。 |
+| `preview_delete_memory` | 单个 `target`，见[删除契约](#删除契约)。 | `previewId`、基准资料库修订和影响范围。 |
+| `delete_memory` | `target`、`previewId`、预览返回的 `baseRevision`、`operationId`。 | 删除目标、提交修订、影响范围和清理状态，适用时返回清理 `jobId`。 |
 | `get_task`、`control_task` | `jobId`。控制请求另带任务修订和暂停、继续或取消操作。 | `jobId`、任务修订、状态、阶段、等待原因、检查点和当前可执行操作。 |
+
+## 删除契约
+
+对应 [F08、A18 和 A40](prd.md#f08纠正停用与删除)及[数据库清理顺序](database-design.md#64-纠正停用与删除)。调用方用 `preview_delete_memory` 读取影响，用户确认后提交 `delete_memory`。删除接口和以下验收用例供 #6、#7、#8、#9 和 #10 联调。
+
+### 删除对象
+
+`target` 为 `{type, id}`，`id` 是稳定实体标识。一次请求处理一个目标及其依赖闭包。
+
+| `target.type` / 入口 | 业务规则 |
+| --- | --- |
+| `record` | 删除记录、所属会话和事项正文，以及 `owner_record_id` 指向该记录的全部来源版本。其他记录对这些来源的引用同步失效。该记录引用的外部来源仍归原记录，本次只移除自身关联。 |
+| `source` | 删除一个来源的全部版本及其在各记录中的引用。保留所属记录和其他独立材料。最后一条来源删掉后仍保留记录容器，详情返回空来源列表，生成标题和摘要只使用剩余有效内容。 |
+| `knowledge_item` | 撤回该认识及其历史正文、参数和下游使用，从活动快照移除，并保留独立原始材料与共用证据。旧版本随认识一并撤回，任务提交时复查删除标记。确认页说明哪些原始材料仍可用于以后独立推断。 |
+| 移除引用 / `update_record` | 携带 `recordId`、记录自身修订及 `change={type: "remove_source_reference", sourceRef}`，只解除该记录对指定来源版本的跨记录关联，并撤回依赖该关联的结果。来源、其他引用和依赖来源本身的结果继续保留。 |
+
+移出记录本只修改归属。停用只改变参与查询的状态。删除确认页逐项说明清理、保留和待重算的内容，并提示已外发副本与用户另存的旧备份由各自入口管理。
+
+### 预览、确认与回执
+
+| 字段 | 约定 |
+| --- | --- |
+| `previewId` | 服务签发的不可篡改预览标识，绑定权威实例、资料库代次、主体与 `clientId`、授权修订、目标、资料库修订和影响清单摘要。摘要按对象标识、修订和处置方式计算。预览使用一致读取，返回 `target`、`previewId`、`baseRevision` 和 `impact`，只读操作无需 `operationId`。 |
+| `baseRevision` | 删除会跨对象传播，固定使用预览时的**资料库修订**。提交事务中重新计算影响并核对预览。资料库修订或影响清单任一变化都要求重新预览并确认。 |
+| `impact` | 预览与提交使用同一结构。`remove`、`invalidate`、`cancel`、`rebuild` 四组按对象类型给出去重计数。`remove.source` 按稳定来源计数，版本单列为 `remove.source_version`。跨记录关联计入 `remove.record_source`，仍保留但读视图变化的记录计入 `invalidate.record`，并在 `affectedRecordIds` 返回这些记录的标识。待重算的对象也可计入 `invalidate`。空组用 `{}`，省略计数为零的类型，响应只传标识和计数。 |
+| 成功回执 | 使用通用回执外层。`data` 包含 `target`、`impact` 和提交时的 `cleanupState`。`complete` 表示清理已完成。`pending` 返回清理 `jobId`，调用 `get_task` 查进度。外层 `revision` 为提交后的资料库修订。 |
+
+预览与提交均检查当前身份、资料库及 `delete` 授权。非所有者的授权须覆盖目标和全部受影响范围，否则返回 `FORBIDDEN`。提交先校验当前授权，再按回执唯一键查重，最后校验预览、基准修订和当前依赖。相同请求重发返回原提交回执，即使预览已失效或清理已完成也沿用原状态。预览标识与基准修订均参与请求摘要。
+
+| 情况 | 错误回执 |
+| --- | --- |
+| 修订或影响清单变化，或预览已无法验证 | `REVISION_CONFLICT`，`currentRevision` 为当前资料库修订，`nextAction=preview_again`，`retryable=false`。重新预览和确认后用新的 `operationId`。 |
+| 权限已撤销或范围不足 | `FORBIDDEN`，`retryable=false`。响应省略目标存在性与影响明细。 |
+| 参数无效 | `INVALID_INPUT`，`retryable=false`。 |
+| 授权范围内目标不存在或已标记删除 | `INVALID_INPUT`，分别返回 `reason=TARGET_NOT_FOUND` 或 `TARGET_DELETED`，`retryable=false`。相同操作的有效回放优先返回原回执。 |
+| 同一操作标识改用不同载荷 | `INVALID_INPUT`，`reason=OPERATION_ID_REUSED`，`retryable=false`。 |
+| 提交事务失败 | `PROCESSING_FAILED`，`nextAction=retry`，`retryable=true`。原请求可携同一 `operationId` 重试。 |
+
+Android 调用 `CoreApi.previewDeleteMemory` 读取 `ApiReceipt.deletePreview`，确认后调用 `deleteMemory` 读取 `ApiReceipt.deletion` 和提交时的 `libraryRevision`。服务重启后重新预览，已提交的操作按原回执重放。`removeSourceReference` 使用 `REVISE` 权限，逐项核对记录、指定版本的关联和受影响对象。
+
+### 提交与清理
+
+1. **原子隔离。** 在一个 `CoreRepository.write` 内重查授权、目标与依赖，登记无正文标记和任务，取消依赖作业及规则触发，撤回失效证据、索引项和模型视图，递增资料库与受影响对象修订，并保存成功回执。提交失败时整体回滚。清理未完的内容通过标记和有效性检查即时退出列表、详情、精确版本回查、上下文、搜索和导出。缓存命中也要通过有效性检查。
+2. **清理依赖。** 沿证据、快照、决策、生成回答及其来源追踪到依赖闭包稳定。删除正文、派生副本、参数、工作区和含正文诊断。历史决策只保留必要引用和 `redacted` 状态。共享附件在最后一个有效引用解除后才能移除，检查引用与文件删除须串行化。已物化的兼容字段也要清理，包括旧库的 `rawText`、依赖被删记录的长期条件副本，以及旧回执内被清理的标题。旧回执保留请求摘要、状态、标识和修订，回放省略已清理正文。
+3. **重算与防回写。** 撤回失去全部依据的认识。从保留下来的来源版本重算仍有独立依据的事件、标签或认识。任务发布时在写事务内复核删除标记、输入版本、任务状态和租约。已取消任务继续为 `cancelled`，其他失效结果以 `STALE_INPUT` 拒绝并将仍属于该次执行的任务转为 `stale`。已向外部发送的真实动作保留最少结果状态。
+4. **恢复与收尾。** 物理清理任务持久记录进度，失败或重启后从检查点幂等继续。普通任务控制无法暂停或取消清理。清理等待重试期间数据保持隔离，完成数据库、索引及失去引用的附件清理后标记为 `complete`，对应清理任务转为 `completed`。
+
+周恪玄在 SQLite 的一次读写事务内接入 `CoreReader.deletion` 和 `CoreWriter.deletion`。读取依赖时区分两种情况。删除整个对象（`FULL_OBJECT`）时，返回它拥有的材料和使用其内容的副本。只更新引用记录的读视图（`RECORD_VIEW`）时，沿旧摘要、生成回答和缓存继续查找副本，保留该记录自己的材料。一组依据中的每一项都保留下来，这组依据才可用于重算。共享附件按仍然有效的引用决定去留。[仓储接口](../android/app/src/main/java/com/pebblepile/android/repository/DeletionRepository.kt)
+
+写入端在同一事务保存隔离结果、回执和清理任务。普通 Android 演示仓储调用删除接口时返回 `DELETION_STORAGE_UNAVAILABLE`。陈飞扬接手 `DELETE_CLEANUP` 任务时，初始状态为 `queued`，阶段为 `isolated`。调度器从这里继续清理，保存检查点，完成后把任务标为 `completed`。
+
+### 验收场景
+
+| 场景 | 预期 |
+| --- | --- |
+| A 引用 B 的来源。分别从相同初始数据执行移除 A 的引用、删除 A、删除 B 的来源。 | 前两项保留 B 的材料。删除来源使 A 的引用失效，来源的当前和历史版本都无法读取，A、B 的容器和独立材料仍在。 |
+| 预览后新增引用或撤销授权，再提交。 | 分别返回 `REVISION_CONFLICT` 或 `FORBIDDEN`，无删除标记和清理任务。 |
+| 写入中断、并发重发、提交后重开库。 | 中断整体回滚。相同操作只提交一次，重发返回原修订、影响范围与清理任务 ID。清理阶段可从任务查询得到当前进度。 |
+| 物理清理失败，同时模型任务尝试发布旧结果。 | 删除内容持续不可读，迟到结果被拒绝。重启继续清理；仅由已删除输入支撑的推断被撤回，有独立依据的部分用新版本重算。 |
+| 来源共用同一附件，记录的旧回执中另存了标题。 | 仍有有效引用时保留附件；最后一个引用解除后清理文件。删除记录后重放改名操作，回执保留原提交修订并省略已删除标题。 |
+| 删除一条明确设置的认识，其证据同时支持另一条认识。 | 被删认识及其历史版本退出上下文，其他认识可继续读取共用证据。旧任务无法恢复被删的认识。 |
 
 ## 仓储边界
 
@@ -48,8 +111,8 @@
 | 一致读取 | 每次 `read` 提供同一个读取视图。按记录 ID 读记录和关联任务，按来源 ID 与精确版本定位原话。 |
 | 原子提交 | 每次 `write` 用一个写事务执行整个回调。回调先查原回执，再读目标修订，随后写记录、来源及适用的待办，递增库修订并登记回执。事务提交后返回结果，失败回滚并抛出 `RepositoryWriteException`。 |
 | 操作唯一键 | 在同一资料库内，`(clientId, operationId)` 唯一。持久保存 `requestHash` 和原成功回执所需的标识、状态及修订。重开后用这些值复原当时的回执。 |
-| 三种版本号 | `PebbleRecord.revision` 是记录修订，`CoreReader.revision` 是资料库修订，`SourceRef.sourceVersion` 是原话版本。任务的 `inputRevision` 在当前接口中指输入记录修订，`CoreTask.revision` 是任务自身修订。 |
-| 任务数据 | 保存首个待办的 `jobId`、记录引用、输入修订、类型与状态。调度阶段、输入版本集合和持久检查点由 #7 与 [#8](https://github.com/155TuT/PebblePile/issues/8) 对齐后接入。 |
+| 三种版本号 | `PebbleRecord.revision` 是记录修订，`CoreReader.revision` 是资料库修订，`SourceRef.sourceVersion` 是原话版本。一般任务的 `inputRevision` 取输入记录的修订，`DELETE_CLEANUP` 取确认删除或移除引用时提交的资料库修订。`CoreTask.revision` 是任务自身修订。 |
+| 任务数据 | 保存 `jobId`、适用的 `recordId`、输入修订、类型、状态和阶段。来源或认识的清理任务按 `jobId` 回查，`recordId` 可为空。#7 与 #8 对齐输入版本和清理检查点。[任务调度 #8](https://github.com/155TuT/PebblePile/issues/8) |
 
 从空库开启自动整理，跑[回执样例](core-api-receipt-examples.json)。以下补充场景各用一份独立的空库：
 

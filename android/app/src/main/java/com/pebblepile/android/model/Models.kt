@@ -46,7 +46,9 @@ data class ApiReceipt(
     val currentRecord: PebbleRecord? = null,
     val task: CoreTask? = null,
     val title: String? = null,
-    val currentPreference: ConditionSetting? = null
+    val currentPreference: ConditionSetting? = null,
+    val deletePreview: DeletePreview? = null,
+    val deletion: DeletionResult? = null
 )
 
 data class SourceRef(val sourceId: String, val sourceVersion: Long)
@@ -61,19 +63,20 @@ data class CapturedSource(
 
 enum class TaskState { QUEUED, RUNNING, WAITING, NEEDS_REVIEW, COMPLETED, FAILED, CANCELLED, STALE }
 enum class TaskAction { PAUSE, RESUME, CANCEL }
-enum class TaskKind { ORGANIZE, APPLY_FEEDBACK, REBUILD_CONTEXT }
+enum class TaskKind { ORGANIZE, APPLY_FEEDBACK, REBUILD_CONTEXT, DELETE_CLEANUP }
 
 data class CoreTask(
     val id: String,
-    val recordId: String,
+    val recordId: String?,
     val kind: TaskKind,
     val inputRevision: Long,
     val revision: Long = 1,
     val state: TaskState = TaskState.QUEUED,
-    val waitReason: String? = null
+    val waitReason: String? = null,
+    val phase: String? = null
 ) {
     val allowedActions: Set<TaskAction>
-        get() = when (state) {
+        get() = if (kind == TaskKind.DELETE_CLEANUP) emptySet() else when (state) {
             TaskState.QUEUED, TaskState.RUNNING -> setOf(TaskAction.PAUSE, TaskAction.CANCEL)
             TaskState.WAITING -> if (waitReason == "user_paused") {
                 setOf(TaskAction.RESUME, TaskAction.CANCEL)

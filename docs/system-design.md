@@ -267,7 +267,8 @@ Agent 标签表示对内容的语义标注。标签可表达场景、主题、�
 | `propose_preference` | 条件、倾向、证据及起源 | 证据检查、候选状态、冲突和版本 |
 | `update_goal` | 记录编号、要求、期限、执行责任方、检查频率 | 事项关联、目标版本、当前状态及最近有效结果 |
 | `record_outcome` | 目标／决策／事件引用、发起者、动作、回执和体验 | 结果编号、事件关联与更新任务 |
-| `revise_memory / delete_memory` | 对象、基准修订、修改或删除范围 | 新修订、影响范围、清理／重算任务 |
+| `revise_memory` | 认识对象、基准修订和纠正条件 | 新修订、影响范围及适用的重算任务 |
+| `preview_delete_memory / delete_memory` | 目标；确认删除时带预览标识、预览的资料库修订及 `operationId` | 预览及影响范围；确认后返回提交修订、清理状态及适用的清理任务。见[删除契约](core-api-contract.md#删除契约)。 |
 | `get_task / control_task` | 任务编号、暂停／继续／取消动作 | 阶段、等待原因、预算和检查点 |
 | `get_capabilities` | 客户端能力请求 | 接口、场景、处理位置、模型和宿主能力 |
 | `export_data / restore_data` | 导出范围／备份包、校验和预览确认 | 包清单／恢复检查结果、切换状态 |

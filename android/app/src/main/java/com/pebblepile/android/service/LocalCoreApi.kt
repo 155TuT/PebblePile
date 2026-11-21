@@ -2,17 +2,30 @@ package com.pebblepile.android.service
 
 import com.pebblepile.android.model.ApiReceipt
 import com.pebblepile.android.model.CapturedSource
+import com.pebblepile.android.model.CleanupState
 import com.pebblepile.android.model.ConditionSetting
 import com.pebblepile.android.model.CoreTask
 import com.pebblepile.android.model.CorrectionScope
+import com.pebblepile.android.model.DeletePreview
+import com.pebblepile.android.model.DeleteRequest
+import com.pebblepile.android.model.DeleteTarget
+import com.pebblepile.android.model.DeleteTargetType
+import com.pebblepile.android.model.DeletionResult
 import com.pebblepile.android.model.OutcomeItem
 import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.SourceRef
 import com.pebblepile.android.model.TaskAction
 import com.pebblepile.android.model.TaskKind
 import com.pebblepile.android.model.TaskState
+import com.pebblepile.android.repository.CoreReader
 import com.pebblepile.android.repository.CoreRepository
 import com.pebblepile.android.repository.CoreWriter
+import com.pebblepile.android.repository.DeletionJobAccess
+import com.pebblepile.android.repository.DeletionObject
+import com.pebblepile.android.repository.DeletionPermission
+import com.pebblepile.android.repository.DeletionPlan
+import com.pebblepile.android.repository.DeletionReader
+import com.pebblepile.android.repository.DeletionWriter
 import com.pebblepile.android.repository.OperationKey
 import com.pebblepile.android.repository.RepositoryWriteException
 import com.pebblepile.android.repository.StoredReceipt
@@ -62,6 +75,8 @@ class LocalCoreApi(
     private val newId: () -> String = { UUID.randomUUID().toString() },
     private val decorateSampleRecord: (PebbleRecord) -> PebbleRecord = { it }
 ) : CoreApi {
+    private val deletionTokens by lazy { DeletionPreviewTokens() }
+
     override suspend fun recordExperience(
         text: String,
         captureMethod: String,
@@ -106,7 +121,8 @@ class LocalCoreApi(
         val record = tx.record(recordId) ?: return@read null
         val sources = tx.sources(recordId).filter { sourceRef == null || it.ref == sourceRef }
         if (sourceRef != null && sources.isEmpty()) return@read null
-        RecordDetail(record, sources, tx.tasks(recordId).map { it.id }, tx.revision, tx.futureCondition)
+        val jobs = tx.tasks(recordId).filter { canReadTask(tx, it) }.map { it.id }
+        RecordDetail(record, sources, jobs, tx.revision, tx.futureCondition)
     }
 
     override suspend fun recentRecords(): List<PebbleRecord> = queryRecords().records
@@ -137,6 +153,94 @@ class LocalCoreApi(
             tx.putRecord(updated)
             saved(updated, "记录标题已更新").copy(title = updated.title)
         }
+
+    override fun previewDeleteMemory(target: DeleteTarget): ApiReceipt {
+        if (target.id.isBlank()) return invalid("缺少删除目标")
+        val ref = target.ref()
+        return repository.read { tx ->
+            val storage = tx.deletion ?: return@read deletionUnavailable()
+            val permission = DeletionPermission.DELETE
+            val authority = storage.authority(clientId) ?: return@read forbidden()
+            if (!storage.allows(authority, permission, setOf(ref))) return@read forbidden()
+            if (storage.isDeleted(ref)) return@read targetUnavailable(deleted = true, tx.revision)
+            val item = storage.item(ref) ?: return@read targetUnavailable(deleted = false, tx.revision)
+            val plan = planDeletion(storage, item)
+            if (!storage.allows(authority, permission, plan.affectedObjects)) return@read forbidden()
+            val previewId = deletionTokens.issue(authority, clientId, target, tx.revision, plan)
+            ApiReceipt(
+                success = true,
+                libraryRevision = tx.revision,
+                deletePreview = DeletePreview(target, previewId, tx.revision, plan.impact())
+            )
+        }
+    }
+
+    override fun deleteMemory(request: DeleteRequest): ApiReceipt {
+        val (target, previewId, baseRevision, operationId) = request
+        if (target.id.isBlank() || previewId.isBlank() || baseRevision < 0) return invalid("删除请求参数无效")
+        val ref = target.ref()
+        val permission = DeletionPermission.DELETE
+        val hash = requestHash("delete_memory", ref.type, ref.id, previewId, baseRevision.toString())
+        return commit(operationId, hash, authorize = { tx, previous ->
+            authorizeDeletion(tx, permission, setOf(ref), previous)
+        }) { tx ->
+            val storage = checkNotNull(tx.deletion)
+            val authority = storage.authority(clientId) ?: return@commit WriteResult(forbidden())
+            if (storage.isDeleted(ref)) return@commit WriteResult(targetUnavailable(deleted = true, tx.revision))
+            val item = storage.item(ref) ?: return@commit WriteResult(targetUnavailable(deleted = false, tx.revision))
+            val plan = planDeletion(storage, item)
+            val scope = plan.affectedObjects
+            if (!storage.allows(authority, permission, scope)) return@commit WriteResult(forbidden())
+            val expected = deletionTokens.issue(authority, clientId, target, tx.revision, plan)
+            if (baseRevision != tx.revision || !deletionTokens.matches(previewId, expected)) {
+                return@commit WriteResult(deleteConflict(tx.revision))
+            }
+
+            val recordId = target.id.takeIf { target.type == DeleteTargetType.RECORD }
+            val jobId = isolate(storage, plan, tx.revision + 1, recordId, DeletionJobAccess(permission, scope))
+            val cleanupState = if (jobId == null) CleanupState.COMPLETE else CleanupState.PENDING
+            WriteResult(ApiReceipt(
+                success = true,
+                message = "已删除",
+                jobId = jobId,
+                deletion = DeletionResult(target, plan.impact(), cleanupState)
+            ), scope)
+        }
+    }
+
+    override fun removeSourceReference(
+        recordId: String,
+        baseRevision: Long,
+        sourceRef: SourceRef,
+        operationId: String
+    ): ApiReceipt {
+        if (recordId.isBlank() || sourceRef.sourceId.isBlank() || sourceRef.sourceVersion < 1 || baseRevision < 1) {
+            return invalid("移除引用参数无效")
+        }
+        val recordRef = DeletionObject("record", recordId)
+        val referenceRef = DeletionObject("record_source", sourceRef.sourceId, sourceRef.sourceVersion, recordId)
+        val permission = DeletionPermission.REVISE
+        val hash = requestHash(
+            "update_record", recordId, baseRevision.toString(), "remove_source_reference",
+            sourceRef.sourceId, sourceRef.sourceVersion.toString()
+        )
+        return commit(operationId, hash, authorize = { tx, previous ->
+            authorizeDeletion(tx, permission, setOf(recordRef, referenceRef), previous)
+        }) { tx ->
+            val storage = checkNotNull(tx.deletion)
+            val record = tx.record(recordId)
+                ?: return@commit WriteResult(targetUnavailable(storage.isDeleted(recordRef), tx.revision))
+            if (record.revision != baseRevision) return@commit WriteResult(conflict(recordId, record.revision))
+            val item = storage.sourceReference(recordId, sourceRef)
+                ?: return@commit WriteResult(targetUnavailable(storage.isDeleted(referenceRef), tx.revision))
+            val plan = planDeletion(storage, item)
+            val scope = plan.affectedObjects + recordRef
+            if (!storage.allows(clientId, permission, scope)) return@commit WriteResult(forbidden())
+            val jobId = isolate(storage, plan, tx.revision + 1, recordId, DeletionJobAccess(permission, scope))
+            val current = checkNotNull(tx.record(recordId))
+            WriteResult(saved(current, "已移除引用").copy(jobId = jobId), scope)
+        }
+    }
 
     override suspend fun reviseTags(recordId: String, baseRevision: Long, tagId: String, operationId: String): ApiReceipt =
         changeRecord(recordId, baseRevision, operationId, "revise_tags", tagId) { tx, record ->
@@ -186,11 +290,11 @@ class LocalCoreApi(
         }
     }
 
-    override fun getTask(jobId: String): CoreTask? = repository.read { it.task(jobId) }
+    override fun getTask(jobId: String): CoreTask? = repository.read { taskForCaller(it, jobId) }
 
     override fun controlTask(jobId: String, baseRevision: Long, action: TaskAction, operationId: String): ApiReceipt =
         write(operationId, "control_task", jobId, baseRevision.toString(), action.name) { tx ->
-            val task = tx.task(jobId) ?: return@write invalid("任务不存在")
+            val task = taskForCaller(tx, jobId) ?: return@write invalid("任务不存在")
             if (task.revision != baseRevision) {
                 return@write conflict(task.recordId, task.revision).copy(jobId = task.id, task = task)
             }
@@ -221,27 +325,92 @@ class LocalCoreApi(
         method: String,
         vararg params: String?,
         apply: (CoreWriter) -> ApiReceipt
+    ): ApiReceipt = commit(operationId, requestHash(method, *params)) { WriteResult(apply(it)) }
+
+    private data class WriteResult(val receipt: ApiReceipt, val deletionScope: Set<DeletionObject> = emptySet())
+
+    private fun commit(
+        operationId: String,
+        hash: String,
+        authorize: (CoreWriter, StoredReceipt?) -> ApiReceipt? = { _, _ -> null },
+        apply: (CoreWriter) -> WriteResult
     ): ApiReceipt {
         if (operationId.isBlank()) return invalid("缺少操作标识")
         val key = OperationKey(clientId, operationId)
-        val hash = requestHash(method, *params)
         return try {
             repository.write { tx ->
                 val previous = tx.receipt(key)
+                authorize(tx, previous?.takeIf { it.requestHash == hash })?.let { return@write it }
                 if (previous != null) {
                     return@write if (previous.requestHash == hash) previous.receipt
                     else invalid("操作标识已用于其他内容").copy(reason = "OPERATION_ID_REUSED", libraryRevision = tx.revision)
                 }
-                val result = apply(tx)
+                val (result, scope) = apply(tx)
                 if (!result.success) return@write result.copy(libraryRevision = tx.revision)
                 val committed = result.copy(libraryRevision = tx.advanceRevision())
-                tx.putReceipt(key, StoredReceipt(hash, committed))
+                tx.putReceipt(key, StoredReceipt(hash, committed, scope))
                 committed
             }
         } catch (_: RepositoryWriteException) {
             ApiReceipt(false, message = "保存失败，请重试", code = "PROCESSING_FAILED", nextAction = "retry", retryable = true)
         }
     }
+
+    private fun authorizeDeletion(
+        tx: CoreWriter,
+        permission: DeletionPermission,
+        roots: Set<DeletionObject>,
+        previous: StoredReceipt?
+    ): ApiReceipt? {
+        val storage = tx.deletion ?: return deletionUnavailable()
+        val scope = previous?.deletionScope.orEmpty() + roots
+        return if (storage.allows(clientId, permission, scope)) null else forbidden()
+    }
+
+    private fun DeletionReader.allows(clientId: String, permission: DeletionPermission, scope: Set<DeletionObject>): Boolean {
+        val authority = authority(clientId) ?: return false
+        return allows(authority, permission, scope)
+    }
+
+    private fun isolate(
+        storage: DeletionWriter,
+        plan: DeletionPlan,
+        revision: Long,
+        recordId: String?,
+        access: DeletionJobAccess
+    ): String? {
+        if (!storage.isolate(plan, revision)) return null
+        val task = CoreTask(newId(), recordId, TaskKind.DELETE_CLEANUP, revision, phase = "isolated")
+        storage.putCleanupTask(task, plan, access)
+        return task.id
+    }
+
+    private fun taskForCaller(tx: CoreReader, jobId: String): CoreTask? =
+        tx.task(jobId)?.takeIf { canReadTask(tx, it) }
+
+    private fun canReadTask(tx: CoreReader, task: CoreTask): Boolean {
+        if (task.kind != TaskKind.DELETE_CLEANUP) return true
+        val storage = tx.deletion ?: return false
+        val access = storage.cleanupAccess(task.id) ?: return false
+        return storage.allows(clientId, access.permission, access.objects)
+    }
+
+    private fun deletionUnavailable() = ApiReceipt(
+        false, message = "删除仓储尚未接入", code = "PROCESSING_FAILED", reason = "DELETION_STORAGE_UNAVAILABLE"
+    )
+
+    private fun forbidden() = ApiReceipt(false, message = "当前授权范围无法执行此操作", code = "FORBIDDEN")
+
+    private fun targetUnavailable(deleted: Boolean, revision: Long) = if (deleted) {
+        invalid("目标已删除").copy(reason = "TARGET_DELETED", libraryRevision = revision)
+    } else {
+        invalid("目标不存在").copy(reason = "TARGET_NOT_FOUND", libraryRevision = revision)
+    }
+
+    private fun deleteConflict(revision: Long) = ApiReceipt(
+        false, message = "删除影响范围已变化，请重新预览并确认。", conflict = true,
+        code = "REVISION_CONFLICT", currentRevision = revision, nextAction = "preview_again"
+    )
 
     private fun enqueue(tx: CoreWriter, record: PebbleRecord, kind: TaskKind): String? {
         if (!autoOrganize) return null
@@ -260,7 +429,7 @@ class LocalCoreApi(
 
     private fun invalid(message: String) = ApiReceipt(false, message = message, code = "INVALID_INPUT")
 
-    private fun conflict(recordId: String, revision: Long) = ApiReceipt(
+    private fun conflict(recordId: String?, revision: Long) = ApiReceipt(
         false, recordId, message = "内容已更新，请核对当前版本后重试。",
         conflict = true, currentRevision = revision, code = "REVISION_CONFLICT", nextAction = "review_current_revision"
     )
