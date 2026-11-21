@@ -182,7 +182,7 @@ class LocalCoreApi(
         val permission = DeletionPermission.DELETE
         val hash = requestHash("delete_memory", ref.type, ref.id, previewId, baseRevision.toString())
         return commit(operationId, hash, authorize = { tx, previous ->
-            authorizeDeletion(tx, permission, ref, previous)
+            authorizeDeletion(tx, permission, setOf(ref), previous)
         }) { tx ->
             val storage = checkNotNull(tx.deletion)
             val authority = storage.authority(clientId) ?: return@commit WriteResult(forbidden())
@@ -218,19 +218,21 @@ class LocalCoreApi(
             return invalid("移除引用参数无效")
         }
         val recordRef = DeletionObject("record", recordId)
+        val referenceRef = DeletionObject("record_source", sourceRef.sourceId, sourceRef.sourceVersion, recordId)
         val permission = DeletionPermission.REVISE
         val hash = requestHash(
             "update_record", recordId, baseRevision.toString(), "remove_source_reference",
             sourceRef.sourceId, sourceRef.sourceVersion.toString()
         )
         return commit(operationId, hash, authorize = { tx, previous ->
-            authorizeDeletion(tx, permission, recordRef, previous)
+            authorizeDeletion(tx, permission, setOf(recordRef, referenceRef), previous)
         }) { tx ->
             val storage = checkNotNull(tx.deletion)
-            val record = tx.record(recordId) ?: return@commit WriteResult(targetUnavailable(deleted = false, tx.revision))
+            val record = tx.record(recordId)
+                ?: return@commit WriteResult(targetUnavailable(storage.isDeleted(recordRef), tx.revision))
             if (record.revision != baseRevision) return@commit WriteResult(conflict(recordId, record.revision))
             val item = storage.sourceReference(recordId, sourceRef)
-                ?: return@commit WriteResult(targetUnavailable(deleted = false, tx.revision))
+                ?: return@commit WriteResult(targetUnavailable(storage.isDeleted(referenceRef), tx.revision))
             val plan = planDeletion(storage, item)
             val scope = plan.affectedObjects + recordRef
             if (!storage.allows(clientId, permission, scope)) return@commit WriteResult(forbidden())
@@ -357,11 +359,11 @@ class LocalCoreApi(
     private fun authorizeDeletion(
         tx: CoreWriter,
         permission: DeletionPermission,
-        root: DeletionObject,
+        roots: Set<DeletionObject>,
         previous: StoredReceipt?
     ): ApiReceipt? {
         val storage = tx.deletion ?: return deletionUnavailable()
-        val scope = previous?.deletionScope.orEmpty() + root
+        val scope = previous?.deletionScope.orEmpty() + roots
         return if (storage.allows(clientId, permission, scope)) null else forbidden()
     }
 
@@ -378,7 +380,7 @@ class LocalCoreApi(
         access: DeletionJobAccess
     ): String? {
         if (!storage.isolate(plan, revision)) return null
-        val task = CoreTask(newId(), recordId, TaskKind.DELETE_CLEANUP, revision)
+        val task = CoreTask(newId(), recordId, TaskKind.DELETE_CLEANUP, revision, phase = "isolated")
         storage.putCleanupTask(task, plan, access)
         return task.id
     }

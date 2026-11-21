@@ -3,9 +3,14 @@ package com.pebblepile.android.db
 import android.content.SharedPreferences
 import com.pebblepile.android.model.ApiReceipt
 import com.pebblepile.android.model.CapturedSource
+import com.pebblepile.android.model.CleanupState
 import com.pebblepile.android.model.ConditionSetting
 import com.pebblepile.android.model.CoreTask
 import com.pebblepile.android.model.CorrectionScope
+import com.pebblepile.android.model.DeleteTarget
+import com.pebblepile.android.model.DeleteTargetType
+import com.pebblepile.android.model.DeletionImpact
+import com.pebblepile.android.model.DeletionResult
 import com.pebblepile.android.model.EvidenceItem
 import com.pebblepile.android.model.OutcomeItem
 import com.pebblepile.android.model.PebbleRecord
@@ -15,6 +20,7 @@ import com.pebblepile.android.model.SuggestionItem
 import com.pebblepile.android.model.TaskKind
 import com.pebblepile.android.model.TaskState
 import com.pebblepile.android.repository.CoreRepository
+import com.pebblepile.android.repository.DeletionObject
 import com.pebblepile.android.repository.OperationKey
 import com.pebblepile.android.repository.RepositoryWriteException
 import com.pebblepile.android.repository.StoredReceipt
@@ -65,7 +71,10 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
         val tasks = state.objects("tasks").map(::decodeTask).associateByTo(linkedMapOf()) { it.id }
         val receipts = state.objects("receipts").associateTo(linkedMapOf()) { stored ->
             val key = OperationKey(stored.getString("clientId"), stored.getString("operationId"))
-            key to StoredReceipt(stored.getString("requestHash"), decodeReceipt(stored.getJSONObject("receipt")))
+            val scope = stored.objects("deletionScope").mapTo(mutableSetOf()) { ref ->
+                DeletionObject(ref.getString("type"), ref.getString("id"), ref.optionalLong("version"), ref.optionalString("relatedId"))
+            }
+            key to StoredReceipt(stored.getString("requestHash"), decodeReceipt(stored.getJSONObject("receipt")), scope)
         }
         val condition = state.optJSONObject("futureCondition")?.let {
             ConditionSetting(it.getString("text"), it.getString("recordId"), it.getLong("revision"))
@@ -86,6 +95,10 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
             .put("receipts", library.receipts.entries.jsonArray { (key, stored) ->
                 JSONObject().put("clientId", key.clientId).put("operationId", key.operationId)
                     .put("requestHash", stored.requestHash).put("receipt", encodeReceipt(stored.receipt))
+                    .put("deletionScope", stored.deletionScope.takeIf { it.isNotEmpty() }?.jsonArray { ref ->
+                        JSONObject().put("type", ref.type).put("id", ref.id)
+                            .put("version", ref.version).put("relatedId", ref.relatedId)
+                    })
             })
             .put("futureCondition", library.futureCondition?.let {
                 JSONObject().put("text", it.text).put("recordId", it.recordId).put("revision", it.revision)
@@ -156,27 +169,28 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
         })
 
     private fun decodeTask(task: JSONObject): CoreTask = CoreTask(
-        task.getString("id"), task.getString("recordId"), readEnum<TaskKind>(task, "kind"),
+        task.getString("id"), task.optionalString("recordId"), readEnum<TaskKind>(task, "kind"),
         task.getLong("inputRevision"), task.getLong("revision"), readEnum<TaskState>(task, "state"),
-        task.optionalString("waitReason")
+        task.optionalString("waitReason"), task.optionalString("phase")
     )
 
     private fun encodeTask(task: CoreTask): JSONObject = JSONObject()
         .put("id", task.id).put("recordId", task.recordId).put("kind", task.kind.name)
         .put("inputRevision", task.inputRevision).put("revision", task.revision)
-        .put("state", task.state.name).put("waitReason", task.waitReason)
+        .put("state", task.state.name).put("waitReason", task.waitReason).put("phase", task.phase)
 
     private fun decodeReceipt(obj: JSONObject): ApiReceipt = ApiReceipt(
         success = true,
         recordId = obj.optionalString("recordId"),
-        revision = if (obj.isNull("recordRevision")) null else obj.getLong("recordRevision"),
+        revision = obj.optionalLong("recordRevision"),
         message = obj.optString("message"),
         libraryRevision = obj.getLong("libraryRevision"),
         source = if (obj.isNull("sourceId")) null else obj.sourceRef(),
         jobId = obj.optionalString("jobId"),
         outcomeId = obj.optionalString("outcomeId"),
         task = obj.optJSONObject("task")?.let(::decodeTask),
-        title = obj.optionalString("title")
+        title = obj.optionalString("title"),
+        deletion = obj.optJSONObject("deletion")?.let(::decodeDeletion)
     )
 
     private fun encodeReceipt(receipt: ApiReceipt): JSONObject = JSONObject()
@@ -185,10 +199,33 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
         .put("libraryRevision", receipt.libraryRevision).put("jobId", receipt.jobId).put("outcomeId", receipt.outcomeId)
         .put("sourceId", receipt.source?.sourceId).put("sourceVersion", receipt.source?.sourceVersion)
         .put("task", receipt.task?.let(::encodeTask))
+        .put("deletion", receipt.deletion?.let(::encodeDeletion))
+
+    private fun encodeDeletion(result: DeletionResult): JSONObject = JSONObject()
+        .put("targetType", result.target.type.name).put("targetId", result.target.id)
+        .put("cleanupState", result.cleanupState.name)
+        .put("remove", JSONObject(result.impact.remove)).put("invalidate", JSONObject(result.impact.invalidate))
+        .put("cancel", JSONObject(result.impact.cancel)).put("rebuild", JSONObject(result.impact.rebuild))
+        .put("affectedRecordIds", JSONArray(result.impact.affectedRecordIds))
+
+    private fun decodeDeletion(obj: JSONObject): DeletionResult {
+        fun counts(key: String): Map<String, Int> {
+            val entries = obj.getJSONObject(key)
+            return entries.keys().asSequence().associateWith(entries::getInt)
+        }
+        val records = obj.getJSONArray("affectedRecordIds")
+        return DeletionResult(
+            DeleteTarget(readEnum<DeleteTargetType>(obj, "targetType"), obj.getString("targetId")),
+            DeletionImpact(counts("remove"), counts("invalidate"), counts("cancel"), counts("rebuild"),
+                (0 until records.length()).map(records::getString)),
+            readEnum<CleanupState>(obj, "cleanupState")
+        )
+    }
 
     private fun JSONObject.sourceRef() = SourceRef(getString("sourceId"), getLong("sourceVersion"))
 
     private fun JSONObject.optionalString(key: String): String? = if (isNull(key)) null else getString(key)
+    private fun JSONObject.optionalLong(key: String): Long? = if (isNull(key)) null else getLong(key)
 
     private fun JSONObject.objects(key: String): List<JSONObject> = optJSONArray(key)?.objects().orEmpty()
 

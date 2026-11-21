@@ -44,7 +44,7 @@
 | --- | --- |
 | `record` | 删除记录、所属会话和事项正文，以及 `owner_record_id` 指向该记录的全部来源版本。其他记录对这些来源的引用同步失效。该记录引用的外部来源仍归原记录，本次只移除自身关联。 |
 | `source` | 删除一个来源的全部版本及其在各记录中的引用。保留所属记录和其他独立材料。最后一条来源删掉后仍保留记录容器，详情返回空来源列表，生成标题和摘要只使用剩余有效内容。 |
-| `knowledge_item` | 撤回该认识及其历史正文、参数和下游使用，从活动快照移除，并保留独立原始材料与共用证据。旧认识 ID、历史版本和在途任务均不得恢复该认识。确认页说明保留的有效材料仍可作为以后独立推断的依据。 |
+| `knowledge_item` | 撤回该认识及其历史正文、参数和下游使用，从活动快照移除，并保留独立原始材料与共用证据。旧版本随认识一并撤回，任务提交时复查删除标记。确认页说明哪些原始材料仍可用于以后独立推断。 |
 | 移除引用 / `update_record` | 携带 `recordId`、记录自身修订及 `change={type: "remove_source_reference", sourceRef}`，只解除该记录对指定来源版本的跨记录关联，并撤回依赖该关联的结果。来源、其他引用和依赖来源本身的结果继续保留。 |
 
 移出记录本只修改归属。停用只改变参与查询的状态。删除确认页逐项说明清理、保留和待重算的内容，并提示已外发副本与用户另存的旧备份由各自入口管理。
@@ -69,16 +69,18 @@
 | 同一操作标识改用不同载荷 | `INVALID_INPUT`，`reason=OPERATION_ID_REUSED`，`retryable=false`。 |
 | 提交事务失败 | `PROCESSING_FAILED`，`nextAction=retry`，`retryable=true`。原请求可携同一 `operationId` 重试。 |
 
-Kotlin 调用 `CoreApi.previewDeleteMemory`、`deleteMemory` 和 `removeSourceReference`，通过 `ApiReceipt.deletePreview` 或 `ApiReceipt.deletion` 读取类型化结果。未确认的预览在业务服务重启后重新生成；已提交请求仍按持久回执重放。引用移除使用 `REVISE` 权限，并校验容器及实际受影响范围。
+Android 调用 `CoreApi.previewDeleteMemory` 读取 `ApiReceipt.deletePreview`，确认后调用 `deleteMemory` 读取 `ApiReceipt.deletion` 和提交时的 `libraryRevision`。服务重启后重新预览，已提交的操作按原回执重放。`removeSourceReference` 使用 `REVISE` 权限，逐项核对记录、指定版本的关联和受影响对象。
 
 ### 提交与清理
 
 1. **原子隔离。** 在一个 `CoreRepository.write` 内重查授权、目标与依赖，登记无正文标记和任务，取消依赖作业及规则触发，撤回失效证据、索引项和模型视图，递增资料库与受影响对象修订，并保存成功回执。提交失败时整体回滚。清理未完的内容通过标记和有效性检查即时退出列表、详情、精确版本回查、上下文、搜索和导出。缓存命中也要通过有效性检查。
 2. **清理依赖。** 沿证据、快照、决策、生成回答及其来源追踪到依赖闭包稳定。删除正文、派生副本、参数、工作区和含正文诊断。历史决策只保留必要引用和 `redacted` 状态。共享附件在最后一个有效引用解除后才能移除，检查引用与文件删除须串行化。已物化的兼容字段也要清理，包括旧库的 `rawText`、依赖被删记录的长期条件副本，以及旧回执内被清理的标题。旧回执保留请求摘要、状态、标识和修订，回放省略已清理正文。
-3. **重算与防回写。** 失去全部依据的认识撤回。剩余独立依据支持的事件、标签或认识从有效版本重算。任务发布时在写事务内复核删除标记、输入版本、任务状态和租约。已取消任务继续为 `cancelled`，其他失效结果以 `STALE_INPUT` 拒绝并将仍属于该次执行的任务转为 `stale`。已向外部发送的真实动作保留最少结果状态。
+3. **重算与防回写。** 撤回失去全部依据的认识。从保留下来的来源版本重算仍有独立依据的事件、标签或认识。任务发布时在写事务内复核删除标记、输入版本、任务状态和租约。已取消任务继续为 `cancelled`，其他失效结果以 `STALE_INPUT` 拒绝并将仍属于该次执行的任务转为 `stale`。已向外部发送的真实动作保留最少结果状态。
 4. **恢复与收尾。** 物理清理任务持久记录进度，失败或重启后从检查点幂等继续。普通任务控制无法暂停或取消清理。清理等待重试期间数据保持隔离，完成数据库、索引及失去引用的附件清理后标记为 `complete`，对应清理任务转为 `completed`。
 
-仓储在同一事务的 `CoreReader.deletion` / `CoreWriter.deletion` 接入 [DeletionReader 和 DeletionWriter](../android/app/src/main/java/com/pebblepile/android/repository/DeletionRepository.kt)。读取端提供授权范围、对象修订、直接依赖与有效独立依据；业务层计算闭包、清理和重算范围。写入端落实隔离、回执可见性与 `DELETE_CLEANUP` 任务存储。现有演示仓储留空，删除调用返回 `DELETION_STORAGE_UNAVAILABLE`。任务调度接入后执行物理清理并发布重算结果。
+周恪玄在 SQLite 的一次读写事务内接入 `CoreReader.deletion` 和 `CoreWriter.deletion`。读取依赖时区分两种情况。删除整个对象（`FULL_OBJECT`）时，返回它拥有的材料和使用其内容的副本。只更新引用记录的读视图（`RECORD_VIEW`）时，沿旧摘要、生成回答和缓存继续查找副本，保留该记录自己的材料。一组依据中的每一项都保留下来，这组依据才可用于重算。共享附件按仍然有效的引用决定去留。[仓储接口](../android/app/src/main/java/com/pebblepile/android/repository/DeletionRepository.kt)
+
+写入端在同一事务保存隔离结果、回执和清理任务。普通 Android 演示仓储调用删除接口时返回 `DELETION_STORAGE_UNAVAILABLE`。陈飞扬接手 `DELETE_CLEANUP` 任务时，初始状态为 `queued`，阶段为 `isolated`。调度器从这里继续清理，保存检查点，完成后把任务标为 `completed`。
 
 ### 验收场景
 
@@ -109,8 +111,8 @@ Kotlin 调用 `CoreApi.previewDeleteMemory`、`deleteMemory` 和 `removeSourceRe
 | 一致读取 | 每次 `read` 提供同一个读取视图。按记录 ID 读记录和关联任务，按来源 ID 与精确版本定位原话。 |
 | 原子提交 | 每次 `write` 用一个写事务执行整个回调。回调先查原回执，再读目标修订，随后写记录、来源及适用的待办，递增库修订并登记回执。事务提交后返回结果，失败回滚并抛出 `RepositoryWriteException`。 |
 | 操作唯一键 | 在同一资料库内，`(clientId, operationId)` 唯一。持久保存 `requestHash` 和原成功回执所需的标识、状态及修订。重开后用这些值复原当时的回执。 |
-| 三种版本号 | `PebbleRecord.revision` 是记录修订，`CoreReader.revision` 是资料库修订，`SourceRef.sourceVersion` 是原话版本。任务的 `inputRevision` 在当前接口中指输入记录修订，`CoreTask.revision` 是任务自身修订。 |
-| 任务数据 | 保存首个待办的 `jobId`、记录引用、输入修订、类型与状态。调度阶段、输入版本集合和持久检查点由 #7 与 [#8](https://github.com/155TuT/PebblePile/issues/8) 对齐后接入。 |
+| 三种版本号 | `PebbleRecord.revision` 是记录修订，`CoreReader.revision` 是资料库修订，`SourceRef.sourceVersion` 是原话版本。一般任务的 `inputRevision` 取输入记录的修订，`DELETE_CLEANUP` 取确认删除或移除引用时提交的资料库修订。`CoreTask.revision` 是任务自身修订。 |
+| 任务数据 | 保存 `jobId`、适用的 `recordId`、输入修订、类型、状态和阶段。来源或认识的清理任务按 `jobId` 回查，`recordId` 可为空。#7 与 #8 对齐输入版本和清理检查点。[任务调度 #8](https://github.com/155TuT/PebblePile/issues/8) |
 
 从空库开启自动整理，跑[回执样例](core-api-receipt-examples.json)。以下补充场景各用一份独立的空库：
 

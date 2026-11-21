@@ -8,6 +8,9 @@ import com.pebblepile.android.repository.DeletionLinkKind
 import com.pebblepile.android.repository.DeletionObject
 import com.pebblepile.android.repository.DeletionPlan
 import com.pebblepile.android.repository.DeletionReader
+import com.pebblepile.android.repository.DeletionTraversal
+import com.pebblepile.android.repository.DeletionTraversal.FULL_OBJECT
+import com.pebblepile.android.repository.DeletionTraversal.RECORD_VIEW
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -22,35 +25,44 @@ internal fun planDeletion(reader: DeletionReader, root: DeletionItem): DeletionP
     val recordViews = linkedMapOf<DeletionObject, DeletionItem>()
     val cancel = linkedMapOf<DeletionObject, DeletionItem>()
     val attachments = linkedMapOf<DeletionObject, DeletionItem>()
-    val visited = mutableSetOf<DeletionObject>()
-    val pending = ArrayDeque(listOf(root.ref))
+    val pending = ArrayDeque(listOf(root.ref to FULL_OBJECT))
+    val visited = pending.toMutableSet()
+    fun enqueue(ref: DeletionObject, traversal: DeletionTraversal) {
+        val visit = ref to traversal
+        if (visited.add(visit)) pending.addLast(visit)
+    }
 
     while (pending.isNotEmpty()) {
-        val input = pending.removeFirst()
-        if (!visited.add(input)) continue
-        for ((item, kind) in reader.dependents(input)) {
+        val (input, traversal) = pending.removeFirst()
+        for ((item, kind) in reader.dependents(input, traversal)) {
             val ref = item.ref
             when (kind) {
                 DeletionLinkKind.REMOVE_WITH_INPUT -> {
                     remove[ref] = item
-                    pending.addLast(ref)
+                    enqueue(ref, FULL_OBJECT)
                 }
                 DeletionLinkKind.DERIVED -> {
                     derived[ref] = item
-                    pending.addLast(ref)
+                    enqueue(ref, FULL_OBJECT)
                 }
-                DeletionLinkKind.RECORD_VIEW -> recordViews[ref] = item
+                DeletionLinkKind.RECORD_VIEW -> {
+                    recordViews[ref] = item
+                    enqueue(ref, RECORD_VIEW)
+                }
                 DeletionLinkKind.ACTIVE_JOB -> cancel[ref] = item
                 DeletionLinkKind.SHARED_ATTACHMENT -> attachments[ref] = item
             }
         }
     }
 
+    val lostInputs = (remove.keys + derived.keys + recordViews.keys + cancel.keys).toMutableSet()
     fun hasIndependentSupport(ref: DeletionObject): Boolean =
-        reader.supportGroups(ref).any { group -> group.isNotEmpty() && group.none { it in visited } }
+        reader.supportGroups(ref).any { group -> group.isNotEmpty() && group.none(lostInputs::contains) }
 
-    // Evaluate alternatives after the full closure so a later branch cannot preserve a copy.
-    remove.putAll(attachments.filterKeys { !hasIndependentSupport(it) })
+    // Resolve shared files first: rebuilding a derived item may depend on one of them.
+    val orphanedAttachments = attachments.filterKeys { !hasIndependentSupport(it) }
+    remove.putAll(orphanedAttachments)
+    lostInputs.addAll(orphanedAttachments.keys)
     val rebuild = derived.filterKeys { it !in remove && hasIndependentSupport(it) }
     val invalidate = (derived + recordViews).filterKeys { it !in remove }
     return DeletionPlan(remove.values.toSet(), invalidate.values.toSet(), cancel.values.toSet(), rebuild.values.toSet())

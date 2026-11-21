@@ -29,6 +29,7 @@ import com.pebblepile.android.repository.DeletionLinkKind.SHARED_ATTACHMENT
 import com.pebblepile.android.repository.DeletionObject
 import com.pebblepile.android.repository.DeletionPermission
 import com.pebblepile.android.repository.DeletionPlan
+import com.pebblepile.android.repository.DeletionTraversal
 import com.pebblepile.android.repository.DeletionWriter
 import com.pebblepile.android.repository.RepositoryWriteException
 import java.util.concurrent.Executors
@@ -67,12 +68,17 @@ class DeletionContractTest {
         assertEquals("", core.getRecordDetail("b")!!.record.rawText)
         assertEquals(2L, core.getRecordDetail("a")!!.record.revision)
         assertEquals(TaskState.CANCELLED, core.getTask("produce")!!.state)
-        assertEquals(emptySet<TaskAction>(), core.getTask(receipt.jobId!!)!!.allowedActions)
+        val cleanup = requireNotNull(core.getTask(requireNotNull(receipt.jobId)))
+        assertEquals(TaskState.QUEUED, cleanup.state)
+        assertEquals("isolated", cleanup.phase)
+        assertEquals(emptySet<TaskAction>(), cleanup.allowedActions)
         assertFalse(core.controlTask(receipt.jobId, 1, TaskAction.CANCEL, "cancel-cleanup").success)
 
         storage.finishCleanup(receipt.jobId)
         val reopened: CoreApi = LocalCoreApi(storage)
-        assertEquals(TaskState.COMPLETED, reopened.getTask(receipt.jobId)!!.state)
+        val completed = requireNotNull(reopened.getTask(receipt.jobId))
+        assertEquals(TaskState.COMPLETED, completed.state)
+        assertEquals("complete", completed.phase)
         assertEquals(receipt, reopened.deleteMemory(request))
         assertEquals("OPERATION_ID_REUSED", reopened.deleteMemory(request.copy(baseRevision = 1)).reason)
         assertEquals("TARGET_DELETED", reopened.previewDeleteMemory(sourceTarget).reason)
@@ -143,10 +149,15 @@ class DeletionContractTest {
         val core = LocalCoreApi(storage)
         val oldPreview = core.previewDeleteMemory(sourceTarget).deletePreview!!
         val reference = SourceRef("b-source", 1)
+        assertNotNull(core.getRecordDetail("a", reference))
         val unlinked = core.removeSourceReference("a", 1, reference, "unlink")
         assertTrue(unlinked.success)
         assertEquals(2L, unlinked.revision)
+        assertNull(core.getRecordDetail("a", reference))
+        assertNotNull(core.getRecordDetail("a", SourceRef("a-source", 1)))
         assertEquals(unlinked, core.removeSourceReference("a", 1, reference, "unlink"))
+        assertEquals("TARGET_DELETED", core.removeSourceReference("a", 2, reference, "removed-link").reason)
+        assertEquals("TARGET_NOT_FOUND", core.removeSourceReference("a", 2, SourceRef("other", 1), "absent-link").reason)
         assertNotNull(core.getRecordDetail("b", reference))
         assertEquals("REVISION_CONFLICT", core.deleteMemory(
             DeleteRequest(sourceTarget, oldPreview.previewId, oldPreview.baseRevision, "old")
@@ -160,6 +171,50 @@ class DeletionContractTest {
         assertEquals(CleanupState.COMPLETE, removed.deletion!!.cleanupState)
         assertNull(removed.jobId)
         assertNotNull(core.getRecordDetail("b", reference))
+    }
+
+    @Test
+    fun deletingAReferencedSourceFollowsCopiesOfTheOldViewAndKeepsIndependentSources() {
+        val core = LocalCoreApi(TestRepository())
+        val preview = requireNotNull(core.previewDeleteMemory(sourceTarget).deletePreview)
+        assertEquals(1, preview.impact.remove["generated_text"])
+        assertEquals(1, preview.impact.remove["context_cache"])
+        val result = core.deleteMemory(DeleteRequest(sourceTarget, preview.previewId, preview.baseRevision, "source"))
+        assertEquals(preview.impact, requireNotNull(result.deletion).impact)
+        assertNotNull(core.getRecordDetail("a", SourceRef("a-source", 1)))
+        assertNull(core.getRecordDetail("a", SourceRef("b-source", 1)))
+    }
+
+    @Test
+    fun deletingTheReferencingRecordKeepsBothVersionsOfTheOwnersSource() {
+        val core = LocalCoreApi(TestRepository())
+        val target = DeleteTarget(DeleteTargetType.RECORD, "a")
+        val before = requireNotNull(core.getRecordDetail("b"))
+        val preview = requireNotNull(core.previewDeleteMemory(target).deletePreview)
+        assertEquals(1, preview.impact.remove["generated_text"])
+        assertTrue(core.deleteMemory(DeleteRequest(target, preview.previewId, preview.baseRevision, "record-a")).success)
+        assertNull(core.getRecordDetail("a"))
+        assertEquals("TARGET_DELETED", core.removeSourceReference("a", 1, SourceRef("b-source", 1), "removed-record").reason)
+        val after = requireNotNull(core.getRecordDetail("b"))
+        assertEquals(before.record, after.record)
+        assertEquals(listOf(1L, 2L), after.sources.map { it.ref.sourceVersion }.sorted())
+    }
+
+    @Test
+    fun onlySurvivingInputsSupportRebuildingKnowledgeOrKeepingAnAttachment() {
+        for (input in listOf(recordA, job, attachment)) {
+            val storage = TestRepository().apply {
+                otherKnowledgeSupport = input
+                otherAttachmentSupport = if (input == attachment) null else input
+            }
+            val impact = requireNotNull(LocalCoreApi(storage).previewDeleteMemory(sourceTarget).deletePreview).impact
+            assertEquals("obsolete input: $input", 1, impact.remove["attachment"])
+            assertNull("obsolete input: $input", impact.rebuild["knowledge_item"])
+        }
+        val storage = TestRepository().apply { otherKnowledgeSupport = attachment }
+        val impact = requireNotNull(LocalCoreApi(storage).previewDeleteMemory(sourceTarget).deletePreview).impact
+        assertNull(impact.remove["attachment"])
+        assertEquals(1, impact.rebuild["knowledge_item"])
     }
 
     @Test
@@ -177,6 +232,8 @@ class DeletionContractTest {
         private var removed = emptySet<DeletionObject>()
         private var cleanup = emptyMap<String, DeletionJobAccess>()
         var denied = emptySet<DeletionObject>()
+        var otherKnowledgeSupport = sourceA
+        var otherAttachmentSupport: DeletionObject? = sourceA
         var jobRevision = 1L
         var failCleanupRegistration = false
         var deferCleanup = true
@@ -184,6 +241,7 @@ class DeletionContractTest {
         init {
             base.write { tx ->
                 for (id in listOf("a", "b")) tx.putRecord(PebbleRecord(id, id, "2026-11-21 15:00", "test"))
+                tx.putSource(CapturedSource(SourceRef("a-source", 1), "a", "a", "test", ""))
                 for (version in 1L..2L) tx.putSource(CapturedSource(SourceRef("b-source", version), "b", "b", "test", ""))
                 tx.putTask(CoreTask("produce", "b", TaskKind.ORGANIZE, 1))
             }
@@ -202,7 +260,7 @@ class DeletionContractTest {
         }
 
         fun finishCleanup(jobId: String) {
-            base.write { tx -> tx.putTask(tx.task(jobId)!!.copy(state = TaskState.COMPLETED, revision = 2)) }
+            base.write { tx -> tx.putTask(tx.task(jobId)!!.copy(state = TaskState.COMPLETED, revision = 2, phase = "complete")) }
         }
 
         private inner class Tx(private val core: CoreWriter) : CoreWriter by core, DeletionWriter {
@@ -211,8 +269,13 @@ class DeletionContractTest {
             override val deletion get() = this
             override fun record(id: String) = core.record(id)?.takeUnless { isDeleted(DeletionObject("record", id)) }
             override fun records() = core.records().mapNotNull { record(it.id) }
-            override fun sources(recordId: String) = core.sources(recordId).filterNot {
-                isDeleted(DeletionObject("source_version", it.ref.sourceId, it.ref.sourceVersion))
+            override fun sources(recordId: String): List<CapturedSource> {
+                val shared = if (recordId == "a" && !isDeleted(reference)) {
+                    core.sources("b").filter { it.ref == SourceRef("b-source", 1) }
+                } else emptyList()
+                return (core.sources(recordId) + shared).filterNot {
+                    isDeleted(DeletionObject("source_version", it.ref.sourceId, it.ref.sourceVersion))
+                }
             }
 
             override fun authority(clientId: String) = DeletionAuthority("local", "lib", "current", "owner", 1)
@@ -230,11 +293,15 @@ class DeletionContractTest {
 
             override fun isDeleted(ref: DeletionObject) = ref in markers
 
-            override fun dependents(ref: DeletionObject): List<DeletionLink> {
+            override fun dependents(ref: DeletionObject, traversal: DeletionTraversal): List<DeletionLink> {
                 fun link(to: DeletionObject, kind: DeletionLinkKind, revision: Long = 1) =
                     DeletionLink(DeletionItem(to, revision), kind)
-                return when (ref) {
-                    recordA -> listOf(link(reference, REMOVE_WITH_INPUT))
+                val viewCopies = if (ref == recordA) listOf(link(generated, REMOVE_WITH_INPUT)) else emptyList()
+                val owned = if (traversal == DeletionTraversal.RECORD_VIEW) emptyList() else when (ref) {
+                    recordA -> listOf(link(reference, REMOVE_WITH_INPUT), link(sourceA, REMOVE_WITH_INPUT))
+                    generated -> listOf(link(cache, REMOVE_WITH_INPUT))
+                    cache -> listOf(link(generated, REMOVE_WITH_INPUT))
+                    sourceA -> listOf(link(DeletionObject("source_version", "a-source", 1), REMOVE_WITH_INPUT))
                     recordB -> listOf(link(sourceB, REMOVE_WITH_INPUT))
                     sourceB -> listOf(link(version1, REMOVE_WITH_INPUT), link(version2, REMOVE_WITH_INPUT))
                     version1 -> listOf(
@@ -244,11 +311,13 @@ class DeletionContractTest {
                     version2 -> listOf(link(recordB, RECORD_VIEW, core.record("b")!!.revision))
                     reference -> listOf(link(recordA, RECORD_VIEW, core.record("a")!!.revision))
                     else -> emptyList()
-                }.filterNot { isDeleted(it.item.ref) }
+                }
+                return (owned + viewCopies).filterNot { isDeleted(it.item.ref) }
             }
 
             override fun supportGroups(ref: DeletionObject): List<Set<DeletionObject>> = when (ref) {
-                independent, attachment -> listOf(setOf(version1), setOf(sourceA))
+                independent -> listOf(setOf(version1), setOf(otherKnowledgeSupport))
+                attachment -> listOfNotNull(setOf(version1), otherAttachmentSupport?.let { setOf(it) })
                 dependent -> listOf(setOf(version1, sourceA))
                 else -> emptyList()
             }
@@ -294,6 +363,8 @@ class DeletionContractTest {
         val independent = DeletionObject("knowledge_item", "independent")
         val dependent = DeletionObject("knowledge_item", "dependent")
         val attachment = DeletionObject("attachment", "shared")
+        val generated = DeletionObject("generated_text", "summary-of-a")
+        val cache = DeletionObject("context_cache", "summary-copy")
         val job = DeletionObject("job", "produce")
     }
 }

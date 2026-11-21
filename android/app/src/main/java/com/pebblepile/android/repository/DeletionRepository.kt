@@ -28,6 +28,8 @@ enum class DeletionLinkKind {
 
 data class DeletionLink(val item: DeletionItem, val kind: DeletionLinkKind)
 
+enum class DeletionTraversal { FULL_OBJECT, RECORD_VIEW }
+
 data class DeletionAuthority(
     val authorityInstanceId: String,
     val libraryId: String,
@@ -63,14 +65,16 @@ interface DeletionReader {
     fun item(ref: DeletionObject): DeletionItem?
 
     /**
-     * Immediate outgoing dependencies from the same read view. Sources enumerate all versions
-     * and associations. A cross-record association points to its record view, while that view
-     * leaves the record's independent sources intact. A shared attachment is a terminal node.
+     * Immediate dependencies in the same read view. FULL_OBJECT includes owned rows and copies
+     * of the object's view. RECORD_VIEW follows only consumers of the former record projection
+     * (such as a copied summary or cache), leaving independently owned sources and associations in place.
+     * Sources enumerate all versions and associations. Shared attachments are terminal.
      */
-    fun dependents(ref: DeletionObject): List<DeletionLink>
+    fun dependents(ref: DeletionObject, traversal: DeletionTraversal): List<DeletionLink>
 
     /**
-     * Alternatives whose inputs are currently effective. Each group requires all its members.
+     * Alternative sets of currently effective evidence. All members of one set must survive this
+     * deletion. Name the exact contributing version or association when the input is versioned.
      * For an attachment, each live reference is a singleton group.
      */
     fun supportGroups(ref: DeletionObject): List<Set<DeletionObject>>

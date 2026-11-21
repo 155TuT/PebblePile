@@ -6,10 +6,21 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pebblepile.android.db.DemoLibrary
 import com.pebblepile.android.db.DemoLibraryStore
 import com.pebblepile.android.db.SnapshotCoreRepository
+import com.pebblepile.android.model.ApiReceipt
+import com.pebblepile.android.model.CleanupState
+import com.pebblepile.android.model.CoreTask
 import com.pebblepile.android.model.CorrectionScope
+import com.pebblepile.android.model.DeleteTarget
+import com.pebblepile.android.model.DeleteTargetType
+import com.pebblepile.android.model.DeletionImpact
+import com.pebblepile.android.model.DeletionResult
+import com.pebblepile.android.model.TaskKind
 import com.pebblepile.android.model.TaskAction
 import com.pebblepile.android.model.TaskState
+import com.pebblepile.android.repository.DeletionObject
+import com.pebblepile.android.repository.OperationKey
 import com.pebblepile.android.repository.RepositoryWriteException
+import com.pebblepile.android.repository.StoredReceipt
 import com.pebblepile.android.service.CaptureRequest
 import com.pebblepile.android.service.CoreApi
 import com.pebblepile.android.service.LocalCoreApi
@@ -62,6 +73,41 @@ class CoreContractTest {
             assertEquals(TaskState.WAITING, paused.task?.state)
             assertEquals(paused, open().controlTask(job, 1, TaskAction.PAUSE, "pause"))
             assertEquals("REVISION_CONFLICT", reopened.controlTask(job, 1, TaskAction.CANCEL, "old-cancel").code)
+        } finally {
+            context.deleteSharedPreferences(name)
+        }
+    }
+
+    @Test fun aLibraryCleanupTaskAndItsCommittedReceiptSurviveReopening() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val name = "core-cleanup-" + UUID.randomUUID()
+        val store = DemoLibraryStore(context.getSharedPreferences(name, Context.MODE_PRIVATE))
+        try {
+            val repository = store.repository()
+            val saved = LocalCoreApi(repository).recordExperience(dinner)
+            val source = requireNotNull(saved.source)
+            val record = requireNotNull(saved.recordId)
+            val target = DeleteTarget(DeleteTargetType.SOURCE, source.sourceId)
+            val impact = DeletionImpact(mapOf("source_version" to 1), mapOf("record" to 1),
+                mapOf("job" to 1), emptyMap(), listOf(record))
+            val task = CoreTask("cleanup", null, TaskKind.DELETE_CLEANUP, 2, phase = "isolated")
+            val key = OperationKey("android", "delete-source")
+            val scope = setOf(DeletionObject("record_source", source.sourceId, source.sourceVersion, record))
+            val receipt = StoredReceipt("test-digest", ApiReceipt(true, jobId = task.id, libraryRevision = 2,
+                deletion = DeletionResult(target, impact, CleanupState.PENDING)), scope)
+            repository.write { tx ->
+                tx.putTask(task)
+                tx.putReceipt(key, receipt)
+                tx.advanceRevision()
+            }
+
+            val reopened = store.repository()
+            reopened.read { tx ->
+                assertEquals(2L, tx.revision)
+                assertEquals(task, tx.task(task.id))
+                assertEquals(receipt, tx.receipt(key))
+            }
+            assertEquals(saved, LocalCoreApi(reopened).recordExperience(dinner))
         } finally {
             context.deleteSharedPreferences(name)
         }
