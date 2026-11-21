@@ -7,7 +7,11 @@ import com.pebblepile.android.model.CoreTask
 import com.pebblepile.android.model.PebbleRecord
 
 data class OperationKey(val clientId: String, val operationId: String)
-data class StoredReceipt(val requestHash: String, val receipt: ApiReceipt)
+data class StoredReceipt(
+    val requestHash: String,
+    val receipt: ApiReceipt,
+    val deletionScope: Set<DeletionObject> = emptySet()
+)
 
 /** SQLite implements this contract for one library per repository instance. */
 interface CoreRepository {
@@ -21,6 +25,7 @@ interface CoreRepository {
 interface CoreReader {
     val revision: Long
     val futureCondition: ConditionSetting?
+    val deletion: DeletionReader? get() = null
     fun record(id: String): PebbleRecord?
     fun records(): List<PebbleRecord>
     fun sources(recordId: String): List<CapturedSource>
@@ -30,6 +35,8 @@ interface CoreReader {
 }
 
 interface CoreWriter : CoreReader {
+    override val deletion: DeletionWriter? get() = null
+
     fun putRecord(record: PebbleRecord)
 
     /** Insert an exact source version, keeping previously stored versions available. */
