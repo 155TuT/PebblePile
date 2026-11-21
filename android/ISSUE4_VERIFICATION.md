@@ -16,33 +16,39 @@
 | 验收项 | 结果 |
 | --- | --- |
 | `assembleDebug` | 成功 |
-| JVM 合约测试 | 28 项通过 |
-| Android 仪器测试 | 21 项通过 |
+| JVM 合约测试 | 30 项通过 |
+| Android 仪器测试 | 27 项通过 |
 | APK 安装 | 成功 |
 | 首页输入原话 | 成功 |
 | 对话／记录切换保留草稿 | 成功 |
 | 保存后显示带 `recordId` 的回执 | 成功 |
 | 保存后进入 `detail/{recordId}` | 成功 |
 | 页面使用 Issue #3 共享组件 | 成功 |
+| “添加材料”写入同一草稿 | 成功 |
 | 首页进入记录库 | 成功 |
 | 时间线按日期显示 | 成功 |
-| 标签筛选入口显示 | 成功 |
+| 时间线／记录本切换 | 成功 |
+| 搜索、标签、人物、事项状态组合筛选 | 成功 |
+| 从详情返回后视图与筛选状态保留 | 成功 |
 | 从记录库进入详情 | 成功 |
 | `force-stop` 后重开 | 成功 |
 | 重开后原话仍在 | 成功 |
 | 系统分享写入同一资料库 | 成功 |
 | 分享与首页记录同时显示在记录库 | 成功 |
+| 设置中关闭自动整理后不创建新任务 | 成功 |
+| 设置结束进程后恢复 | 成功 |
+| 系统字号 2.0 完整页面检查 | 成功 |
 
 本次最终冒烟验证产生的记录：
 
 ```text
-PebblePersistence20261121.
+PebbleManual20261121
 ```
 
 首页保存回执示例：
 
 ```text
-已保存 · cab57763-66b7-4749-bb3a-c71e50aa2d83
+已保存 · 7467863c-d4bc-4357-8f61-ea20abddab72
 ```
 
 ## 复现命令
@@ -82,8 +88,7 @@ adb shell run-as com.pebblepile.android cat shared_prefs/pebblepile_issue4_demo.
 预期同一 `records` JSON 中同时存在：
 
 ```text
-FinalIssue4Home   captureMethod=app_home_record
-FinalIssue4Shared captureMethod=android_share
+PebbleManual20261121 captureMethod=android_share
 ```
 
 ## 后续复验

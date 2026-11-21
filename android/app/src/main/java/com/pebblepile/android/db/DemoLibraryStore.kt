@@ -12,11 +12,13 @@ import com.pebblepile.android.model.DeleteTargetType
 import com.pebblepile.android.model.DeletionImpact
 import com.pebblepile.android.model.DeletionResult
 import com.pebblepile.android.model.EvidenceItem
+import com.pebblepile.android.model.ItemStatus
 import com.pebblepile.android.model.OutcomeItem
 import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.RecordTag
 import com.pebblepile.android.model.SourceRef
 import com.pebblepile.android.model.SuggestionItem
+import com.pebblepile.android.model.TagReviewState
 import com.pebblepile.android.model.TaskKind
 import com.pebblepile.android.model.TaskState
 import com.pebblepile.android.repository.CoreRepository
@@ -121,15 +123,30 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
             captureMethod = obj.optString("captureMethod"),
             revision = obj.optLong("revision", 1),
             tags = obj.objects("tags").map {
-                RecordTag(it.getString("id"), it.getString("name"), it.optString("quote"), it.optString("algorithm"), it.optBoolean("excluded"))
+                RecordTag(
+                    it.getString("id"),
+                    it.getString("name"),
+                    it.optString("quote"),
+                    it.optString("algorithm"),
+                    it.optBoolean("excluded"),
+                    TagReviewState.entries.firstOrNull { state -> state.name == it.optString("reviewState") }
+                        ?: TagReviewState.AUTO,
+                )
             },
             suggestions = obj.objects("suggestions").map { suggestion ->
                 SuggestionItem(
                     suggestion.getString("id"), suggestion.optString("title"), suggestion.optString("reason"),
                     suggestion.objects("evidence").map {
+                        val sourceRecordId = it.optString("sourceRecordId", id)
+                        val sourceRef = it.optJSONObject("sourceRef")?.sourceRef()
+                            ?: SourceRef("$sourceRecordId:source", 1)
+                        val quote = it.optString("quote")
                         EvidenceItem(
-                            it.getString("id"), it.optString("title"), it.optString("quote"),
-                            it.optString("date"), it.optString("sourceRecordId", id)
+                            it.getString("id"), it.optString("title"), quote,
+                            it.optString("date"), sourceRecordId, sourceRef,
+                            it.optInt("start", 0),
+                            it.optInt("end", quote.codePointCount(0, quote.length)),
+                            it.optionalString("unavailableReason"),
                         )
                     }
                 )
@@ -143,7 +160,12 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
             title = obj.optString("title"),
             currentGoalCondition = obj.optionalString("currentGoalCondition") ?: condition.takeIf {
                 it.isNotBlank() && conditionScope != CorrectionScope.FUTURE
-            }
+            },
+            people = obj.optJSONArray("people")?.let { array ->
+                (0 until array.length()).map(array::getString)
+            }.orEmpty(),
+            itemStatus = ItemStatus.entries.firstOrNull { it.name == obj.optString("itemStatus") }
+                ?: ItemStatus.OPEN,
         )
     }
 
@@ -152,9 +174,11 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
         .put("captureMethod", record.captureMethod).put("revision", record.revision).put("title", record.title)
         .put("condition", record.currentCondition).put("status", record.status)
         .put("conditionScope", record.conditionScope?.name).put("currentGoalCondition", record.currentGoalCondition)
+        .put("people", JSONArray(record.people)).put("itemStatus", record.itemStatus.name)
         .put("tags", record.tags.jsonArray {
             JSONObject().put("id", it.id).put("name", it.name).put("quote", it.sourceQuote)
                 .put("algorithm", it.algorithmVersion).put("excluded", it.excluded)
+                .put("reviewState", it.reviewState.name)
         })
         .put("outcomes", record.outcomes.jsonArray {
             JSONObject().put("id", it.id).put("choice", it.choice)
@@ -165,6 +189,10 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
                 .put("evidence", suggestion.evidence.jsonArray {
                     JSONObject().put("id", it.id).put("title", it.title).put("quote", it.quote)
                         .put("date", it.recordDate).put("sourceRecordId", it.sourceRecordId)
+                        .put("sourceRef", JSONObject().put("sourceId", it.sourceRef.sourceId)
+                            .put("sourceVersion", it.sourceRef.sourceVersion))
+                        .put("start", it.start).put("end", it.end)
+                        .put("unavailableReason", it.unavailableReason)
                 })
         })
 

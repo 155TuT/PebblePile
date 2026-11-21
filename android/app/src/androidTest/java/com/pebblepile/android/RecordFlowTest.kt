@@ -71,9 +71,15 @@ class RecordFlowTest {
         openShare(text).use {
             ui.onNodeWithText("确认保存").performClick()
             waitForText("原始记录")
-            ui.onNodeWithText("“${text.take(100)}”").performScrollTo().performClick()
+            val api = ApplicationProvider.getApplicationContext<PebblePileApplication>().coreApi
+            val quote = runBlocking {
+                api.recentRecords().single { it.rawText == text }.suggestions.first().evidence.first().quote
+            }
+            ui.onNodeWithText("“$quote”").performScrollTo().performClick()
             waitForText("来源与原话")
             ui.onNode(hasText(text) and hasAnyAncestor(isDialog())).assertExists()
+            ui.onNode(hasText("版本 1", substring = true) and hasAnyAncestor(isDialog())).assertExists()
+            ui.onNode(hasText("码点 [", substring = true) and hasAnyAncestor(isDialog())).assertExists()
             ui.onNodeWithText("关闭").performClick()
             ui.onNodeWithText("原始记录").assertExists()
         }

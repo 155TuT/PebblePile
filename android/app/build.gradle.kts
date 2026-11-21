@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.gradle.api.tasks.testing.Test
 
 plugins {
     id("com.android.application")
@@ -118,4 +119,29 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.google.code.gson:gson:2.10.1")
+}
+
+// Gradle passes project-local test outputs through a JVM argument file. On Windows,
+// non-ASCII checkout paths can be decoded with the platform charset before the test
+// worker starts, which makes every compiled test class appear to be missing.
+tasks.withType<Test>().configureEach {
+    doFirst {
+        val mirrorRoot = file("${System.getProperty("java.io.tmpdir")}/pebblepile-android-tests")
+        delete(mirrorRoot)
+        val projectRoot = rootDir.toPath().toAbsolutePath().normalize()
+        classpath = files(classpath.files.map { entry ->
+            val normalized = entry.toPath().toAbsolutePath().normalize()
+            if (!normalized.startsWith(projectRoot) || !entry.exists()) {
+                entry
+            } else {
+                val target = File(mirrorRoot, rootDir.toPath().relativize(normalized).toString())
+                if (entry.isDirectory) entry.copyRecursively(target, overwrite = true)
+                else {
+                    target.parentFile.mkdirs()
+                    entry.copyTo(target, overwrite = true)
+                }
+                target
+            }
+        })
+    }
 }

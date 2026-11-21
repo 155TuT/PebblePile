@@ -121,7 +121,11 @@ class PebbleComponentsTest {
             val draft = "只在工作日加班时优先省事，周末另选。".repeat(5)
             for (confirm in listOf(false, true)) {
                 ui.onNodeWithText("纠正条件").performScrollTo().performClick()
-                val field = ui.onNode(hasSetTextAction() and hasAnyAncestor(isDialog()))
+                ui.waitUntil(5_000) {
+                    ui.onAllNodes(hasSetTextAction() and hasAnyAncestor(isDialog()))
+                        .fetchSemanticsNodes().isNotEmpty()
+                }
+                val field = ui.onAllNodes(hasSetTextAction() and hasAnyAncestor(isDialog()))[0]
                 field.assertTextContains("加班时优先省事").performTextReplacement(draft)
                 ui.onNodeWithText(if (confirm) "确认" else "取消").performClick()
                 ui.onNodeWithText(if (confirm) draft else "加班时优先省事").assertExists()

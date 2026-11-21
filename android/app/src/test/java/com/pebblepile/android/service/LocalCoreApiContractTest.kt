@@ -15,6 +15,7 @@ import com.pebblepile.android.repository.CoreReader
 import com.pebblepile.android.repository.CoreRepository
 import com.pebblepile.android.repository.CoreWriter
 import com.pebblepile.android.repository.RepositoryWriteException
+import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -477,8 +478,14 @@ class LocalCoreApiContractTest {
     }
 
     private companion object {
-        val fixtures = requireNotNull(LocalCoreApiContractTest::class.java.getResourceAsStream("/fixtures.json"))
+        val fixtures = requireNotNull(fixtureStream())
             .bufferedReader(Charsets.UTF_8).use { JsonParser.parseReader(it).asJsonObject }
+
+        fun fixtureStream() = LocalCoreApiContractTest::class.java.getResourceAsStream("/fixtures.json")
+            ?: listOf(
+                File("../../docs/testing/issue10/fixtures.json"),
+                File("../docs/testing/issue10/fixtures.json"),
+            ).firstOrNull(File::isFile)?.inputStream()
 
         fun text(group: String, id: String): String = fixtures.getAsJsonArray(group)
             .map { it.asJsonObject }.single { it["id"].asString == id }["text"].asString

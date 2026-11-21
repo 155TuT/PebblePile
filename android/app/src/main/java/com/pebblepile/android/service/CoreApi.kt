@@ -5,7 +5,9 @@ import com.pebblepile.android.model.CorrectionScope
 import com.pebblepile.android.model.CoreTask
 import com.pebblepile.android.model.DeleteRequest
 import com.pebblepile.android.model.DeleteTarget
+import com.pebblepile.android.model.ItemStatus
 import com.pebblepile.android.model.SourceRef
+import com.pebblepile.android.model.TagAction
 import com.pebblepile.android.model.TaskAction
 import com.pebblepile.android.model.PebbleRecord
 
@@ -13,6 +15,7 @@ import com.pebblepile.android.model.PebbleRecord
  * UI-facing contract implemented by the local core. The Android assembly supplies a repository.
  */
 interface CoreApi {
+    fun setAutoOrganize(enabled: Boolean)
     fun recordExperience(request: CaptureRequest): ApiReceipt
     fun getRecordDetail(recordId: String, sourceRef: SourceRef? = null): RecordDetail?
     fun queryRecords(tags: Set<String> = emptySet()): RecordQueryResult
@@ -32,6 +35,21 @@ interface CoreApi {
     ): ApiReceipt
     suspend fun getRecord(recordId: String): PebbleRecord?
     suspend fun reviseTags(recordId: String, baseRevision: Long, tagId: String, operationId: String): ApiReceipt
+    suspend fun reviseTag(
+        recordId: String,
+        baseRevision: Long,
+        tagId: String,
+        action: TagAction,
+        name: String?,
+        operationId: String,
+    ): ApiReceipt
+    suspend fun updateRecordGoal(
+        recordId: String,
+        baseRevision: Long,
+        title: String,
+        status: ItemStatus,
+        operationId: String,
+    ): ApiReceipt
     suspend fun recordOutcome(recordId: String, baseRevision: Long, choice: String, experience: String, operationId: String): ApiReceipt
     suspend fun reviseMemory(
         recordId: String, baseRevision: Long, condition: String, scope: CorrectionScope, operationId: String,
