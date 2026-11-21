@@ -88,7 +88,7 @@
 
 每次新操作分配一个 `operationId`，修改已有对象时携带 `baseRevision`。按 #6 的样例核对资料库、记录、来源版本、对象修订和适用的任务。原样重发后，逐字段比对首次回执。[业务接口与仓储契约](core-api-contract.md)
 
-在 `android/` 运行 `.\gradlew.bat testDebugUnitTest`。20 项 JVM 用例直接读取冻结材料，覆盖保存、标签排除、条件纠正、实际反馈，以及任务控制和失败重试。#7 接 SQLite 后重跑 K 组，再结束进程，核对重开后的原话、来源版本、任务与首次回执。[JVM 契约测试](../android/app/src/test/java/com/pebblepile/android/service/LocalCoreApiContractTest.kt) · [设备契约测试](../android/app/src/androidTest/java/com/pebblepile/android/CoreContractTest.kt)
+在 `android/` 运行 `.\gradlew.bat testDebugUnitTest`。20 项共享契约断言和 2 项内存仓储回滚/重试用例直接读取冻结材料，覆盖保存、标签排除、条件纠正、实际反馈，以及任务控制和失败重试。断言套件在 [CoreApiContractSuite](../android/app/src/test/java/com/pebblepile/android/service/CoreApiContractSuite.kt)，内存实现由 [LocalCoreApiContractTest](../android/app/src/test/java/com/pebblepile/android/service/LocalCoreApiContractTest.kt) 继承；#7 接 SQLite 后新增一个子类即可复用同一套断言，再结束进程，核对重开后的原话、来源版本、任务与首次回执。[设备契约测试](../android/app/src/androidTest/java/com/pebblepile/android/CoreContractTest.kt)
 
 ### 3.2 三种回执
 
