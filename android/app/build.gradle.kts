@@ -63,7 +63,12 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    sourceSets.getByName("test").resources.srcDir(rootProject.file("../docs/testing/issue10"))
+    listOf("test", "androidTest").forEach { name ->
+        sourceSets.getByName(name).apply {
+            java.srcDir("src/sharedTest/java")
+            resources.srcDir(rootProject.file("../docs/testing/issue10"))
+        }
+    }
 
     buildFeatures { compose = true }
     compileOptions {
@@ -154,6 +159,7 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.google.code.gson:gson:2.10.1")
+    androidTestImplementation("com.google.code.gson:gson:2.10.1")
 }
 
 // Gradle passes project-local test outputs through a JVM argument file. On Windows,
