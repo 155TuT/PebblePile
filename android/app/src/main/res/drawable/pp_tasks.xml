@@ -1,0 +1,35 @@
+<!-- Iconoir Regular (MIT). Source: assets/icons/tasks.svg -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path
+        android:pathData="M9 6L20 6"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF000000" android:strokeWidth="1.5"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path
+        android:pathData="M3.80002 5.79999L4.60002 6.59998L6.60001 4.59999"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF000000" android:strokeWidth="1.5"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path
+        android:pathData="M3.80002 11.8L4.60002 12.6L6.60001 10.6"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF000000" android:strokeWidth="1.5"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path
+        android:pathData="M3.80002 17.8L4.60002 18.6L6.60001 16.6"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF000000" android:strokeWidth="1.5"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path
+        android:pathData="M9 12L20 12"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF000000" android:strokeWidth="1.5"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+    <path
+        android:pathData="M9 18L20 18"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FF000000" android:strokeWidth="1.5"
+        android:strokeLineCap="round" android:strokeLineJoin="round" />
+</vector>

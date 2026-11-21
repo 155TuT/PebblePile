@@ -36,10 +36,18 @@ internal val PebbleEditableText = VisualTransformation {
 }
 
 @Composable
-internal fun PebbleText(
+fun PebbleText(
     text: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified,
     style: TextStyle = LocalTextStyle.current, fontWeight: FontWeight? = null,
 ) {
-    Text(remember(text) { styleLatin(AnnotatedString(text)) }, modifier = modifier,
+    PebbleText(remember(text) { AnnotatedString(text) }, modifier, color, style, fontWeight)
+}
+
+@Composable
+fun PebbleText(
+    text: AnnotatedString, modifier: Modifier = Modifier, color: Color = Color.Unspecified,
+    style: TextStyle = LocalTextStyle.current, fontWeight: FontWeight? = null,
+) {
+    Text(remember(text) { styleLatin(text) }, modifier = modifier,
         color = color, style = style, fontWeight = fontWeight)
 }

@@ -1,221 +1,182 @@
 package com.pebblepile.android
 
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.border
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.semantics.*
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontSynthesis
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
-/** Shared Android colors from assets/design-tokens.json. */
-object PebbleVisuals {
-    val Sand = Color(0xFFF5F3EB)
-    val Ink = Color(0xFF222C24)
-    val Muted = Color(0xFF5E6B5D)
-    val Moss = Color(0xFF536D58)
-    val Focus = Color(0xFF365B44)
-    val Content = Color(0xFFFFFDF7)
-    val Outline = Color(0xFF788374)
-}
-
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun PebbleComponentTheme(cjk: FontFamily = PebbleWenKai, content: @Composable () -> Unit) {
-    val body = TextStyle(fontFamily = cjk, fontWeight = FontWeight.Normal,
-        fontSynthesis = FontSynthesis.None, fontSize = 16.sp, lineHeight = 26.sp)
-    MaterialTheme(
-        colorScheme = lightColorScheme(primary = PebbleVisuals.Moss,
-            onPrimary = PebbleVisuals.Content, background = PebbleVisuals.Sand,
-            surface = PebbleVisuals.Sand, onSurface = PebbleVisuals.Ink, onBackground = PebbleVisuals.Ink,
-            surfaceContainerHigh = PebbleVisuals.Content, surfaceTint = PebbleVisuals.Moss,
-            onSurfaceVariant = PebbleVisuals.Muted, outline = PebbleVisuals.Outline,
-            error = Color(0xFF934C47)),
-        typography = Typography(bodyLarge = body, bodyMedium = body.copy(fontSize = 14.sp, lineHeight = 20.sp),
-            bodySmall = body.copy(fontSize = 14.sp, lineHeight = 20.sp),
-            headlineSmall = body.copy(fontSize = 20.sp, lineHeight = 30.sp, fontWeight = FontWeight.Medium),
-            titleMedium = body.copy(fontSize = 20.sp, lineHeight = 30.sp, fontWeight = FontWeight.Medium),
-            labelLarge = body.copy(fontWeight = FontWeight.Medium)),
-    ) { CompositionLocalProvider(LocalContentColor provides PebbleVisuals.Ink, content = content) }
-}
-
-/** Layered soft relief, drawn in dp. Inset is clipped inside the control. */
-private fun Modifier.relief(inset: Boolean = false, radius: Int = 16, surface: Color = PebbleVisuals.Sand): Modifier = drawBehind {
-    val r = radius.dp.toPx()
-    val shade = Color(0xFFD6D7CF)
-    if (!inset) {
-        for (i in 14 downTo 1) {
-            val spread = i.dp.toPx() / 2
-            for ((offset, color) in listOf(6f to shade, -6f to Color.White)) {
-                drawRoundRect(color.copy(alpha = 0.045f),
-                    topLeft = Offset(offset.dp.toPx() - spread, offset.dp.toPx() - spread),
-                    size = androidx.compose.ui.geometry.Size(size.width + spread * 2, size.height + spread * 2),
-                    cornerRadius = CornerRadius(r + spread))
-            }
-        }
-    }
-    drawRoundRect(surface, cornerRadius = CornerRadius(r))
-}.then(if (inset) Modifier.clip(RoundedCornerShape(radius.dp)).drawBehind {
-    // Inset light and shade remain supplementary to the accessible control outline.
-    for (i in 7 downTo 1) {
-        val width = i.dp.toPx()
-        drawRoundRect(Color(0xFFD1D4C9).copy(alpha = .10f), topLeft = Offset(-width / 2, -width / 2),
-            cornerRadius = CornerRadius(radius.dp.toPx()), style = Stroke(width))
-        drawRoundRect(Color.White.copy(alpha = .10f), topLeft = Offset(width / 2, width / 2),
-            cornerRadius = CornerRadius(radius.dp.toPx()), style = Stroke(width))
-    }
-} else Modifier)
-
-@Composable
-fun PebbleInput(
-    value: String, onValueChange: (String) -> Unit, label: String,
-    modifier: Modifier = Modifier, enabled: Boolean = true, errorMessage: String? = null,
-    placeholder: String? = null, help: String? = null,
-) {
-    Column(modifier.fillMaxWidth()) {
-        OutlinedTextField(
-            value = value, onValueChange = onValueChange, enabled = enabled,
-            label = { PebbleText(label) },
-            placeholder = placeholder?.let { { PebbleText(it) } },
-            visualTransformation = PebbleEditableText,
-            isError = errorMessage != null, minLines = 1, maxLines = 4,
-            shape = RoundedCornerShape(16.dp),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = PebbleVisuals.Focus),
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).relief(inset = true)
-                .semantics { if (errorMessage != null) error(errorMessage) },
-        )
-        val message = errorMessage ?: help
-        if (message != null) {
-            PebbleText(message, Modifier.padding(start = 16.dp, top = 4.dp),
-                color = if (errorMessage == null) PebbleVisuals.Muted else MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall)
-        }
-    }
+fun PebbleTagGroup(modifier: Modifier = Modifier, content: @Composable FlowRowScope.() -> Unit) {
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
 }
 
 @Composable
 fun PebbleTag(
     label: String, selected: Boolean, onSelectedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier, origin: String? = null, needsReview: Boolean = false,
-    enabled: Boolean = true,
+    enabled: Boolean = true, icon: PebbleGlyph? = null,
 ) {
-    val interactions = remember { MutableInteractionSource() }
-    val pressed by interactions.collectIsPressedAsState()
-    val focused by interactions.collectIsFocusedAsState()
-    val shape = RoundedCornerShape(16.dp)
-    val ink = if (enabled) PebbleVisuals.Moss else PebbleVisuals.Outline
-    Column(modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-        .then(if (enabled) Modifier.relief(inset = selected || pressed) else Modifier.background(PebbleVisuals.Sand, shape))
-        .then(if (focused) Modifier.border(2.dp, PebbleVisuals.Focus, shape) else Modifier)
-        .clip(shape)
-        .toggleable(value = selected, interactionSource = interactions, indication = ripple(),
-            enabled = enabled, role = Role.Checkbox, onValueChange = onSelectedChange)
-        .padding(horizontal = 16.dp, vertical = 12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (selected) StatusIcon(PebbleFeedbackState.SAVED, ink)
-            PebbleText(label, color = ink, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
-        }
-        origin?.let { PebbleText(it, color = ink, style = MaterialTheme.typography.bodyMedium) }
-        if (needsReview) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatusIcon(PebbleFeedbackState.REVIEW, PebbleFeedbackState.REVIEW.ink)
-                PebbleText("待核对", style = MaterialTheme.typography.bodyMedium, color = PebbleFeedbackState.REVIEW.ink)
-            }
-        }
-    }
+    val source = remember { MutableInteractionSource() }
+    val toggle = Modifier.toggleable(selected, source, indication = null, enabled = enabled,
+        role = Role.Checkbox, onValueChange = onSelectedChange)
+    TagSurface(label, modifier, origin, needsReview, enabled, selected, icon, source, toggle)
 }
 
-enum class PebbleFeedbackState(val label: String, val ink: Color, val surface: Color) {
-    SAVED("已保存", Color(0xFF3E6246), Color(0xFFE5EFE2)),
-    PROCESSING("正在整理", Color(0xFF3C6470), Color(0xFFE6EEF0)),
-    REVIEW("待核对", Color(0xFF775C29), Color(0xFFF3EAD2)),
-    FAILED("保存失败", Color(0xFF934C47), Color(0xFFF5E6E2)),
-    PROCESSING_FAILED("整理失败", Color(0xFF934C47), Color(0xFFF5E6E2)),
-    WAITING("等待条件", Color(0xFF775C29), Color(0xFFF3EAD2)),
-    UPDATED("已更新", Color(0xFF3E6246), Color(0xFFE5EFE2)),
+/** A label on a record can open its evidence sheet, or simply identify the record. */
+@Composable
+fun PebbleTag(
+    label: String, modifier: Modifier = Modifier, origin: String? = null, needsReview: Boolean = false,
+    icon: PebbleGlyph? = null, onClick: (() -> Unit)? = null, enabled: Boolean = true,
+) {
+    val source = remember { MutableInteractionSource() }
+    val action = if (onClick == null) Modifier.semantics(mergeDescendants = true) {} else
+        Modifier.clickable(source, indication = null, enabled = enabled, role = Role.Button, onClick = onClick)
+    TagSurface(label, modifier, origin, needsReview, enabled, false, icon, source, action)
 }
-
-// Iconoir Regular check/info/warning paths, from assets/icons (MIT; original LICENSE retained).
-private val infoPaths = listOf("M12 11.5V16.5", "M12 7.51L12.01 7.49889",
-    "M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z")
-private val warningPaths = listOf("M20.0429 21H3.95705C2.41902 21 1.45658 19.3364 2.22324 18.0031L10.2662 4.01533C11.0352 2.67792 12.9648 2.67791 13.7338 4.01532L21.7768 18.0031C22.5434 19.3364 21.581 21 20.0429 21Z",
-    "M12 9V13", "M12 17.01L12.01 16.9989")
 
 @Composable
-private fun StatusIcon(state: PebbleFeedbackState, color: Color) {
-    val paths: List<Path> = remember(state) {
-        (when (state) {
-            PebbleFeedbackState.SAVED, PebbleFeedbackState.UPDATED -> listOf("M5 13L9 17L19 7")
-            PebbleFeedbackState.REVIEW, PebbleFeedbackState.FAILED, PebbleFeedbackState.PROCESSING_FAILED -> warningPaths
-            else -> infoPaths
-        }).map { PathParser().parsePathString(it).toPath() }
+private fun TagSurface(
+    label: String, modifier: Modifier, origin: String?, needsReview: Boolean, enabled: Boolean, selected: Boolean,
+    icon: PebbleGlyph?, source: MutableInteractionSource, action: Modifier,
+) {
+    val pressed by source.collectIsPressedAsState()
+    val focused by source.collectIsFocusedAsState()
+    val ink = when {
+        !enabled -> PebbleVisuals.Outline
+        needsReview -> PebbleVisuals.Warning
+        selected -> PebbleVisuals.Moss
+        else -> PebbleVisuals.Ink
     }
-    Canvas(Modifier.size(24.dp).clearAndSetSemantics { }) {
-        scale(size.width / 24, size.height / 24, pivot = Offset.Zero) {
-            paths.forEach { drawPath(it, color, style = Stroke(1.5f, cap = StrokeCap.Round, join = StrokeJoin.Round)) }
+    val surface = when {
+        !enabled -> PebbleVisuals.SurfaceMuted
+        needsReview -> PebbleVisuals.WarningSoft
+        else -> PebbleVisuals.Sand
+    }
+    val relief = when {
+        !enabled || needsReview -> Relief.Flat
+        selected || pressed -> Relief.Inset
+        else -> Relief.Raised
+    }
+    Column(modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp).pebbleSurface(relief, color = surface)
+        .pebbleFocus(focused).clip(RoundedCornerShape(16.dp)).then(action)
+        .padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.Center) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            val glyph = if (selected) PebbleGlyph.Check else icon
+            glyph?.let { PebbleIcon(it, color = ink) }
+            PebbleText(if (needsReview) "$label · 待核对" else label, color = ink,
+                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal)
         }
+        origin?.let { PebbleText(it, color = ink, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 
+enum class PebbleFeedbackState(val label: String, val ink: Color, val surface: Color, val icon: PebbleGlyph) {
+    SAVED("已保存", PebbleVisuals.Success, PebbleVisuals.SuccessSoft, PebbleGlyph.Check),
+    PROCESSING("正在整理", PebbleVisuals.Info, PebbleVisuals.InfoSoft, PebbleGlyph.Info),
+    REVIEW("待核对", PebbleVisuals.Warning, PebbleVisuals.WarningSoft, PebbleGlyph.Warning),
+    FAILED("保存失败", PebbleVisuals.Danger, PebbleVisuals.DangerSoft, PebbleGlyph.Warning),
+    PROCESSING_FAILED("整理失败", PebbleVisuals.Danger, PebbleVisuals.DangerSoft, PebbleGlyph.Warning),
+    WAITING("等待条件", PebbleVisuals.Warning, PebbleVisuals.WarningSoft, PebbleGlyph.Clock),
+    UPDATED("已更新", PebbleVisuals.Success, PebbleVisuals.SuccessSoft, PebbleGlyph.Check),
+    PAUSED("已暂停", PebbleVisuals.Warning, PebbleVisuals.WarningSoft, PebbleGlyph.Pause),
+}
+
+@Composable
+fun PebbleStatusBadge(state: PebbleFeedbackState, modifier: Modifier = Modifier, label: String = state.label) {
+    Row(modifier.heightIn(min = 32.dp).background(state.surface, androidx.compose.foundation.shape.CircleShape)
+        .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        PebbleIcon(state.icon, Modifier.size(16.dp), state.ink)
+        PebbleText(label, color = state.ink, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+fun PebbleBanner(
+    label: String, icon: PebbleGlyph, modifier: Modifier = Modifier, detail: String? = null,
+    tone: Color = PebbleVisuals.Info, action: (@Composable () -> Unit)? = null,
+) {
+    Column(modifier.fillMaxWidth().pebbleSurface(Relief.Inset).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+            horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            PebbleIcon(icon, color = tone)
+            Column(Modifier.weight(1f)) {
+                PebbleText(label)
+                detail?.let { PebbleText(it, color = PebbleVisuals.Muted, style = MaterialTheme.typography.bodyMedium) }
+            }
+        }
+        action?.invoke()
+    }
+}
+
+/** The parent owns the notification's lifetime and its position above the composer. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun PebbleToast(
+    label: String, icon: PebbleGlyph, modifier: Modifier = Modifier,
+    tone: Color = PebbleVisuals.Success, action: (@Composable () -> Unit)? = null,
+) {
+    FlowRow(modifier.widthIn(max = 480.dp).fillMaxWidth().heightIn(min = 48.dp).pebbleSurface(Relief.Raised)
+        .padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.align(Alignment.CenterVertically).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            PebbleIcon(icon, color = tone)
+            PebbleText(label)
+        }
+        action?.invoke()
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun PebbleFeedback(
     state: PebbleFeedbackState, modifier: Modifier = Modifier, detail: String? = null,
     onRetry: (() -> Unit)? = null, onContinue: (() -> Unit)? = null, onCancel: (() -> Unit)? = null,
 ) {
-    Column(modifier.fillMaxWidth().background(state.surface, RoundedCornerShape(16.dp)).padding(16.dp)) {
-        Column(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatusIcon(state, state.ink)
-                PebbleText(state.label, color = state.ink, modifier = Modifier.weight(1f))
-            }
-            detail?.let { PebbleText(it, color = state.ink) }
-        }
-        if ((state == PebbleFeedbackState.FAILED || state == PebbleFeedbackState.PROCESSING_FAILED) && onRetry != null) {
-            TextButton(onClick = onRetry, modifier = Modifier.sizeIn(minWidth = 48.dp, minHeight = 48.dp)) {
-                PebbleText(if (state == PebbleFeedbackState.FAILED) "重试保存" else "重试整理")
-            }
-        }
-        if (onContinue != null) TextButton(onClick = onContinue) { PebbleText("继续") }
-        if (onCancel != null) TextButton(onClick = onCancel) { PebbleText("取消") }
+    val retry = onRetry?.takeIf { state == PebbleFeedbackState.FAILED || state == PebbleFeedbackState.PROCESSING_FAILED }
+    if ((state == PebbleFeedbackState.SAVED || state == PebbleFeedbackState.UPDATED) && detail == null &&
+        onContinue == null && onCancel == null) {
+        PebbleToast(state.label, state.icon, modifier, state.ink)
+        return
     }
+    val actions: (@Composable () -> Unit)? = if (retry == null && onContinue == null && onCancel == null) null else {
+        {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                retry?.let {
+                    PebbleButton(if (state == PebbleFeedbackState.FAILED) "重试保存" else "重试整理",
+                        it, style = PebbleButtonStyle.Secondary, icon = PebbleGlyph.Retry)
+                }
+                onContinue?.let { PebbleButton("继续", it, style = PebbleButtonStyle.Secondary) }
+                onCancel?.let { PebbleButton("取消", it, style = PebbleButtonStyle.Secondary) }
+            }
+        }
+    }
+    PebbleBanner(state.label, state.icon, modifier, detail, state.ink, actions)
 }
 
-// Each source owns its own callback. The page binds its record, source version and quote range.
 @Composable
 fun PebbleEvidenceSource(
     quote: String, sourceLabel: String, onOpenSource: () -> Unit,
     sourceAvailable: Boolean = true, unavailableReason: String = "来源暂不可用",
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        PebbleText(sourceLabel, style = MaterialTheme.typography.bodyMedium, color = PebbleVisuals.Muted)
-        PebbleText(quote, style = MaterialTheme.typography.bodyLarge)
+    PebbleQuote(quote, source = sourceLabel) {
         if (!sourceAvailable) PebbleText(unavailableReason, color = PebbleVisuals.Muted)
-        TextButton(onClick = onOpenSource, enabled = sourceAvailable,
-            modifier = Modifier.heightIn(min = 48.dp).semantics {
-                onClick(label = "查看原文，$sourceLabel", action = null)
-            }) { PebbleText("查看原文") }
+        PebbleLink("查看原文", onOpenSource, enabled = sourceAvailable, actionLabel = "查看原文，$sourceLabel")
     }
 }
 
@@ -224,12 +185,11 @@ fun PebbleEvidenceCard(
     condition: String, onCorrect: () -> Unit, modifier: Modifier = Modifier,
     origin: String? = null, sources: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(modifier.fillMaxWidth().relief(radius = 24, surface = PebbleVisuals.Content).padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        origin?.let { PebbleText(it, style = MaterialTheme.typography.bodyMedium, color = PebbleVisuals.Muted) }
-        PebbleText(condition, color = PebbleVisuals.Moss)
+    PebbleCard(modifier) {
+        origin?.let { PebbleText(it, style = MaterialTheme.typography.bodyMedium, color = PebbleVisuals.Moss) }
+        PebbleText(condition, style = MaterialTheme.typography.titleMedium)
         sources()
-        TextButton(onClick = onCorrect, modifier = Modifier.heightIn(min = 48.dp)) { PebbleText("纠正条件") }
+        PebbleButton("纠正条件", onCorrect)
     }
 }
 
