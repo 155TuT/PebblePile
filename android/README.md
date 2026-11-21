@@ -26,14 +26,16 @@ Android 工程、首页输入、记录库、系统分享、详情、任务与设
 
 ## 构建
 
-使用 JDK 17 或 21、Android SDK Platform 35。将 `JAVA_HOME` 和 `ANDROID_HOME` 指向本机安装目录，在仓库根目录执行：
+将 `JAVA_HOME` 指向 JDK 17 或 21，`ANDROID_HOME` 指向装有 Platform 35 的 Android SDK。打包团队最新进度时，在仓库根目录同步 `main`。分支联调时，直接在当前分支运行 Gradle 命令。
 
 ```powershell
+git switch main
+git pull --ff-only
 cd android
-.\gradlew.bat clean assembleDebug
+.\gradlew.bat :app:assembleDebug
 ```
 
-APK 输出：
+安装下面的应用包。调试构建会清理上次设备测试留下的 APK。在 Git 检出目录构建时，应用版本名包含当前提交的短哈希。
 
 ```text
 app\build\outputs\apk\debug\app-debug.apk

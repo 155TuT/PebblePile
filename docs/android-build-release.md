@@ -49,7 +49,7 @@ cd android
 ./gradlew clean testDebugUnitTest lintDebug assembleDebug
 ```
 
-调试 APK 位于：
+调试构建清理上次设备测试留下的 APK，只生成下方的应用包。从 Git 检出目录打包时，调试版本名为 `<版本号>+<短提交号>`，可与 `git rev-parse --short=12 HEAD` 对照。`android/` 含本地未提交改动时，版本名再加 `.dirty`。
 
 ```text
 android/app/build/outputs/apk/debug/app-debug.apk
@@ -145,7 +145,7 @@ Android 工程、两条 Android 工作流、发布脚本或晋级测试有改动
 
 1. 在 Ubuntu 上运行候选包晋级的 Python 测试，核对来源和 SHA-256。
 2. 设置 JDK 17，安装上表的调试 SDK 包，运行 `testDebugUnitTest`、`lintDebug` 和 `assembleDebug`。
-3. 三项构建任务通过后上传调试 APK，保留 14 天。设备上的契约与页面测试由签名候选工作流运行。
+3. 核对调试 APK 的包名、版本号和源码提交，再上传应用包，保留 14 天。签名候选工作流单独构建设备测试 APK，运行契约与页面测试。
 
 ### 2. 构建候选包
 

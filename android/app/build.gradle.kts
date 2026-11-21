@@ -92,6 +92,39 @@ android {
     }
 }
 
+// Git archives keep the version from version.properties. A checkout also identifies
+// the source revision in the installable debug APK, including incremental builds.
+val checkoutDir = rootProject.projectDir.parentFile
+if (checkoutDir.resolve(".git").exists()) {
+    fun gitOutput(vararg args: String) = providers.exec {
+        workingDir(checkoutDir)
+        commandLine("git", *args)
+    }.standardOutput.asText.map { it.trim() }
+
+    val revision = gitOutput("rev-parse", "--short=12", "HEAD")
+    val changes = gitOutput("--no-optional-locks", "status", "--porcelain", "--untracked-files=normal", "--", "android")
+    val debugVersionName = revision.zip(changes) { hash, status ->
+        if (status.isEmpty()) "$pebblePileVersionName+$hash" else "$pebblePileVersionName+$hash.dirty"
+    }
+
+    androidComponents.onVariants(androidComponents.selector().withBuildType("debug")) { variant ->
+        variant.outputs.forEach { output -> output.versionName.set(debugVersionName) }
+    }
+}
+
+val cleanDeviceTestApks = tasks.register<Delete>("cleanDeviceTestApks") {
+    delete(layout.buildDirectory.dir("outputs/apk/androidTest"))
+}
+
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+    dependsOn(cleanDeviceTestApks)
+}
+
+// When the caller requests both APKs, package the test runner after cleanup.
+tasks.matching { it.name == "packageDebugAndroidTest" }.configureEach {
+    mustRunAfter(cleanDeviceTestApks)
+}
+
 tasks.matching { name == "packageRelease" || name == "bundleRelease" }.configureEach {
     if (!hasReleaseSigning) {
         doFirst {
