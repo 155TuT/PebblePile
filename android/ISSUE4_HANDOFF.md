@@ -3,6 +3,7 @@
 ## 当前可交付
 
 - 带 Gradle Wrapper 8.9 的 Kotlin + Compose Android 工程。
+- 首页、记录库和详情已全部接入 Issue #3 的共享 VI 组件。
 - 首页输入、对话／记录切换、草稿保持和保存回执。
 - 独立记录库、标签筛选、时间分组和详情导航。
 - `detail/{recordId}` 详情路由。
@@ -12,10 +13,9 @@
 ## 界面方案
 
 - 前端框架选定 Kotlin + Jetpack Compose。
-- 页面层使用 Compose Navigation；组件层按团队
-  [`docs/android-components-handoff.md`](../docs/android-components-handoff.md)
-  约定的输入、标签、依据和状态契约接入。
-- 当前使用 Material 3 基础组件作为可运行占位，Issue #3 交付后再替换视觉组件。
+- 页面层使用 Compose Navigation；入口为 `home`、`library` 和 `detail/{recordId}`。
+- 组件层统一使用 `PebbleComponentTheme`、`PebbleComposer`、`PebbleTag`、`PebbleCard`、`PebbleEvidenceCard`、`PebbleFeedback`、`PebbleDialog` 等 Issue #3 共享组件。
+- 页面只保留 Compose 基础布局与 Material 3 字体排版能力，不再用 Material 3 默认控件搭建主界面。
 
 ## 依赖约定
 
@@ -32,7 +32,7 @@
 首页和分享已通过 `PebblePileApplication.coreApi` 接入 #6 的 `LocalCoreApi`。入口为每次新操作生成 `operationId`，重试时沿用原标识和参数。核心在同一次写入中保存记录、来源、适用的待办和回执。[回执样例](../docs/core-api-receipt-examples.json)
 
 1. #7 实现 `CoreRepository` 后接入 SQLite。#4、#5 分别从首页和分享保存一条原话，重开后逐条核对 `recordId`、原话和首次回执。
-2. #3 交付共用组件后，#4 替换首页输入框和记录库筛选控件，#5 接详情的依据和反馈状态。
+2. #3 共享组件已接入首页、记录库和详情，后续组件变更由 #4、#5 同步回归。
 3. #8、#9 交出任务进度和带来源版本的饮食建议后，#5 接到详情，#10 用固定的晚餐材料回放。[业务接口与仓储契约](../docs/core-api-contract.md)
 
 ## 构建入口

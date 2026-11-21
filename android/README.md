@@ -1,12 +1,13 @@
 # PebblePile Android
 
-Android 工程、首页输入、记录库和详情路由的可构建基线。
+Android 工程、首页输入、记录库、系统分享和详情页的组件化前端。
 
 正式构建、签名、候选包和 Release 流程见 [Android 构建、签名与发布](../docs/android-build-release.md)。版本由 [`version.properties`](version.properties) 维护，签名发布必须使用环境变量或 GitHub Actions Secrets 提供密钥。
 
 ## 已覆盖
 
 - Kotlin + Jetpack Compose 单 `app` 工程和 Gradle Wrapper 8.9。首页、记录库、系统分享和详情共用纵向界面。
+- 页面已接入 Issue #3 的 `PebbleComponentTheme`、输入、标签、依据卡片、反馈、按钮和弹层组件。
 - 首页直接输入，对话／记录模式切换时保留同一草稿。
 - 首页提交后显示带 `recordId` 的保存回执并进入详情。
 - 记录库为独立页面，可回到首页、按标签筛选并按时间分组。
@@ -31,7 +32,7 @@ app\build\outputs\apk\debug\app-debug.apk
 
 工程路径允许包含中文，配置中已开启 `android.overridePathCheck=true`。
 
-接上一台测试设备，在 `android/` 运行 `.\gradlew.bat connectedDebugAndroidTest`。契约测试覆盖回执重放、写入回滚和跨记录的长期条件冲突。页面测试覆盖分享确认、依据回查和纠正草稿。[契约测试](app/src/androidTest/java/com/pebblepile/android/CoreContractTest.kt) · [页面测试](app/src/androidTest/java/com/pebblepile/android/RecordFlowTest.kt)
+接上一台测试设备，在 `android/` 运行 `.\gradlew.bat connectedDebugAndroidTest`。当前 21 项仪器测试全部通过，契约测试覆盖回执重放、写入回滚和跨记录的长期条件冲突；页面测试覆盖分享确认、依据回查、纠正草稿、冲突恢复和共享组件可访问性。[契约测试](app/src/androidTest/java/com/pebblepile/android/CoreContractTest.kt) · [页面测试](app/src/androidTest/java/com/pebblepile/android/RecordFlowTest.kt)
 
 ## 单元测试
 
@@ -58,7 +59,7 @@ cd android
 
 2. 在首页输入一段自选文字。
 3. 在“对话／记录”之间切换，确认输入内容仍在。
-4. 点击“发送并保存”或“保存记录”。
+4. 点击输入区右侧的“发送”或“保存”图标。
 5. 预期显示带 `recordId` 的保存回执并进入详情。
 
 ### 记录库与重开
@@ -93,4 +94,4 @@ adb shell run-as com.pebblepile.android cat shared_prefs/pebblepile_issue4_demo.
 
 - #7 按 `CoreRepository` 接 SQLite，用同一组请求核对重开后的记录、任务和回执。[仓储交接](../docs/core-api-contract.md)
 - #8 接任务调度，#9 接饮食标签、建议和证据。详情当前展示固定的晚餐样例，联调时按原话区间核对每条依据。[晚餐验收材料](../docs/issue10-testing.md)
-- #3 交付共用组件后，#4、#5 将页面中的 Material 3 基础控件换成对应组件，在纵向小屏上复验输入、依据和反馈。[组件交接](../docs/android-components-handoff.md)
+- #10、#11 在首测手机和 360dp 小屏复验安装、分享、重开、标签、依据和反馈。[组件交接](../docs/android-components-handoff.md)
