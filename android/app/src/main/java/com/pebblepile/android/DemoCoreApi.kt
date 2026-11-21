@@ -19,7 +19,6 @@ class DemoCoreApi(context: Context) : CoreApi by coreFor(context) {
             val store = DemoLibraryStore(preferences)
             return LocalCoreApi(
                 repository = store.repository(),
-                decorateSampleRecord = { withDemoContent(it, SourceRef("${it.id}:source", 1)) },
                 decorateCreatedRecord = ::withDemoContent,
             )
         }
@@ -39,8 +38,7 @@ class DemoCoreApi(context: Context) : CoreApi by coreFor(context) {
                 if (record.rawText.contains(Regex("加班|工作|忙|省事"))) add("加班")
                 if (isEmpty()) add("待整理")
             }
-            val hint = listOf("省事", "加班", "晚餐", "工作", "吃", "汤")
-                .firstOrNull(record.rawText::contains)
+            val hint = listOf("省事", "加班", "时间紧").firstOrNull(record.rawText::contains)
             val charStart = hint?.let(record.rawText::indexOf)?.takeIf { it >= 0 } ?: 0
             val start = record.rawText.codePointCount(0, charStart)
             val quoteLength = hint?.codePointCount(0, hint.length) ?: minOf(24, snippetLength)
@@ -52,7 +50,6 @@ class DemoCoreApi(context: Context) : CoreApi by coreFor(context) {
             return record.copy(
                 title = record.title.ifBlank { snippet(18) },
                 people = record.people.ifEmpty { people },
-                itemStatus = record.itemStatus,
                 tags = tagNames.mapIndexed { index, name ->
                     RecordTag(
                         id = "${record.id}:rule-$index",
@@ -60,9 +57,10 @@ class DemoCoreApi(context: Context) : CoreApi by coreFor(context) {
                         sourceQuote = snippet(36),
                         algorithmVersion = "local-rules-0.1",
                         reviewState = TagReviewState.NEEDS_REVIEW,
+                        sourceRef = sourceRef,
                     )
                 },
-                suggestions = listOf(
+                suggestions = if ("饮食" in tagNames && hint != null) listOf(
                     SuggestionItem(
                         "${record.id}:suggestion", "优先选择准备简单的晚餐",
                         "示例依据：记录中提到了时间紧张或希望省事。正式建议由团队任务模块提供。",
@@ -79,7 +77,7 @@ class DemoCoreApi(context: Context) : CoreApi by coreFor(context) {
                             )
                         )
                     )
-                )
+                ) else emptyList()
             )
         }
     }

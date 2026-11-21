@@ -13,9 +13,9 @@
 ## 界面方案
 
 - 前端框架选定 Kotlin + Jetpack Compose。
-- 页面层使用 Compose Navigation；入口为 `home`、`library` 和 `detail/{recordId}`。
+- 页面通过 Compose Navigation 打开 `home`、`library` 和 `detail/{recordId}`。
 - 组件层统一使用 `PebbleComponentTheme`、`PebbleComposer`、`PebbleTag`、`PebbleCard`、`PebbleEvidenceCard`、`PebbleFeedback`、`PebbleDialog` 等 Issue #3 共享组件。
-- 页面只保留 Compose 基础布局与 Material 3 字体排版能力，不再用 Material 3 默认控件搭建主界面。
+- 首页顶栏左侧进入记录库，右侧进入设置。方式选择放在顶栏下方，底部输入区保留同一份草稿。
 
 ## 依赖约定
 
@@ -26,7 +26,7 @@
 - 详情路由：`detail/{recordId}`
 - 设置路由：`settings`、`settings/memory`、`settings/rules`、`settings/data`
 - 首页保存、系统分享都调用 `CoreApi.recordExperience`
-- 记录库用 `CoreApi.recentRecords` 取列表，详情用 `getRecordDetail(recordId)` 读记录和长期条件。
+- 记录库用 `CoreApi.queryRecords` 取列表，详情用 `getRecordDetail(recordId)` 读记录和长期条件。
 
 ## 接入团队模块
 

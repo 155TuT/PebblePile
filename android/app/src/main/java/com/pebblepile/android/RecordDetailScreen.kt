@@ -25,6 +25,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -34,6 +35,7 @@ import com.pebblepile.android.model.ApiReceipt
 import com.pebblepile.android.model.CapturedSource
 import com.pebblepile.android.model.ConditionSetting
 import com.pebblepile.android.model.CorrectionScope
+import com.pebblepile.android.model.EvidenceItem
 import com.pebblepile.android.model.CoreTask
 import com.pebblepile.android.model.ItemStatus
 import com.pebblepile.android.model.PebbleRecord
@@ -54,10 +56,29 @@ private data class DetailNotice(
     val retry: (() -> Unit)? = null,
 )
 
-private data class EvidenceAvailability(
-    val source: CapturedSource?,
-    val reason: String?,
+internal data class EvidenceAvailability(
+    val source: CapturedSource? = null,
+    val range: IntRange? = null,
+    val reason: String? = null,
 )
+
+internal fun EvidenceItem.resolve(source: CapturedSource?): EvidenceAvailability {
+    unavailableReason?.let { return EvidenceAvailability(reason = it) }
+    if (source == null || source.ref != sourceRef) return EvidenceAvailability(reason = "来源版本已失效或被移除")
+    val text = source.text
+    if (start < 0 || end <= start || end > text.codePointCount(0, text.length)) {
+        return EvidenceAvailability(reason = "引文区间已失效")
+    }
+    val from = text.offsetByCodePoints(0, start)
+    val to = text.offsetByCodePoints(0, end)
+    if (text.substring(from, to) != quote) return EvidenceAvailability(reason = "引文与该版本原话不一致")
+    return EvidenceAvailability(source, from until to)
+}
+
+private fun CoreApi.resolveEvidence(item: EvidenceItem): EvidenceAvailability {
+    val detail = getRecordDetail(item.sourceRecordId, item.sourceRef)
+    return item.resolve(detail?.sources?.singleOrNull { it.ref == item.sourceRef })
+}
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
@@ -72,7 +93,7 @@ internal fun RecordDetailScreen(
     var record by remember(recordId) { mutableStateOf<PebbleRecord?>(null) }
     var futureCondition by remember(recordId) { mutableStateOf<ConditionSetting?>(null) }
     var tasks by remember(recordId) { mutableStateOf<List<CoreTask>>(emptyList()) }
-    var evidenceAvailability by remember(recordId) { mutableStateOf<Map<String, EvidenceAvailability>>(emptyMap()) }
+    var evidenceAvailability by remember(recordId) { mutableStateOf<Map<String, String?>>(emptyMap()) }
     var loading by remember(recordId) { mutableStateOf(true) }
     var choice by rememberSaveable(recordId) { mutableStateOf("") }
     var experience by rememberSaveable(recordId) { mutableStateOf("") }
@@ -96,24 +117,20 @@ internal fun RecordDetailScreen(
     val taskOperations = remember(recordId) { mutableMapOf<String, String>() }
     var conflict by remember(recordId) { mutableStateOf<ApiReceipt?>(null) }
     var evidenceId by rememberSaveable(recordId) { mutableStateOf<String?>(null) }
-    var modifyingTag by remember(recordId) { mutableStateOf<RecordTag?>(null) }
+    var selectedTagId by rememberSaveable(recordId) { mutableStateOf<String?>(null) }
+    var modifyingTagId by rememberSaveable(recordId) { mutableStateOf<String?>(null) }
+    var editFailure by remember(recordId) { mutableStateOf<String?>(null) }
     var modifiedTagName by rememberSaveable(recordId) { mutableStateOf("") }
     var notice by remember(recordId) { mutableStateOf<DetailNotice?>(null) }
 
-    suspend fun reload() {
+    suspend fun reload(refreshEditingBase: Boolean = false) {
         loading = true
         val loaded = withContext(Dispatchers.IO) {
             val detail = api.getRecordDetail(recordId)
             val loadedTasks = detail?.jobIds.orEmpty().mapNotNull(api::getTask)
             val evidence = detail?.record?.suggestions.orEmpty().flatMap { it.evidence }
             val availability = evidence.associate { item ->
-                val sourceDetail = api.getRecordDetail(item.sourceRecordId, item.sourceRef)
-                item.id to EvidenceAvailability(
-                    source = sourceDetail?.sources?.singleOrNull { it.ref == item.sourceRef },
-                    reason = if (sourceDetail == null) {
-                        item.unavailableReason ?: "来源版本已失效或被移除"
-                    } else null,
-                )
+                item.id to api.resolveEvidence(item).reason
             }
             Triple(detail, loadedTasks, availability)
         }
@@ -121,8 +138,10 @@ internal fun RecordDetailScreen(
         futureCondition = loaded.first?.futureCondition
         tasks = loaded.second
         evidenceAvailability = loaded.third
-        editingRecordRevision = loaded.first?.record?.revision ?: 0L
-        editingPreferenceRevision = loaded.first?.futureCondition?.revision ?: 0L
+        if (refreshEditingBase) {
+            editingRecordRevision = loaded.first?.record?.revision ?: 0L
+            editingPreferenceRevision = loaded.first?.futureCondition?.revision ?: 0L
+        }
         loading = false
     }
 
@@ -146,6 +165,7 @@ internal fun RecordDetailScreen(
     }
 
     fun openCorrection() {
+        editFailure = null
         conditionDraft = item.currentCondition
         correctionScope = item.conditionScope ?: CorrectionScope.THIS_TIME
         editingRecordRevision = item.revision
@@ -155,6 +175,8 @@ internal fun RecordDetailScreen(
     }
 
     fun openGoalEditor() {
+        editFailure = null
+        editingRecordRevision = item.revision
         goalTitleDraft = item.title.ifBlank { item.rawText.take(24) }
         goalStatusDraft = item.itemStatus
         goalOperation = null
@@ -163,25 +185,27 @@ internal fun RecordDetailScreen(
 
     fun runTagAction(tag: RecordTag, action: TagAction, name: String? = null) {
         if (busyTagKey != null) return
+        val baseRevision = if (action == TagAction.MODIFY) editingRecordRevision else item.revision
         val operationKey = "${tag.id}:${action.name}:${name.orEmpty()}"
         busyTagKey = operationKey
         val operationId = tagOperations[operationKey]
             ?: UUID.randomUUID().toString().also { tagOperations[operationKey] = it }
         scope.launch {
             val receipt = withContext(Dispatchers.IO) {
-                api.reviseTag(item.id, item.revision, tag.id, action, name, operationId)
+                api.reviseTag(item.id, baseRevision, tag.id, action, name, operationId)
             }
             busyTagKey = null
             when {
                 receipt.success -> {
                     tagOperations.remove(operationKey)
-                    modifyingTag = null
+                    selectedTagId = null
+                    modifyingTagId = null
                     notice = DetailNotice(receipt.message, PebbleFeedbackState.UPDATED)
                     reload()
                     onChanged()
                 }
                 receipt.conflict -> conflict = receipt
-                else -> notice = DetailNotice(receipt.message, PebbleFeedbackState.FAILED)
+                else -> editFailure = receipt.message
             }
         }
     }
@@ -256,7 +280,6 @@ internal fun RecordDetailScreen(
             }
             PebbleText(
                 item.currentGoalCondition?.let { "本次目标条件：$it" }
-                    ?: item.currentCondition.takeIf { it.isNotBlank() }?.let { "当前条件：$it" }
                     ?: "尚未补充当前目标条件。",
                 color = PebbleVisuals.Muted,
             )
@@ -289,32 +312,17 @@ internal fun RecordDetailScreen(
             if (item.tags.isEmpty()) {
                 PebbleText("暂时没有标签", color = PebbleVisuals.Muted)
             }
-            item.tags.forEach { tag ->
-                PebbleTag(
-                    label = if (tag.excluded) "${tag.name} · 已排除" else tag.name,
-                    origin = "${tag.reviewState.label} · ${tag.algorithmVersion}",
-                    needsReview = tag.reviewState == TagReviewState.NEEDS_REVIEW,
-                )
-                PebbleText("依据：${tag.sourceQuote}", color = PebbleVisuals.Muted, style = MaterialTheme.typography.bodySmall)
-                PebbleTagGroup(Modifier.fillMaxWidth()) {
-                    if (!tag.excluded) {
-                        PebbleLink("确认", { runTagAction(tag, TagAction.CONFIRM) }, enabled = busyTagKey == null)
-                        PebbleLink("修改", {
-                            modifyingTag = tag
-                            modifiedTagName = tag.name
-                        }, enabled = busyTagKey == null)
-                        PebbleLink("待核对", { runTagAction(tag, TagAction.REVIEW) }, enabled = busyTagKey == null)
-                        PebbleLink(
-                            if (busyTagKey?.startsWith("${tag.id}:EXCLUDE") == true) "排除中…" else "排除",
-                            { runTagAction(tag, TagAction.EXCLUDE) },
-                            enabled = busyTagKey == null,
-                        )
-                    } else {
-                        PebbleLink("恢复", { runTagAction(tag, TagAction.CONFIRM) }, enabled = busyTagKey == null)
-                    }
-                }
-                if (busyTagKey?.startsWith("${tag.id}:") == true) {
-                    PebbleText("正在更新该标签…", color = PebbleVisuals.Muted, style = MaterialTheme.typography.bodySmall)
+            PebbleTagGroup {
+                item.tags.forEach { tag ->
+                    PebbleTag(
+                        label = if (tag.excluded) "${tag.name} · 已排除" else tag.name,
+                        modifier = Modifier.testTag("record_tag_${tag.id}"),
+                        needsReview = tag.reviewState == TagReviewState.NEEDS_REVIEW,
+                        onClick = {
+                            selectedTagId = tag.id
+                            editFailure = null
+                        },
+                    )
                 }
             }
         }
@@ -336,13 +344,13 @@ internal fun RecordDetailScreen(
                     origin = suggestion.reason,
                 ) {
                     suggestion.evidence.forEach { evidence ->
-                        val availability = evidenceAvailability[evidence.id]
+                        val reason = evidenceAvailability[evidence.id]
                         PebbleEvidenceSource(
-                            quote = "“${evidence.quote}”",
+                            quote = if (reason == null) "“${evidence.quote}”" else "引文已失效",
                             sourceLabel = "${evidence.title} · ${evidence.recordDate} · ${evidence.sourceRef.sourceId} v${evidence.sourceRef.sourceVersion} · [${evidence.start},${evidence.end})",
                             onOpenSource = { evidenceId = evidence.id },
-                            sourceAvailable = availability?.reason == null,
-                            unavailableReason = availability?.reason ?: "来源暂不可用",
+                            sourceAvailable = reason == null,
+                            unavailableReason = reason ?: "来源暂不可用",
                         )
                     }
                 }
@@ -367,7 +375,7 @@ internal fun RecordDetailScreen(
                     choice = it
                     feedbackOperation = null
                 },
-                label = "实际选择",
+                label = "实际选择", enabled = !feedbackSaving,
             )
             PebbleInput(
                 value = experience,
@@ -375,7 +383,7 @@ internal fun RecordDetailScreen(
                     experience = it
                     feedbackOperation = null
                 },
-                label = "实际体验／结果",
+                label = "实际体验／结果", enabled = !feedbackSaving,
             )
             PebbleButton(
                 label = "保存实际反馈",
@@ -407,7 +415,7 @@ internal fun RecordDetailScreen(
         SectionTitle("纠正适用条件")
         PebbleCard {
             PebbleText(
-                if (item.currentCondition.isBlank()) "尚未设置当前事项条件" else "当前条件：${item.currentCondition}",
+                item.currentGoalCondition?.let { "本次适用条件：$it" } ?: "尚未设置本次适用条件。",
             )
             item.conditionScope?.let {
                 PebbleText("适用范围：${it.label}", color = PebbleVisuals.Moss)
@@ -437,51 +445,101 @@ internal fun RecordDetailScreen(
 
     val evidence = item.suggestions.flatMap { it.evidence }.firstOrNull { it.id == evidenceId }
     if (evidence != null) {
-        val availability = evidenceAvailability[evidence.id]
-        PebbleDialog(
-            title = "来源与原话",
-            onDismiss = { evidenceId = null },
-            confirmLabel = "关闭",
-            cancelLabel = null,
-            confirmEnabled = true,
-            onConfirm = { evidenceId = null },
-        ) {
-            PebbleText("${evidence.title} · ${evidence.recordDate}", color = PebbleVisuals.Moss)
-            PebbleText(
-                "来源 ${evidence.sourceRef.sourceId} · 版本 ${evidence.sourceRef.sourceVersion} · 码点 [${evidence.start},${evidence.end})",
-                color = PebbleVisuals.Muted,
-                style = MaterialTheme.typography.bodySmall,
-            )
-            val source = availability?.source
-            if (source == null) {
-                PebbleFeedback(
-                    PebbleFeedbackState.PROCESSING_FAILED,
-                    detail = availability?.reason ?: evidence.unavailableReason ?: "来源暂不可用",
+        var resolved by remember(evidence) { mutableStateOf<EvidenceAvailability?>(null) }
+        LaunchedEffect(api, evidence) {
+            val latest = withContext(Dispatchers.IO) { api.resolveEvidence(evidence) }
+            evidenceAvailability = evidenceAvailability + (evidence.id to latest.reason)
+            resolved = latest
+        }
+        resolved?.let { availability ->
+            PebbleDialog(
+                title = "来源与原话",
+                onDismiss = { evidenceId = null },
+                confirmLabel = "关闭",
+                cancelLabel = null,
+                confirmEnabled = true,
+                onConfirm = { evidenceId = null },
+            ) {
+                PebbleText("${evidence.title} · ${evidence.recordDate}", color = PebbleVisuals.Moss)
+                PebbleText(
+                    "来源 ${evidence.sourceRef.sourceId} · 版本 ${evidence.sourceRef.sourceVersion} · 码点 [${evidence.start},${evidence.end})",
+                    color = PebbleVisuals.Muted,
+                    style = MaterialTheme.typography.bodySmall,
                 )
-            } else {
-                PebbleQuote(
-                    highlightedSource(source.text, evidence.start, evidence.end),
-                    source = "${source.capturedAt} · ${source.captureMethod}",
-                )
+                val source = availability.source
+                val range = availability.range
+                if (source == null || range == null) {
+                    PebbleFeedback(
+                        PebbleFeedbackState.PROCESSING_FAILED,
+                        detail = availability.reason ?: "来源暂不可用",
+                    )
+                } else {
+                    PebbleQuote(
+                        highlightedSource(source.text, range),
+                        source = "${source.capturedAt} · ${source.captureMethod}",
+                    )
+                }
             }
         }
     }
 
-    modifyingTag?.let { tag ->
+    val selectedTag = item.tags.firstOrNull { it.id == selectedTagId }
+    if (selectedTag != null && modifyingTagId == null && conflict == null) {
+        val ref = selectedTag.sourceRef
+        var source by remember(recordId, ref) { mutableStateOf<CapturedSource?>(null) }
+        var resolving by remember(recordId, ref) { mutableStateOf(ref != null) }
+        LaunchedEffect(recordId, ref) {
+            if (ref != null) {
+                source = withContext(Dispatchers.IO) { api.getRecordDetail(recordId, ref)?.sources?.singleOrNull { it.ref == ref } }
+                resolving = false
+            }
+        }
+        PebbleSheet("标签依据", onDismiss = { if (busyTagKey == null) selectedTagId = null }) {
+            PebbleText(selectedTag.name, style = MaterialTheme.typography.titleMedium)
+            PebbleText("${selectedTag.reviewState.label} · 标签算法 ${selectedTag.algorithmVersion}", color = PebbleVisuals.Muted)
+            when {
+                resolving -> PebbleText("正在读取来源版本")
+                ref == null -> PebbleText("这条旧标签尚待核对来源版本", color = PebbleVisuals.Muted)
+                source?.text?.contains(selectedTag.sourceQuote) == true && selectedTag.sourceQuote.isNotEmpty() ->
+                    PebbleQuote(selectedTag.sourceQuote, source = "原话版本 v${ref.sourceVersion} · ${ref.sourceId}")
+                else -> PebbleText("来源版本已失效或引文已变更", color = PebbleVisuals.Warning)
+            }
+            editFailure?.let { PebbleFeedback(PebbleFeedbackState.FAILED, detail = it) }
+            val enabled = busyTagKey == null
+            PebbleTagGroup {
+                if (selectedTag.excluded) {
+                    PebbleLink("恢复", { runTagAction(selectedTag, TagAction.CONFIRM) }, enabled = enabled)
+                } else {
+                    PebbleLink("确认", { runTagAction(selectedTag, TagAction.CONFIRM) }, enabled = enabled)
+                    PebbleLink("修改", {
+                        editFailure = null
+                        editingRecordRevision = item.revision
+                        modifyingTagId = selectedTag.id
+                        modifiedTagName = selectedTag.name
+                    }, enabled = enabled)
+                    PebbleLink("待核对", { runTagAction(selectedTag, TagAction.REVIEW) }, enabled = enabled)
+                    PebbleLink("排除", { runTagAction(selectedTag, TagAction.EXCLUDE) }, enabled = enabled)
+                }
+            }
+        }
+    }
+
+    item.tags.firstOrNull { it.id == modifyingTagId && conflict == null }?.let { tag ->
         PebbleDialog(
             title = "修改标签",
-            onDismiss = { modifyingTag = null },
+            onDismiss = { if (busyTagKey == null) modifyingTagId = null },
             confirmLabel = if (busyTagKey != null) "保存中…" else "确认修改",
             confirmEnabled = modifiedTagName.isNotBlank() && busyTagKey == null,
             onConfirm = {
                 if (modifiedTagName.isNotBlank()) runTagAction(tag, TagAction.MODIFY, modifiedTagName.trim())
             },
         ) {
+            editFailure?.let { PebbleFeedback(PebbleFeedbackState.FAILED, detail = it) }
             PebbleText("修改会保留算法依据，并把标签标记为人工确认。", color = PebbleVisuals.Muted)
             PebbleInput(
                 value = modifiedTagName,
                 onValueChange = { modifiedTagName = it },
-                label = "标签名称",
+                label = "标签名称", enabled = busyTagKey == null,
             )
         }
     }
@@ -498,7 +556,7 @@ internal fun RecordDetailScreen(
                 val operationId = goalOperation ?: UUID.randomUUID().toString().also { goalOperation = it }
                 scope.launch {
                     val receipt = withContext(Dispatchers.IO) {
-                        api.updateRecordGoal(item.id, item.revision, goalTitleDraft, goalStatusDraft, operationId)
+                        api.updateRecordGoal(item.id, editingRecordRevision, goalTitleDraft, goalStatusDraft, operationId)
                     }
                     goalSaving = false
                     when {
@@ -510,21 +568,23 @@ internal fun RecordDetailScreen(
                             onChanged()
                         }
                         receipt.conflict -> conflict = receipt
-                        else -> notice = DetailNotice(receipt.message, PebbleFeedbackState.FAILED)
+                        else -> editFailure = receipt.message
                     }
                 }
             },
         ) {
+            editFailure?.let { PebbleFeedback(PebbleFeedbackState.FAILED, detail = it) }
             PebbleInput(
                 value = goalTitleDraft,
                 onValueChange = {
                     goalTitleDraft = it
                     goalOperation = null
                 },
-                label = "事项名称",
+                label = "事项名称", enabled = !goalSaving,
             )
             PebbleText("当前事项状态", style = MaterialTheme.typography.labelLarge)
             PebbleSegmented(
+                enabled = !goalSaving,
                 options = ItemStatus.entries.map { it.label },
                 selectedIndex = ItemStatus.entries.indexOf(goalStatusDraft),
                 onSelect = {
@@ -570,13 +630,14 @@ internal fun RecordDetailScreen(
                             onChanged()
                         }
                         receipt.conflict -> conflict = receipt
-                        else -> notice = DetailNotice(receipt.message, PebbleFeedbackState.FAILED)
+                        else -> editFailure = receipt.message
                     }
                 }
             },
         ) {
-            if (item.currentCondition.isNotBlank()) {
-                PebbleText("当前条件：${item.currentCondition}", color = PebbleVisuals.Muted)
+            editFailure?.let { PebbleFeedback(PebbleFeedbackState.FAILED, detail = it) }
+            item.currentGoalCondition?.let {
+                PebbleText("本次目标条件：$it", color = PebbleVisuals.Muted)
             }
             if (correctionScope == CorrectionScope.FUTURE) {
                 futureCondition?.let { PebbleText("当前长期条件：${it.text} · 修订 ${it.revision}", color = PebbleVisuals.Muted) }
@@ -587,14 +648,14 @@ internal fun RecordDetailScreen(
                     conditionDraft = it
                     correctionOperation = null
                 },
-                label = "新的适用条件",
+                label = "新的适用条件", enabled = !correctionSaving,
             )
             PebbleText("影响范围", style = MaterialTheme.typography.labelLarge)
             Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 CorrectionScope.entries.forEach { option ->
                     PebbleChoiceTile(
                         label = option.label,
-                        selected = correctionScope == option,
+                        selected = correctionScope == option, enabled = !correctionSaving,
                         onSelect = {
                             correctionScope = option
                             correctionOperation = null
@@ -623,7 +684,7 @@ internal fun RecordDetailScreen(
             onConfirm = {
                 scope.launch {
                     conflict = null
-                    reload()
+                    reload(refreshEditingBase = true)
                     onChanged()
                 }
             },
@@ -631,7 +692,7 @@ internal fun RecordDetailScreen(
             PebbleText(receipt.message)
             receipt.currentRecord?.let { current ->
                 PebbleText("最新记录修订：${current.revision}", color = PebbleVisuals.Muted)
-                PebbleText("当前条件：${current.currentCondition.ifBlank { "未设置" }}")
+                PebbleText("本次目标条件：${current.currentGoalCondition ?: "未设置"}")
                 PebbleText("当前状态：${current.itemStatus.label}")
             }
             receipt.currentPreference?.let {
@@ -647,14 +708,12 @@ internal fun RecordDetailScreen(
 private fun TaskProgressCard(task: CoreTask, busy: Boolean, onAction: (TaskAction) -> Unit) {
     PebbleCard {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            PebbleStatusBadge(taskFeedback(task.state), label = task.state.label())
+            PebbleStatusBadge(task.feedbackState(), label = task.progressLabel())
             PebbleText(task.kind.label(), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
             PebbleText("修订 ${task.revision}", color = PebbleVisuals.Muted, style = MaterialTheme.typography.bodySmall)
         }
         PebbleText(
-            task.phase?.let { "阶段：$it" }
-                ?: task.waitReason?.let { "等待原因：${task.waitReason.label()}" }
-                ?: "尚未返回阶段信息",
+            task.progressDescription(),
             color = PebbleVisuals.Muted,
         )
         if (task.allowedActions.isEmpty()) {
@@ -689,18 +748,19 @@ private fun itemStatusFeedback(status: ItemStatus): PebbleFeedbackState = when (
     ItemStatus.COMPLETED -> PebbleFeedbackState.UPDATED
 }
 
-private fun taskFeedback(state: TaskState): PebbleFeedbackState = when (state) {
+internal fun CoreTask.feedbackState(): PebbleFeedbackState = when (state) {
     TaskState.QUEUED, TaskState.RUNNING -> PebbleFeedbackState.PROCESSING
-    TaskState.WAITING -> PebbleFeedbackState.WAITING
+    TaskState.WAITING -> if (waitReason == "user_paused") PebbleFeedbackState.PAUSED else PebbleFeedbackState.WAITING
     TaskState.NEEDS_REVIEW -> PebbleFeedbackState.REVIEW
     TaskState.COMPLETED -> PebbleFeedbackState.UPDATED
-    TaskState.FAILED, TaskState.STALE, TaskState.CANCELLED -> PebbleFeedbackState.PROCESSING_FAILED
+    TaskState.CANCELLED -> PebbleFeedbackState.PAUSED
+    TaskState.FAILED, TaskState.STALE -> PebbleFeedbackState.PROCESSING_FAILED
 }
 
-private fun TaskState.label(): String = when (this) {
+internal fun CoreTask.progressLabel(): String = when (state) {
     TaskState.QUEUED -> "已排队"
     TaskState.RUNNING -> "正在整理"
-    TaskState.WAITING -> "等待条件"
+    TaskState.WAITING -> if (waitReason == "user_paused") "已暂停" else "等待条件"
     TaskState.NEEDS_REVIEW -> "待核对"
     TaskState.COMPLETED -> "已完成"
     TaskState.FAILED -> "整理失败"
@@ -716,9 +776,26 @@ private fun com.pebblepile.android.model.TaskKind.label(): String = when (name) 
     else -> name
 }
 
-private fun String.label(): String = when (this) {
-    "user_paused" -> "用户暂停"
-    else -> this
+internal fun CoreTask.progressDescription(): String = when (state) {
+    TaskState.QUEUED, TaskState.RUNNING -> when (phase) {
+        "retry_queued" -> if (state == TaskState.QUEUED) "重试任务已排队。" else "正在重新处理。"
+        "isolated" -> "资料已隔离，等待清理。"
+        null -> if (state == TaskState.QUEUED) "等待开始处理。" else "任务正在处理。"
+        else -> "当前阶段：$phase"
+    }
+    TaskState.WAITING -> when (waitReason) {
+        "user_paused" -> "选择“继续”可恢复任务。"
+        "network" -> "等待网络连接。"
+        "model" -> "等待模型就绪。"
+        "budget_exhausted" -> "处理预算已用完，等待追加额度。"
+        null -> "等待处理条件就绪。"
+        else -> "等待原因：$waitReason"
+    }
+    TaskState.NEEDS_REVIEW -> "请核对本次处理结果。"
+    TaskState.COMPLETED -> "本次处理已完成。"
+    TaskState.FAILED -> if (TaskAction.RETRY in allowedActions) "可以重试此任务。" else "本次处理失败。"
+    TaskState.CANCELLED -> "本次任务已取消。"
+    TaskState.STALE -> "任务依赖的输入已更新。"
 }
 
 private fun TaskAction.label(): String = when (this) {
@@ -728,24 +805,11 @@ private fun TaskAction.label(): String = when (this) {
     TaskAction.RETRY -> "重试此任务"
 }
 
-private fun highlightedSource(text: String, start: Int, end: Int): AnnotatedString {
-    val codePoints = text.codePointCount(0, text.length)
-    val safeStart = start.coerceIn(0, codePoints)
-    val safeEnd = end.coerceIn(safeStart, codePoints)
-    val utf16Start = text.offsetByCodePoints(0, safeStart)
-    val utf16End = text.offsetByCodePoints(0, safeEnd)
-    return buildAnnotatedString {
-        append(text)
-        if (utf16End > utf16Start) {
-            addStyle(
-                SpanStyle(
-                    background = PebbleVisuals.MossSoft,
-                    color = PebbleVisuals.Moss,
-                    fontWeight = FontWeight.Medium,
-                ),
-                utf16Start,
-                utf16End,
-            )
-        }
-    }
+private fun highlightedSource(text: String, range: IntRange): AnnotatedString = buildAnnotatedString {
+    append(text)
+    addStyle(
+        SpanStyle(background = PebbleVisuals.MossSoft, color = PebbleVisuals.Moss, fontWeight = FontWeight.Medium),
+        range.first,
+        range.last + 1,
+    )
 }

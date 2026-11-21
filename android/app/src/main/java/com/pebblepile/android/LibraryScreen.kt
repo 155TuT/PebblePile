@@ -16,9 +16,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,7 +27,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.pebblepile.android.model.ItemStatus
 import com.pebblepile.android.model.PebbleRecord
+import com.pebblepile.android.model.TagReviewState
 import com.pebblepile.android.service.CoreApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -48,10 +51,13 @@ internal fun LibraryScreen(
     onMessage: (String, PebbleFeedbackState) -> Unit,
 ) {
     var records by remember { mutableStateOf<List<PebbleRecord>>(emptyList()) }
-    var loading by rememberSaveable { mutableStateOf(true) }
-    var loadError by rememberSaveable { mutableStateOf<String?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var loadError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(refreshKey) {
+    val focus = LocalFocusManager.current
+    var retry by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(api, refreshKey, retry) {
         loading = true
         runCatching { withContext(Dispatchers.IO) { api.queryRecords().records } }
             .onSuccess {
@@ -64,8 +70,12 @@ internal fun LibraryScreen(
                 if (selectedPerson != null && it.none { record -> selectedPerson in record.people }) {
                     onSelectedPersonChange(null)
                 }
+                if (selectedStatus != null && it.none { record -> record.itemStatus == selectedStatus }) {
+                    onSelectedStatusChange(null)
+                }
             }
             .onFailure {
+                if (it is CancellationException) throw it
                 loadError = it.message ?: "记录库读取失败"
                 onMessage("记录库读取失败", PebbleFeedbackState.FAILED)
             }
@@ -95,21 +105,15 @@ internal fun LibraryScreen(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding = PaddingValues(bottom = 24.dp),
     ) {
         item(key = "library_header") {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Spacer(Modifier.height(4.dp))
-                PebbleText("记录库", style = MaterialTheme.typography.titleLarge)
-                PebbleText(
-                    "通过时间、记录本、人物、状态和标签找回同一份原话。",
-                    color = PebbleVisuals.Muted,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                PebbleSearchField(query, onQueryChange, { focus.clearFocus() }, Modifier.testTag("library_search"))
                 PebbleLibraryViewSelector(view, onViewChange)
-                PebbleSearchField(query, onQueryChange, {}, Modifier.testTag("library_search"))
             }
         }
 
@@ -187,11 +191,9 @@ internal fun LibraryScreen(
                 PebbleFeedback(PebbleFeedbackState.PROCESSING, detail = "正在读取记录")
             }
             loadError != null -> item("error") {
-                PebbleFeedback(
-                    PebbleFeedbackState.PROCESSING_FAILED,
-                    detail = loadError,
-                    onRetry = { onMessage("请返回后重新打开记录库", PebbleFeedbackState.WAITING) },
-                )
+                PebbleBanner("记录库读取失败", PebbleGlyph.Warning, detail = loadError, tone = PebbleVisuals.Danger) {
+                    PebbleButton("重新读取", { retry++ }, icon = PebbleGlyph.Retry)
+                }
             }
             visible.isEmpty() -> item("empty") {
                 PebbleCard {
@@ -266,7 +268,8 @@ private fun TimelineRecord(record: PebbleRecord, onOpen: (String) -> Unit, onTag
         if (record.tags.any { !it.excluded }) {
             PebbleTagGroup {
                 record.tags.filterNot { it.excluded }.take(5).forEach { tag ->
-                    PebbleTag(label = tag.name, onClick = { onTagClick(tag.name) })
+                    PebbleTag(label = tag.name, needsReview = tag.reviewState == TagReviewState.NEEDS_REVIEW,
+                        onClick = { onTagClick(tag.name) })
                 }
             }
         }

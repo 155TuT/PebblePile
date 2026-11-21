@@ -15,6 +15,7 @@ data class RecordTag(
     val algorithmVersion: String,
     val excluded: Boolean = false,
     val reviewState: TagReviewState = TagReviewState.AUTO,
+    val sourceRef: SourceRef? = null,
 )
 
 data class EvidenceItem(
@@ -121,7 +122,7 @@ data class CoreTask(
                 setOf(TaskAction.CANCEL)
             }
             TaskState.NEEDS_REVIEW -> setOf(TaskAction.CANCEL)
-            TaskState.FAILED, TaskState.STALE -> setOf(TaskAction.RETRY)
+            TaskState.FAILED -> setOf(TaskAction.RETRY)
             else -> emptySet()
         }
 }

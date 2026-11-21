@@ -20,11 +20,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.pebblepile.android.model.ConditionSetting
+import com.pebblepile.android.model.ItemStatus
 import com.pebblepile.android.model.PebbleRecord
+import com.pebblepile.android.model.TagReviewState
 import com.pebblepile.android.service.CoreApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 
 @Composable
@@ -36,17 +39,10 @@ internal fun SettingsHomeScreen(
     onOpenData: () -> Unit,
 ) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Spacer(Modifier.height(8.dp))
-        PebbleText("设置", style = MaterialTheme.typography.titleLarge)
-        PebbleText(
-            "这里的选项保存在本机演示层。自动整理会改变之后新记录的待办创建。",
-            color = PebbleVisuals.Muted,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
         PebbleCard {
             PebbleSwitch(
                 "自动整理",
@@ -58,7 +54,7 @@ internal fun SettingsHomeScreen(
                 settings.inferenceAssist,
                 { onSettingsChange(settings.copy(inferenceAssist = it)) },
             )
-            PebbleText("字号与外观", style = MaterialTheme.typography.labelLarge)
+            PebbleText("文字大小", style = MaterialTheme.typography.labelLarge)
             PebbleSegmented(
                 options = PebbleTextScale.entries.map { it.label },
                 selectedIndex = PebbleTextScale.entries.indexOf(settings.textScale),
@@ -82,177 +78,132 @@ internal fun SettingsHomeScreen(
                 onClick = onOpenRules,
             )
             PebbleListRow(
-                label = "数据处理与备份",
-                detail = "查看本地记录、来源数量并分享数据摘要",
+                label = "本地数据",
+                detail = "查看记录和来源版本数量，分享统计摘要",
                 icon = PebbleGlyph.Export,
                 onClick = onOpenData,
             )
         }
 
-        PebbleFeedback(
-            PebbleFeedbackState.WAITING,
-            detail = "当前为本地演示适配器：设置与资料库保存在 SharedPreferences。SQLite、加密备份与跨设备恢复由后续仓储模块接入。",
-        )
         Spacer(Modifier.height(24.dp))
     }
 }
 
+private data class MemoryOverview(val records: List<PebbleRecord>, val future: ConditionSetting?)
+
 @Composable
-internal fun MemorySettingsScreen(
-    api: CoreApi,
-    onOpenRecord: (String) -> Unit,
-) {
-    val loaded = rememberRecords(api)
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Spacer(Modifier.height(8.dp))
-        PebbleText("记忆与偏好", style = MaterialTheme.typography.titleLarge)
-        PebbleText(
-            "长期条件来自记录详情中的“以后按此条件”；当前事项条件只在对应记录中生效。",
-            color = PebbleVisuals.Muted,
-            style = MaterialTheme.typography.bodyMedium,
+internal fun MemorySettingsScreen(api: CoreApi, onOpenRecord: (String) -> Unit) {
+    SettingsContent(api, load = {
+        val records = api.queryRecords().records
+        MemoryOverview(
+            records.filter { !it.currentGoalCondition.isNullOrBlank() },
+            records.firstOrNull()?.let { api.queryContext(it.id)?.futureCondition },
         )
-        loaded.records.forEach { record ->
+    }) { memory ->
+        memory.future?.let { preference ->
+            PebbleCard {
+                PebbleListRow("长期条件", detail = preference.text, icon = PebbleGlyph.Memory,
+                    onClick = { onOpenRecord(preference.recordId) })
+            }
+        }
+        memory.records.forEach { record ->
             PebbleCard {
                 PebbleListRow(
                     label = record.title.ifBlank { record.rawText.take(24) },
-                    detail = record.currentCondition.ifBlank { "尚未设置适用条件" },
-                    value = record.conditionScope?.label,
+                    detail = record.currentGoalCondition,
+                    value = "仅本次",
                     icon = PebbleGlyph.Memory,
                     onClick = { onOpenRecord(record.id) },
                 )
-                if (record.conditionScope != null) {
-                    PebbleStatusBadge(
-                        PebbleFeedbackState.UPDATED,
-                        label = "适用范围：${record.conditionScope.label}",
-                    )
-                }
             }
         }
-        if (!loaded.loading && loaded.records.isEmpty()) {
-            PebbleFeedback(PebbleFeedbackState.WAITING, detail = "还没有可调整的记忆或条件。")
+        if (memory.future == null && memory.records.isEmpty()) {
+            PebbleText("在记录详情中设置条件后，可以在这里查看。", color = PebbleVisuals.Muted)
         }
-        Spacer(Modifier.height(24.dp))
     }
 }
 
 @Composable
 internal fun TagRulesScreen(api: CoreApi) {
-    val loaded = rememberRecords(api)
-    val tags = loaded.records.flatMap { it.tags }.distinctBy { it.name }
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Spacer(Modifier.height(8.dp))
-        PebbleText("标签与规则", style = MaterialTheme.typography.titleLarge)
-        PebbleText(
-            "以下标签由本地文本规则生成，不冒充算法结果。可在记录详情确认、修改、排除或标记待核对。",
-            color = PebbleVisuals.Muted,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        if (tags.isEmpty() && !loaded.loading) {
-            PebbleFeedback(PebbleFeedbackState.WAITING, detail = "还没有生成标签。")
-        }
-        tags.forEach { tag ->
+    SettingsContent(api, load = { api.queryRecords().records }) { records ->
+        val tagged = records.filter { record -> record.tags.any { !it.excluded } }
+        if (tagged.isEmpty()) PebbleText("还没有生效的标签。", color = PebbleVisuals.Muted)
+        tagged.forEach { record ->
             PebbleCard {
-                PebbleTag(
-                    label = tag.name,
-                    origin = "${tag.algorithmVersion} · ${tag.reviewState.label}",
-                    needsReview = tag.reviewState == com.pebblepile.android.model.TagReviewState.NEEDS_REVIEW,
-                )
-                PebbleText(
-                    "依据：${tag.sourceQuote}",
-                    color = PebbleVisuals.Muted,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                PebbleText(record.title.ifBlank { record.rawText.take(24) }, style = MaterialTheme.typography.titleMedium)
+                record.tags.filterNot { it.excluded }.forEach { tag ->
+                    PebbleTag(
+                        label = tag.name,
+                        origin = tag.algorithmVersion,
+                        needsReview = tag.reviewState == TagReviewState.NEEDS_REVIEW,
+                    )
+                    PebbleText("${tag.reviewState.label} · ${tag.sourceQuote}", color = PebbleVisuals.Muted)
+                }
             }
         }
-        Spacer(Modifier.height(24.dp))
     }
 }
+
+private data class DataSummary(val records: Int, val sources: Int, val byStatus: Map<ItemStatus, Int>)
 
 @Composable
 internal fun DataManagementScreen(api: CoreApi) {
     val context = LocalContext.current
-    val loaded = rememberRecords(api)
-    var sourceCount by remember { mutableIntStateOf(0) }
-    LaunchedEffect(loaded.records) {
-        sourceCount = withContext(Dispatchers.IO) {
-            loaded.records.sumOf { record -> api.getRecordDetail(record.id)?.sources?.size ?: 0 }
-        }
-    }
-    Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Spacer(Modifier.height(8.dp))
-        PebbleText("数据处理与备份", style = MaterialTheme.typography.titleLarge)
+    SettingsContent(api, load = {
+        val records = api.queryRecords().records
+        DataSummary(records.size, records.sumOf { api.getRecordDetail(it.id)?.sources?.size ?: 0 },
+            records.groupingBy { it.itemStatus }.eachCount())
+    }) { summary ->
         PebbleCard {
-            PebbleListRow(
-                label = "本地记录",
-                value = loaded.records.size.toString(),
-                icon = PebbleGlyph.Library,
-            )
-            PebbleListRow(
-                label = "来源版本",
-                value = sourceCount.toString(),
-                icon = PebbleGlyph.Sources,
-            )
-            PebbleListRow(
-                label = "备份位置",
-                detail = "当前仅在应用私有 SharedPreferences 中保存",
-                icon = PebbleGlyph.Connection,
-            )
+            PebbleListRow("本地记录", value = summary.records.toString(), icon = PebbleGlyph.Library)
+            PebbleListRow("来源版本", value = summary.sources.toString(), icon = PebbleGlyph.Sources)
         }
-        PebbleFeedback(
-            PebbleFeedbackState.WAITING,
-            detail = "当前没有完整加密备份导出。下面的操作会把资料摘要交给系统分享目标，便于交接检查，不会上传到应用服务器。",
-        )
+        PebbleText("摘要包含记录数、来源版本数和各事项状态的数量。", color = PebbleVisuals.Muted)
         PebbleButton(
             "分享本地数据摘要",
             onClick = {
-                val payload = JSONObject()
-                    .put("exportedRecords", loaded.records.size)
-                    .put("sourceVersions", sourceCount)
-                    .put("records", JSONArray().also { array ->
-                        loaded.records.forEach { record ->
-                            array.put(
-                                JSONObject()
-                                    .put("recordId", record.id)
-                                    .put("title", record.title)
-                                    .put("capturedAt", record.capturedAt)
-                                    .put("status", record.itemStatus.name)
-                                    .put("people", JSONArray(record.people))
-                            )
-                        }
-                    })
-                    .toString(2)
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, payload)
-                }
+                val statuses = JSONObject().apply { summary.byStatus.forEach { (status, count) -> put(status.name, count) } }
+                val payload = JSONObject().put("exportedRecords", summary.records)
+                    .put("sourceVersions", summary.sources).put("statusCounts", statuses)
+                val intent = Intent(Intent.ACTION_SEND).setType("text/plain")
+                    .putExtra(Intent.EXTRA_TEXT, payload.toString(2))
                 context.startActivity(Intent.createChooser(intent, "分享 PebblePile 数据摘要"))
             },
-            style = PebbleButtonStyle.Primary,
             icon = PebbleGlyph.Export,
         )
-        Spacer(Modifier.height(24.dp))
     }
 }
 
-private data class LoadedRecords(val loading: Boolean, val records: List<PebbleRecord>)
-
 @Composable
-private fun rememberRecords(api: CoreApi): LoadedRecords {
-    var loading by remember { mutableStateOf(true) }
-    var records by remember { mutableStateOf<List<PebbleRecord>>(emptyList()) }
-    LaunchedEffect(api) {
-        loading = true
-        records = withContext(Dispatchers.IO) { api.queryRecords().records }
-        loading = false
+private fun <T : Any> SettingsContent(api: CoreApi, load: () -> T, content: @Composable (T) -> Unit) {
+    var value by remember(api) { mutableStateOf<T?>(null) }
+    var error by remember(api) { mutableStateOf<String?>(null) }
+    var attempt by remember { mutableIntStateOf(0) }
+    LaunchedEffect(api, attempt) {
+        error = null
+        try {
+            value = withContext(Dispatchers.IO) { load() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            error = e.message ?: "读取失败"
+        }
     }
-    return LoadedRecords(loading, records)
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Spacer(Modifier.height(8.dp))
+        val problem = error
+        val loaded = value
+        when {
+            loaded != null -> content(loaded)
+            problem != null -> {
+                PebbleText(problem, color = PebbleVisuals.Danger)
+                PebbleButton("重新读取", { attempt++ }, style = PebbleButtonStyle.Secondary)
+            }
+            else -> PebbleText("正在读取", color = PebbleVisuals.Muted)
+        }
+        Spacer(Modifier.height(24.dp))
+    }
 }

@@ -20,7 +20,7 @@ Android 工程、首页输入、记录库、系统分享、详情、任务与设
 - 详情从 `RecordDetail.jobIds` 读取整理任务，可查看阶段、等待原因并暂停、继续、取消或重试对应任务。
 - 标签支持确认、修改、排除、恢复和标记待核对；记录库筛选随修订更新。
 - 证据绑定 `SourceRef`、来源版本和 Unicode 码点半开区间 `[start,end)`，来源失效时单独显示原因。
-- 设置页包含自动整理、推断辅助、字号／外观、记忆与偏好、标签与规则、数据处理与备份入口。
+- 设置页包含自动整理、推断辅助、文字大小、记忆与偏好、标签与规则和本地数据。
 - 设置保存在 `pebblepile_settings`；自动整理会实际影响之后新记录的整理任务创建。
 - `LocalCoreApi` 通过 SharedPreferences 仓储保存记录、原话版本、任务和回执。重开应用后重发同一次请求，可以取回首次保存的回执。
 
@@ -41,7 +41,7 @@ app\build\outputs\apk\debug\app-debug.apk
 
 工程路径允许包含中文，配置中已开启 `android.overridePathCheck=true`。
 
-接上一台测试设备，在 `android/` 运行 `.\gradlew.bat connectedDebugAndroidTest`。当前 27 项仪器测试全部通过，覆盖分享确认、依据回查、纠正草稿、冲突恢复、设置持久化、组合筛选、标签操作和任务暂停／继续。[契约测试](app/src/androidTest/java/com/pebblepile/android/CoreContractTest.kt) · [记录流程](app/src/androidTest/java/com/pebblepile/android/RecordFlowTest.kt) · [完整前端流程](app/src/androidTest/java/com/pebblepile/android/FrontendFlowTest.kt)
+接上一台测试设备，在 `android/` 运行 `.\gradlew.bat connectedDebugAndroidTest`。设备用例覆盖分享确认、依据回查、纠正草稿、冲突恢复、设置持久化、组合筛选、标签操作和任务暂停／继续。[契约测试](app/src/androidTest/java/com/pebblepile/android/CoreContractTest.kt) · [记录流程](app/src/androidTest/java/com/pebblepile/android/RecordFlowTest.kt) · [完整前端流程](app/src/androidTest/java/com/pebblepile/android/FrontendFlowTest.kt)
 
 ## 单元测试
 
@@ -54,7 +54,7 @@ cd android
 
 报告在 `app/build/reports/tests/testDebugUnitTest/index.html`。Android CI 在相关 PR 和 `main` 推送中运行同一组测试，上传 HTML 报告和逐项 JUnit XML。
 
-JVM 测试任务会把项目内的编译输出镜像到系统临时目录后再启动工作进程，避免 Windows 中文检出路径被 Gradle 参数文件按错误字符集解析。当前工作区可直接执行上述命令，无需复制到英文路径。
+在 Windows 中文路径下，Gradle 按检出目录和测试任务分别复制项目编译输出，Debug 和 Release 可以各自运行。
 
 ## 手动验收
 
@@ -76,7 +76,7 @@ JVM 测试任务会把项目内的编译输出镜像到系统临时目录后再�
 
 ### 记录库与重开
 
-1. 返回首页，点击顶部“记录库”或“打开记录库”。
+1. 返回首页，点左上角的“记录库”。
 2. 预期按日期看到刚才的记录；切换记录本，并尝试搜索、标签、人物和事项状态的组合筛选。
 3. 打开记录再返回，预期视图与筛选仍保留。
 4. 结束并重开：
@@ -92,9 +92,9 @@ JVM 测试任务会把项目内的编译输出镜像到系统临时目录后再�
 ### 详情、任务与标签
 
 1. 在详情编辑事项名称和当前状态。
-2. 在标签区域依次确认、修改、标记待核对或排除一个标签，返回记录库检查筛选选项同步更新。
+2. 点详情标签打开依据面板，核对原话版本和算法。确认、修改、标记待核对或排除标签后，返回记录库核对筛选。
 3. 点击依据卡，预期面板显示来源 ID、来源版本和码点区间，并高亮完整来源原话。
-4. 在整理任务中暂停，再继续；失败任务会提供只针对该 `jobId` 的重试动作，原记录不删除。
+4. 在整理任务中点暂停，再点继续。任务失败后用原 `jobId` 重试，回到详情核对原话。
 5. 分别保存“仅本次”和“以后按此条件”，确认前者只改变当前事项，后者更新长期条件并创建上下文重建任务。
 
 ### 设置
@@ -102,8 +102,8 @@ JVM 测试任务会把项目内的编译输出镜像到系统临时目录后再�
 1. 从首页左上角打开设置。
 2. 切换自动整理、推断辅助和字号，结束进程后重开，预期状态仍保留。
 3. 关闭自动整理后保存新记录，预期不再创建整理任务。
-4. 打开记忆与偏好、标签与规则、数据处理与备份三个入口，确认内容来自当前本地资料库。
-5. 数据页的“分享本地数据摘要”会打开系统分享目标；当前是摘要导出，不是完整加密备份。
+4. 打开记忆与偏好、标签与规则、本地数据三个入口，确认内容来自当前本地资料库。
+5. 在本地数据页点“分享本地数据摘要”，选择接收应用，核对记录数、来源版本数和各事项状态的数量。
 
 ### 系统分享
 
@@ -125,4 +125,4 @@ adb shell run-as com.pebblepile.android cat shared_prefs/pebblepile_issue4_demo.
 - #8 接任务调度，#9 接饮食标签、建议和证据。详情当前展示固定的晚餐样例，联调时按原话区间核对每条依据。[晚餐验收材料](../docs/issue10-testing.md)
 - #10、#11 在首测手机和 360dp 小屏复验安装、分享、重开、标签、依据和反馈。[组件交接](../docs/android-components-handoff.md)
 
-当前边界：人物来自原话中的 `@人物` 本地规则；事项状态由记录、任务和反馈更新；标签、建议与证据仍是演示规则，不冒充 #8、#9 的真实算法结果。完整 SQLite、加密备份和真实语音识别不在本轮演示层内。
+人物筛选从原话中的 `@人物` 取值。用户在详情里修改事项状态，后台任务单独记录进度。本地规则为加班晚餐样例提供建议和引文，正式仓储、调度和算法分别由 #7、#8、#9 接入。

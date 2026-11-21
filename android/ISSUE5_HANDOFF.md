@@ -9,11 +9,11 @@
 | 详情按 recordId 加载 | `RecordDetailScreen(recordId)` 调用 `CoreApi.getRecordDetail` |
 | 原话、标签、建议依据 | `RecordDetailScreen`；证据按 `SourceRef`、版本和码点区间回查 |
 | 补记实际选择和体验 | `CoreApi.recordOutcome`；实际反馈区域 |
-| 标签确认／修改／排除／待核对 | `CoreApi.reviseTag`；`PebbleTag` 的起源与待核对状态 |
+| 标签确认／修改／排除／待核对 | 点 `PebbleTag` 打开依据面板，核对来源版本后调用 `CoreApi.reviseTag` |
 | 事项信息与状态 | `CoreApi.updateRecordGoal`；详情“当前事项”区域 |
 | 任务阶段与控制 | `RecordDetail.jobIds`、`CoreApi.getTask/controlTask`；暂停、继续、取消、失败重试 |
 | 仅本次／以后按此条件 | `CorrectionScope`；纠正条件弹窗 |
-| 修订冲突与草稿保留 | `ApiReceipt.conflict`；冲突提示；输入状态不清空 |
+| 修订冲突与草稿保留 | `ApiReceipt.conflict`；对照最新版本，保留草稿并重试 |
 
 ## 与团队协作的待办
 

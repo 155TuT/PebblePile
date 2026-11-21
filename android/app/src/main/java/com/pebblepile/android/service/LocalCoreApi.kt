@@ -73,7 +73,7 @@ data class LocalContext(
 class LocalCoreApi(
     private val repository: CoreRepository,
     private val clientId: String = "android",
-    private var autoOrganize: Boolean = true,
+    @Volatile private var autoOrganize: Boolean = true,
     private val clock: () -> String = { LocalDateTime.now().format(dateTimeFormat) },
     private val newId: () -> String = { UUID.randomUUID().toString() },
     private val decorateSampleRecord: (PebbleRecord) -> PebbleRecord = { it },
@@ -112,22 +112,19 @@ class LocalCoreApi(
         val old = request.recordId?.let { tx.record(it) }
         if (request.recordId != null) {
             if (old == null) return@write invalid("记录不存在")
-            checkRevision(old, request.baseRevision)?.let { receipt ->
-                return@write receipt.copy(
-                    currentRecord = receipt.currentRecord?.let { withEffectiveStatus(it, tx.tasks(it.id)) },
-                )
-            }
+            checkRevision(old, request.baseRevision)?.let { return@write it }
         }
         val recordId = old?.id ?: newId()
         val capturedAt = request.capturedAt ?: clock()
         val source = SourceRef(newId(), 1)
-        val record = old?.copy(revision = old.revision + 1) ?: decorateCreatedRecord(
-            PebbleRecord(recordId, request.text, capturedAt, request.captureMethod),
-            source,
-        )
+        val organize = autoOrganize
+        val record = old?.copy(revision = old.revision + 1) ?: run {
+            val captured = PebbleRecord(recordId, request.text, capturedAt, request.captureMethod)
+            if (organize) decorateCreatedRecord(captured, source) else captured
+        }
         tx.putRecord(record)
         tx.putSource(CapturedSource(source, recordId, request.text, request.captureMethod, capturedAt))
-        saved(record, "已保存").copy(source = source, jobId = enqueue(tx, record, TaskKind.ORGANIZE))
+        saved(record, "已保存").copy(source = source, jobId = enqueue(tx, record, TaskKind.ORGANIZE, organize))
     }
 
     override suspend fun getRecord(recordId: String): PebbleRecord? = getRecordDetail(recordId)?.record
@@ -137,7 +134,7 @@ class LocalCoreApi(
         val sources = tx.sources(recordId).filter { sourceRef == null || it.ref == sourceRef }
         if (sourceRef != null && sources.isEmpty()) return@read null
         val tasks = tx.tasks(recordId).filter { canReadTask(tx, it) }
-        RecordDetail(withEffectiveStatus(record, tasks), sources, tasks.map { it.id }, tx.revision, tx.futureCondition)
+        RecordDetail(record, sources, tasks.map { it.id }, tx.revision, tx.futureCondition)
     }
 
     override suspend fun recentRecords(): List<PebbleRecord> = queryRecords().records
@@ -145,7 +142,7 @@ class LocalCoreApi(
     override fun queryRecords(tags: Set<String>): RecordQueryResult = repository.read { tx ->
         val records = tx.records().asReversed().filter { record ->
             tags.all { name -> record.tags.any { it.name == name && !it.excluded } }
-        }.map { record -> withEffectiveStatus(record, tx.tasks(record.id)) to captureInstant(record.capturedAt) }
+        }.map { record -> record to captureInstant(record.capturedAt) }
             .sortedByDescending { it.second }
             .map { it.first }
         RecordQueryResult(records, tx.revision)
@@ -268,7 +265,9 @@ class LocalCoreApi(
         name: String?,
         operationId: String,
     ): ApiReceipt = changeRecord(
-        recordId, baseRevision, operationId, "revise_tag", tagId, action.name, name.orEmpty(),
+        recordId, baseRevision, operationId,
+        if (action == TagAction.EXCLUDE) "revise_tags" else "revise_tag",
+        *(if (action == TagAction.EXCLUDE) arrayOf(tagId) else arrayOf(tagId, action.name, name.orEmpty())),
     ) { tx, record ->
         if (record.tags.none { it.id == tagId }) return@changeRecord invalid("标签不存在")
         if (action == TagAction.MODIFY && name.isNullOrBlank()) return@changeRecord invalid("修改后的标签不能为空")
@@ -282,7 +281,6 @@ class LocalCoreApi(
                     TagAction.REVIEW -> tag.copy(excluded = false, reviewState = TagReviewState.NEEDS_REVIEW)
                 }
             },
-            itemStatus = if (action == TagAction.REVIEW) ItemStatus.NEEDS_REVIEW else record.itemStatus,
         )
         tx.putRecord(updated)
         val message = when (action) {
@@ -321,7 +319,6 @@ class LocalCoreApi(
         val updated = record.copy(
             revision = record.revision + 1,
             outcomes = record.outcomes + outcome,
-            itemStatus = ItemStatus.COMPLETED,
         )
         tx.putRecord(updated)
         saved(updated, "实际反馈已保存").copy(outcomeId = outcome.id, jobId = enqueue(tx, updated, TaskKind.APPLY_FEEDBACK))
@@ -344,7 +341,6 @@ class LocalCoreApi(
             conditionScope = scope,
             revision = record.revision + 1,
             currentGoalCondition = if (scope == CorrectionScope.THIS_TIME) condition else record.currentGoalCondition,
-            itemStatus = if (scope == CorrectionScope.THIS_TIME) ItemStatus.IN_PROGRESS else ItemStatus.WAITING,
         )
         tx.putRecord(updated)
         if (scope == CorrectionScope.THIS_TIME) {
@@ -384,11 +380,7 @@ class LocalCoreApi(
     ): ApiReceipt = write(operationId, method, recordId, baseRevision.toString(), *params) { tx ->
         val record = tx.record(recordId) ?: return@write invalid("记录不存在")
         val conflict = checkRevision(record, baseRevision)
-        if (conflict != null) {
-            conflict.copy(currentRecord = withEffectiveStatus(record, tx.tasks(record.id)))
-        } else {
-            change(tx, record)
-        }
+        conflict ?: change(tx, record)
     }
 
     private fun write(
@@ -483,22 +475,11 @@ class LocalCoreApi(
         code = "REVISION_CONFLICT", currentRevision = revision, nextAction = "preview_again"
     )
 
-    private fun enqueue(tx: CoreWriter, record: PebbleRecord, kind: TaskKind): String? {
-        if (!autoOrganize) return null
+    private fun enqueue(tx: CoreWriter, record: PebbleRecord, kind: TaskKind, enabled: Boolean = autoOrganize): String? {
+        if (!enabled) return null
         val task = CoreTask(newId(), record.id, kind, record.revision)
         tx.putTask(task)
         return task.id
-    }
-
-    private fun withEffectiveStatus(record: PebbleRecord, tasks: List<CoreTask>): PebbleRecord {
-        if (record.itemStatus == ItemStatus.COMPLETED) return record
-        val status = when {
-            tasks.any { it.state == TaskState.NEEDS_REVIEW } -> ItemStatus.NEEDS_REVIEW
-            tasks.any { it.state == TaskState.WAITING } -> ItemStatus.WAITING
-            tasks.any { it.state == TaskState.QUEUED || it.state == TaskState.RUNNING } -> ItemStatus.IN_PROGRESS
-            else -> record.itemStatus
-        }
-        return record.copy(itemStatus = status)
     }
 
     private fun checkRevision(record: PebbleRecord, baseRevision: Long?): ApiReceipt? = when {

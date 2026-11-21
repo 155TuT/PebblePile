@@ -1,4 +1,6 @@
+import java.nio.charset.StandardCharsets
 import java.util.Properties
+import java.util.UUID
 import org.gradle.api.tasks.testing.Test
 
 plugins {
@@ -124,24 +126,27 @@ dependencies {
 // Gradle passes project-local test outputs through a JVM argument file. On Windows,
 // non-ASCII checkout paths can be decoded with the platform charset before the test
 // worker starts, which makes every compiled test class appear to be missing.
-tasks.withType<Test>().configureEach {
-    doFirst {
-        val mirrorRoot = file("${System.getProperty("java.io.tmpdir")}/pebblepile-android-tests")
-        delete(mirrorRoot)
-        val projectRoot = rootDir.toPath().toAbsolutePath().normalize()
-        classpath = files(classpath.files.map { entry ->
-            val normalized = entry.toPath().toAbsolutePath().normalize()
-            if (!normalized.startsWith(projectRoot) || !entry.exists()) {
-                entry
-            } else {
-                val target = File(mirrorRoot, rootDir.toPath().relativize(normalized).toString())
-                if (entry.isDirectory) entry.copyRecursively(target, overwrite = true)
-                else {
-                    target.parentFile.mkdirs()
-                    entry.copyTo(target, overwrite = true)
+if (File.separatorChar == '\\' && !StandardCharsets.US_ASCII.newEncoder().canEncode(rootDir.absolutePath)) {
+    val projectRoot = rootDir.toPath().toAbsolutePath().normalize()
+    val checkoutId = UUID.nameUUIDFromBytes(projectRoot.toString().toByteArray(Charsets.UTF_8))
+    tasks.withType<Test>().configureEach {
+        doFirst {
+            val mirrorRoot = File(System.getProperty("java.io.tmpdir"), "pebblepile-android-tests/$checkoutId/$name")
+            classpath = files(classpath.files.map { entry ->
+                val source = entry.toPath().toAbsolutePath().normalize()
+                if (!source.startsWith(projectRoot) || !entry.exists()) {
+                    entry
+                } else {
+                    val target = File(mirrorRoot, projectRoot.relativize(source).toString())
+                    if (entry.isDirectory) {
+                        project.sync { from(entry); into(target) }
+                    } else {
+                        target.parentFile.mkdirs()
+                        entry.copyTo(target, overwrite = true)
+                    }
+                    target
                 }
-                target
-            }
-        })
+            })
+        }
     }
 }

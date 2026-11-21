@@ -6,6 +6,7 @@ import android.content.Intent
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -27,8 +28,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.pebblepile.android.model.ApiReceipt
 import com.pebblepile.android.model.CoreTask
-import com.pebblepile.android.model.TaskState
 import com.pebblepile.android.service.CoreApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -49,21 +50,30 @@ internal fun HomeEntryScreen(
     onDraftChange: (String) -> Unit,
     captureMode: PebbleCaptureMode,
     onCaptureModeChange: (PebbleCaptureMode) -> Unit,
-    onOpenLibrary: () -> Unit,
     onOpenRecord: (String) -> Unit,
     onMessage: (String, PebbleFeedbackState) -> Unit,
     onSaved: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var saving by rememberSaveable { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
     var operationId by rememberSaveable { mutableStateOf<String?>(null) }
     var saveError by rememberSaveable { mutableStateOf<String?>(null) }
     var receiptMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var receiptRecordId by rememberSaveable { mutableStateOf<String?>(null) }
     var receiptJobId by rememberSaveable { mutableStateOf<String?>(null) }
-    var currentTask by remember { mutableStateOf<CoreTask?>(null) }
-    var assist by remember { mutableStateOf<InputAssist?>(null) }
+    var currentTask by remember(receiptJobId) { mutableStateOf<CoreTask?>(null) }
+    var taskReadError by remember(receiptJobId) { mutableStateOf<String?>(null) }
+    var readAttempt by remember(receiptJobId) { mutableStateOf(0) }
+    var assist by rememberSaveable { mutableStateOf<InputAssist?>(null) }
     var assistText by rememberSaveable { mutableStateOf("") }
+
+    fun editDraft(text: String) {
+        if (text != draft) {
+            operationId = null
+            saveError = null
+            onDraftChange(text)
+        }
+    }
 
     val voiceLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
@@ -71,7 +81,7 @@ internal fun HomeEntryScreen(
                 ?.firstOrNull()
                 ?.trim()
                 .orEmpty()
-            if (spoken.isNotBlank()) onDraftChange(appendDraft(draft, spoken))
+            if (spoken.isNotBlank()) editDraft(appendDraft(draft, spoken))
         }
     }
 
@@ -87,14 +97,16 @@ internal fun HomeEntryScreen(
         }
     }
 
-    LaunchedEffect(draft) {
-        operationId = null
-        saveError = null
-    }
-
-    LaunchedEffect(receiptJobId) {
-        currentTask = receiptJobId?.let { jobId ->
-            withContext(Dispatchers.IO) { api.getTask(jobId) }
+    LaunchedEffect(receiptJobId, readAttempt) {
+        val jobId = receiptJobId ?: return@LaunchedEffect
+        taskReadError = null
+        try {
+            currentTask = withContext(Dispatchers.IO) { api.getTask(jobId) }
+            if (currentTask == null) taskReadError = "找不到本条记录的整理任务。"
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            taskReadError = e.message ?: "读取整理进度失败。"
         }
     }
 
@@ -103,15 +115,23 @@ internal fun HomeEntryScreen(
         saving = true
         saveError = null
         val id = operationId ?: UUID.randomUUID().toString().also { operationId = it }
-        scope.launch {
-            val receipt: ApiReceipt = withContext(Dispatchers.IO) {
-                api.recordExperience(
-                    text = draft,
-                    captureMethod = if (captureMode == PebbleCaptureMode.Chat) "app_home_dialog" else "app_home_record",
-                    operationId = id,
-                )
+        scope.launch(Dispatchers.Main.immediate) {
+            val receipt: ApiReceipt = try {
+                withContext(Dispatchers.IO) {
+                    api.recordExperience(
+                        text = draft,
+                        captureMethod = if (captureMode == PebbleCaptureMode.Chat) "app_home_dialog" else "app_home_record",
+                        operationId = id,
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                saveError = e.message ?: "保存失败，请重试"
+                return@launch
+            } finally {
+                saving = false
             }
-            saving = false
             if (receipt.success && receipt.recordId != null) {
                 operationId = null
                 receiptMessage = "已保存 · ${receipt.recordId}"
@@ -125,72 +145,69 @@ internal fun HomeEntryScreen(
         }
     }
 
-    Column(Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
-        Column(
-            Modifier.weight(1f).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Spacer(Modifier.height(12.dp))
-            PebbleText("留下今天的原话", style = MaterialTheme.typography.headlineSmall)
-            PebbleText(
-                "切换对话或记录不会清空正在输入的内容。",
-                color = PebbleVisuals.Muted,
-                style = MaterialTheme.typography.bodyMedium,
+    BoxWithConstraints(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        // With the IME or large text, let the whole form scroll so all actions remain reachable.
+        val compact = maxHeight < 440.dp
+        val pageScroll = rememberScrollState()
+        Column(if (compact) Modifier.fillMaxSize().verticalScroll(pageScroll) else Modifier.fillMaxSize()) {
+            PebbleCaptureModeSelector(
+                mode = captureMode,
+                onModeChange = { next ->
+                    if (next != captureMode) {
+                        operationId = null
+                        saveError = null
+                        onCaptureModeChange(next)
+                    }
+                },
+                enabled = !saving,
             )
+            Column(
+                if (compact) Modifier else Modifier.weight(1f).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Spacer(Modifier.height(12.dp))
+                PebbleText("留下今天的原话", style = MaterialTheme.typography.headlineSmall)
 
-            val receipt = receiptRecordId?.let { recordId ->
-                HomeReceipt(receiptMessage.orEmpty(), recordId, receiptJobId)
-            }
-            receipt?.let {
-                SavedProgressCard(
-                    receipt = it,
-                    task = currentTask,
-                    onOpenRecord = { onOpenRecord(it.recordId) },
-                )
+                val receipt = receiptRecordId?.let { recordId ->
+                    HomeReceipt(receiptMessage.orEmpty(), recordId, receiptJobId)
+                }
+                receipt?.let {
+                    SavedProgressCard(
+                        receipt = it,
+                        task = currentTask,
+                        readError = taskReadError,
+                        retryRead = { readAttempt++ },
+                        onOpenRecord = { onOpenRecord(it.recordId) },
+                    )
+                }
+
+                saveError?.let {
+                    PebbleFeedback(
+                        PebbleFeedbackState.FAILED,
+                        detail = "$it\n草稿仍保留，可以直接重试同一保存请求。",
+                        onRetry = ::submit,
+                    )
+                }
             }
 
-            saveError?.let {
-                PebbleFeedback(
-                    PebbleFeedbackState.FAILED,
-                    detail = "$it\n草稿仍保留，可以直接重试同一保存请求。",
-                    onRetry = ::submit,
-                )
-            }
-
-            PebbleCard {
-                PebbleText("系统分享和应用内记录会进入同一份资料库。")
-                PebbleButton(
-                    "打开记录库",
-                    onOpenLibrary,
-                    style = PebbleButtonStyle.Secondary,
-                    icon = PebbleGlyph.Library,
-                )
-            }
+            Spacer(Modifier.height(12.dp))
+            PebbleComposer(
+                value = draft,
+                onValueChange = ::editDraft,
+                mode = captureMode,
+                onSubmit = ::submit,
+                onAdd = {
+                    assistText = ""
+                    assist = InputAssist.Material
+                },
+                onVoice = ::launchVoiceInput,
+                submitting = saving,
+                enabled = !saving,
+                error = saveError,
+                canSubmit = draft.isNotBlank(),
+            )
+            Spacer(Modifier.height(16.dp))
         }
-
-        Spacer(Modifier.height(12.dp))
-        PebbleCaptureModeSelector(
-            mode = captureMode,
-            onModeChange = onCaptureModeChange,
-            enabled = !saving,
-        )
-        Spacer(Modifier.height(12.dp))
-        PebbleComposer(
-            value = draft,
-            onValueChange = onDraftChange,
-            mode = captureMode,
-            onSubmit = ::submit,
-            onAdd = {
-                assistText = ""
-                assist = InputAssist.Material
-            },
-            onVoice = ::launchVoiceInput,
-            submitting = saving,
-            enabled = !saving,
-            error = saveError,
-            canSubmit = draft.isNotBlank(),
-        )
-        Spacer(Modifier.height(16.dp))
     }
 
     assist?.let { mode ->
@@ -200,15 +217,15 @@ internal fun HomeEntryScreen(
             confirmLabel = if (mode == InputAssist.Material) "添加到草稿" else "写入草稿",
             confirmEnabled = assistText.isNotBlank(),
             onConfirm = {
-                onDraftChange(appendDraft(draft, assistText.trim()))
+                editDraft(appendDraft(draft, assistText.trim()))
                 assist = null
             },
         ) {
             PebbleText(
                 if (mode == InputAssist.Material) {
-                    "把补充材料写进当前草稿。保存后它仍是一条可回溯的原始材料。"
+                    "这段文字会追加到草稿末尾，随原话一起保存。"
                 } else {
-                    "本机没有可用的系统语音识别入口。下面的内容会作为可编辑草稿写入，不是真实语音识别结果，也不会申请麦克风权限。"
+                    "本机暂时无法识别语音，可以手动输入这段话。"
                 },
                 color = PebbleVisuals.Muted,
             )
@@ -226,26 +243,30 @@ private fun appendDraft(draft: String, addition: String): String =
     if (draft.isBlank()) addition else "${draft.trimEnd()}\n$addition"
 
 @Composable
-private fun SavedProgressCard(receipt: HomeReceipt, task: CoreTask?, onOpenRecord: () -> Unit) {
-    val state = when (task?.state) {
-        null -> PebbleFeedbackState.WAITING
-        TaskState.QUEUED, TaskState.RUNNING -> PebbleFeedbackState.PROCESSING
-        TaskState.WAITING -> PebbleFeedbackState.WAITING
-        TaskState.NEEDS_REVIEW -> PebbleFeedbackState.REVIEW
-        TaskState.COMPLETED -> PebbleFeedbackState.UPDATED
-        TaskState.FAILED, TaskState.STALE, TaskState.CANCELLED -> PebbleFeedbackState.PROCESSING_FAILED
-    }
+private fun SavedProgressCard(
+    receipt: HomeReceipt, task: CoreTask?, readError: String?, retryRead: () -> Unit, onOpenRecord: () -> Unit,
+) {
+    val state = task?.feedbackState() ?: PebbleFeedbackState.WAITING
     PebbleCard {
         PebbleStatusBadge(PebbleFeedbackState.SAVED, label = "已保存")
         PebbleText(receipt.message, style = MaterialTheme.typography.bodyMedium)
-        PebbleStatusBadge(state, label = if (task == null) "未创建整理任务" else state.label)
+        PebbleStatusBadge(state, label = when {
+            receipt.jobId == null -> "未创建整理任务"
+            readError != null -> "进度暂不可用"
+            task == null -> "正在读取进度"
+            else -> task.progressLabel()
+        })
         PebbleText(
-            task?.phase?.let { "阶段：$it" }
-                ?: task?.waitReason?.let { "等待原因：$it" }
-                ?: if (task == null) "可在设置中重新开启自动整理。" else "等待后台模块推进",
+            when {
+                receipt.jobId == null -> "可以在设置中开启自动整理。"
+                readError != null -> readError
+                task == null -> "可在记录详情查看进度。"
+                else -> task.progressDescription()
+            },
             color = PebbleVisuals.Muted,
             style = MaterialTheme.typography.bodyMedium,
         )
+        if (readError != null) PebbleButton("重新读取进度", retryRead, style = PebbleButtonStyle.Secondary)
         PebbleButton(
             "查看当前记录",
             onOpenRecord,

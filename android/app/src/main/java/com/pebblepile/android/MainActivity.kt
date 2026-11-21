@@ -37,8 +37,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.pebblepile.android.model.ItemStatus
 import com.pebblepile.android.service.CoreApi
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 private const val HOME_ROUTE = "home"
@@ -139,7 +142,8 @@ private fun PebbleApp(
     var draft by rememberSaveable { mutableStateOf("") }
     var captureMode by rememberSaveable { mutableStateOf(PebbleCaptureMode.Record) }
     var toast by remember { mutableStateOf<UiToast?>(null) }
-    var shareSaving by remember { mutableStateOf(false) }
+    var shareSaving by remember(pendingShare?.operationId) { mutableStateOf(false) }
+    var shareFailure by remember(pendingShare?.operationId) { mutableStateOf<String?>(null) }
 
     var libraryView by rememberSaveable { mutableStateOf(PebbleLibraryView.Timeline) }
     var libraryQuery by rememberSaveable { mutableStateOf("") }
@@ -170,30 +174,29 @@ private fun PebbleApp(
         Column(Modifier.fillMaxSize()) {
             PebbleTopBar(
                 title = when (currentRoute) {
-                    HOME_ROUTE -> "叠石 · PebblePile"
+                    HOME_ROUTE -> "叠石"
                     LIBRARY_ROUTE -> "记录库"
                     SETTINGS_ROUTE -> "设置"
                     MEMORY_ROUTE -> "记忆与偏好"
                     RULES_ROUTE -> "标签与规则"
-                    DATA_ROUTE -> "数据处理与备份"
+                    DATA_ROUTE -> "本地数据"
                     else -> "记录详情"
                 },
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 20.dp),
                 leading = {
-                    when (currentRoute) {
-                        HOME_ROUTE -> PebbleIconButton(PebbleGlyph.Settings, "设置", {
-                            navController.navigate(SETTINGS_ROUTE) { launchSingleTop = true }
-                        }, style = PebbleIconButtonStyle.Plain)
-                        else -> PebbleIconButton(PebbleGlyph.Back, "返回", {
-                            navController.popBackStack()
-                        }, style = PebbleIconButtonStyle.Plain)
+                    if (currentRoute == HOME_ROUTE) {
+                        PebbleIconButton(PebbleGlyph.Library, "记录库", {
+                            navController.navigate(LIBRARY_ROUTE) { launchSingleTop = true }
+                        }, tint = PebbleVisuals.Moss)
+                    } else {
+                        PebbleIconButton(PebbleGlyph.Back, "返回", { navController.popBackStack() })
                     }
                 },
                 trailing = {
                     if (currentRoute == HOME_ROUTE) {
-                        PebbleIconButton(PebbleGlyph.Library, "记录库", {
-                            navController.navigate(LIBRARY_ROUTE) { launchSingleTop = true }
-                        }, style = PebbleIconButtonStyle.Plain)
+                        PebbleIconButton(PebbleGlyph.Settings, "设置", {
+                            navController.navigate(SETTINGS_ROUTE) { launchSingleTop = true }
+                        })
                     }
                 },
             )
@@ -214,9 +217,6 @@ private fun PebbleApp(
                         onDraftChange = { draft = it },
                         captureMode = captureMode,
                         onCaptureModeChange = { captureMode = it },
-                        onOpenLibrary = {
-                            navController.navigate(LIBRARY_ROUTE) { launchSingleTop = true }
-                        },
                         onOpenRecord = ::openRecord,
                         onMessage = ::showToast,
                         onSaved = { recordId ->
@@ -296,26 +296,33 @@ private fun PebbleApp(
             onConfirm = {
                 if (shareSaving) return@PebbleDialog
                 shareSaving = true
-                scope.launch {
-                    val receipt = api.recordExperience(
-                        pendingShare.text,
-                        "android_share",
-                        pendingShare.operationId,
-                    )
-                    shareSaving = false
+                scope.launch(Dispatchers.Main.immediate) {
+                    shareFailure = null
+                    val receipt = try {
+                        withContext(Dispatchers.IO) {
+                            api.recordExperience(pendingShare.text, "android_share", pendingShare.operationId)
+                        }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (failure: Exception) {
+                        shareFailure = failure.message ?: "保存失败，请重试"
+                        return@launch
+                    } finally {
+                        shareSaving = false
+                    }
                     if (receipt.success && receipt.recordId != null) {
-                        refreshKey++
                         onShareConsumed(pendingShare)
                         showToast("已保存 · ${receipt.recordId}")
                         openRecord(receipt.recordId)
                     } else {
-                        showToast(receipt.message, PebbleFeedbackState.FAILED)
+                        shareFailure = receipt.message
                     }
                 }
             },
         ) {
             PebbleText("以下文字将作为一条新记录保存：", color = PebbleVisuals.Muted)
             PebbleQuote(pendingShare.text, source = "来自其他应用")
+            shareFailure?.let { PebbleFeedback(PebbleFeedbackState.FAILED, detail = it) }
         }
     }
 }
