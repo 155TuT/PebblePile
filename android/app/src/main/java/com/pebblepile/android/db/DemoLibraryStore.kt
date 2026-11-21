@@ -12,11 +12,13 @@ import com.pebblepile.android.model.DeleteTargetType
 import com.pebblepile.android.model.DeletionImpact
 import com.pebblepile.android.model.DeletionResult
 import com.pebblepile.android.model.EvidenceItem
+import com.pebblepile.android.model.ItemStatus
 import com.pebblepile.android.model.OutcomeItem
 import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.RecordTag
 import com.pebblepile.android.model.SourceRef
 import com.pebblepile.android.model.SuggestionItem
+import com.pebblepile.android.model.TagReviewState
 import com.pebblepile.android.model.TaskKind
 import com.pebblepile.android.model.TaskState
 import com.pebblepile.android.repository.CoreRepository
@@ -43,12 +45,20 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
     }
 
     private fun load(): DemoLibrary {
-        val records = JSONArray(preferences.getString("records", null) ?: "[]").objects()
-            .map(::decodeRecord).associateByTo(linkedMapOf()) { it.id }
         val state = preferences.getString("core_state", null)?.let { JSONObject(it) }
+        val sources = state?.objects("sources").orEmpty().map { source ->
+            CapturedSource(
+                source.sourceRef(), source.getString("recordId"), source.getString("text"),
+                source.getString("captureMethod"), source.getString("capturedAt")
+            )
+        }.associateByTo(linkedMapOf()) { it.ref }
+        val sourcesByRecord = sources.values.groupBy { it.recordId }
+        val records = JSONArray(preferences.getString("records", null) ?: "[]").objects()
+            .map { decodeRecord(it, if (state == null) null else sourcesByRecord) }
+            .associateByTo(linkedMapOf()) { it.id }
         if (state == null) {
             // Records written by the original demo had only one source and no stored receipts.
-            val sources = records.values.map { record ->
+            val initialSources = records.values.map { record ->
                 val ref = SourceRef("${record.id}:source", 1)
                 CapturedSource(ref, record.id, record.rawText, record.captureMethod, record.capturedAt)
             }
@@ -59,15 +69,9 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
                 revision = revision,
                 futureCondition = future?.let { ConditionSetting(it.currentCondition, it.id, revision) },
                 records = records,
-                sources = sources.associateByTo(linkedMapOf()) { it.ref }
+                sources = initialSources.associateByTo(linkedMapOf()) { it.ref }
             )
         }
-        val sources = state.objects("sources").map { source ->
-            CapturedSource(
-                source.sourceRef(), source.getString("recordId"), source.getString("text"),
-                source.getString("captureMethod"), source.getString("capturedAt")
-            )
-        }.associateByTo(linkedMapOf()) { it.ref }
         val tasks = state.objects("tasks").map(::decodeTask).associateByTo(linkedMapOf()) { it.id }
         val receipts = state.objects("receipts").associateTo(linkedMapOf()) { stored ->
             val key = OperationKey(stored.getString("clientId"), stored.getString("operationId"))
@@ -110,7 +114,7 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
         if (!committed) throw RepositoryWriteException()
     }
 
-    private fun decodeRecord(obj: JSONObject): PebbleRecord {
+    private fun decodeRecord(obj: JSONObject, sourcesByRecord: Map<String, List<CapturedSource>>?): PebbleRecord {
         val id = obj.getString("id")
         val condition = obj.optString("condition")
         val conditionScope = CorrectionScope.entries.firstOrNull { it.name == obj.optString("conditionScope") }
@@ -121,15 +125,37 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
             captureMethod = obj.optString("captureMethod"),
             revision = obj.optLong("revision", 1),
             tags = obj.objects("tags").map {
-                RecordTag(it.getString("id"), it.getString("name"), it.optString("quote"), it.optString("algorithm"), it.optBoolean("excluded"))
+                RecordTag(
+                    it.getString("id"),
+                    it.getString("name"),
+                    it.optString("quote"),
+                    it.optString("algorithm"),
+                    it.optBoolean("excluded"),
+                    TagReviewState.entries.firstOrNull { state -> state.name == it.optString("reviewState") }
+                        ?: TagReviewState.AUTO,
+                    it.optJSONObject("sourceRef")?.sourceRef(),
+                )
             },
             suggestions = obj.objects("suggestions").map { suggestion ->
                 SuggestionItem(
                     suggestion.getString("id"), suggestion.optString("title"), suggestion.optString("reason"),
                     suggestion.objects("evidence").map {
+                        val sourceRecordId = it.optString("sourceRecordId", id)
+                        val quote = it.optString("quote")
+                        // Older snapshots stored a prefix of the original text without its source ID.
+                        val sourceRef = it.optJSONObject("sourceRef")?.sourceRef() ?: if (sourcesByRecord == null) {
+                            SourceRef("$sourceRecordId:source", 1)
+                        } else {
+                            sourcesByRecord[sourceRecordId].orEmpty().singleOrNull { source ->
+                                quote.isNotEmpty() && source.text.startsWith(quote)
+                            }?.ref
+                        }
                         EvidenceItem(
-                            it.getString("id"), it.optString("title"), it.optString("quote"),
-                            it.optString("date"), it.optString("sourceRecordId", id)
+                            it.getString("id"), it.optString("title"), quote,
+                            it.optString("date"), sourceRecordId, sourceRef ?: SourceRef("", 0),
+                            it.optInt("start", 0),
+                            it.optInt("end", quote.codePointCount(0, quote.length)),
+                            it.optionalString("unavailableReason") ?: if (sourceRef == null) "旧引用需要重新核对来源" else null,
                         )
                     }
                 )
@@ -143,7 +169,12 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
             title = obj.optString("title"),
             currentGoalCondition = obj.optionalString("currentGoalCondition") ?: condition.takeIf {
                 it.isNotBlank() && conditionScope != CorrectionScope.FUTURE
-            }
+            },
+            people = obj.optJSONArray("people")?.let { array ->
+                (0 until array.length()).map(array::getString)
+            }.orEmpty(),
+            itemStatus = ItemStatus.entries.firstOrNull { it.name == obj.optString("itemStatus") }
+                ?: ItemStatus.OPEN,
         )
     }
 
@@ -152,9 +183,14 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
         .put("captureMethod", record.captureMethod).put("revision", record.revision).put("title", record.title)
         .put("condition", record.currentCondition).put("status", record.status)
         .put("conditionScope", record.conditionScope?.name).put("currentGoalCondition", record.currentGoalCondition)
+        .put("people", JSONArray(record.people)).put("itemStatus", record.itemStatus.name)
         .put("tags", record.tags.jsonArray {
             JSONObject().put("id", it.id).put("name", it.name).put("quote", it.sourceQuote)
                 .put("algorithm", it.algorithmVersion).put("excluded", it.excluded)
+                .put("reviewState", it.reviewState.name)
+                .put("sourceRef", it.sourceRef?.let { ref ->
+                    JSONObject().put("sourceId", ref.sourceId).put("sourceVersion", ref.sourceVersion)
+                })
         })
         .put("outcomes", record.outcomes.jsonArray {
             JSONObject().put("id", it.id).put("choice", it.choice)
@@ -165,6 +201,10 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
                 .put("evidence", suggestion.evidence.jsonArray {
                     JSONObject().put("id", it.id).put("title", it.title).put("quote", it.quote)
                         .put("date", it.recordDate).put("sourceRecordId", it.sourceRecordId)
+                        .put("sourceRef", JSONObject().put("sourceId", it.sourceRef.sourceId)
+                            .put("sourceVersion", it.sourceRef.sourceVersion))
+                        .put("start", it.start).put("end", it.end)
+                        .put("unavailableReason", it.unavailableReason)
                 })
         })
 

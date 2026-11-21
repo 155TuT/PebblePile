@@ -174,7 +174,19 @@ fun PebbleEvidenceSource(
     quote: String, sourceLabel: String, onOpenSource: () -> Unit,
     sourceAvailable: Boolean = true, unavailableReason: String = "来源暂不可用",
 ) {
-    PebbleQuote(quote, source = sourceLabel) {
+    val interactions = remember { MutableInteractionSource() }
+    val openSource = if (sourceAvailable) {
+        Modifier.clickable(
+            interactions,
+            indication = null,
+            onClickLabel = "查看原文，$sourceLabel",
+            role = Role.Button,
+            onClick = onOpenSource,
+        )
+    } else {
+        Modifier
+    }
+    PebbleQuote(quote, modifier = openSource, source = sourceLabel) {
         if (!sourceAvailable) PebbleText(unavailableReason, color = PebbleVisuals.Muted)
         PebbleLink("查看原文", onOpenSource, enabled = sourceAvailable, actionLabel = "查看原文，$sourceLabel")
     }

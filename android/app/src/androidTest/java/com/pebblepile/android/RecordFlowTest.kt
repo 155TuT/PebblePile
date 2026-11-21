@@ -11,6 +11,9 @@ import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
@@ -67,14 +70,21 @@ class RecordFlowTest {
     }
 
     @Test fun evidenceOpensItsSourceAndReturnsToTheRecord() {
-        val text = "Dinner ${UUID.randomUUID()} " + "hot soup ".repeat(16) + "end of source"
+        val text = "🍜加班晚餐希望省事 ${UUID.randomUUID()} " + "hot soup ".repeat(16) + "end of source"
         openShare(text).use {
-            ui.onNodeWithText("确认保存").performClick()
+            ui.onNodeWithText("确认保存").performScrollTo().assertIsDisplayed().performClick()
             waitForText("原始记录")
-            ui.onNodeWithText("“${text.take(100)}”").performScrollTo().performClick()
+            val api = ApplicationProvider.getApplicationContext<PebblePileApplication>().coreApi
+            val quote = runBlocking {
+                api.recentRecords().single { it.rawText == text }.suggestions.first().evidence.first().quote
+            }
+            ui.onNodeWithText("“$quote”", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
+                .performTouchInput { click() }
             waitForText("来源与原话")
             ui.onNode(hasText(text) and hasAnyAncestor(isDialog())).assertExists()
-            ui.onNodeWithText("关闭").performClick()
+            ui.onNode(hasText("版本 1", substring = true) and hasAnyAncestor(isDialog())).assertExists()
+            ui.onNode(hasText("码点 [", substring = true) and hasAnyAncestor(isDialog())).assertExists()
+            ui.onNodeWithText("关闭").performScrollTo().assertIsDisplayed().performClick()
             ui.onNodeWithText("原始记录").assertExists()
         }
     }
@@ -86,10 +96,16 @@ class RecordFlowTest {
             ui.onNodeWithText("修改条件").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
             waitForText("纠正条件")
             val field = ui.onNode(hasSetTextAction() and hasAnyAncestor(isDialog()))
+            val edited = hasSetTextAction() and hasText("only on weekdays") and hasAnyAncestor(isDialog())
             field.performTextReplacement("only on weekdays")
+            ui.waitUntil(10_000) { ui.onAllNodes(edited).fetchSemanticsNodes().size == 1 }
             activity.recreate()
-            waitForText("纠正条件")
-            ui.onNode(hasSetTextAction() and hasText("only on weekdays")).assertExists()
+            ui.waitUntil(10_000) { ui.onAllNodes(edited).fetchSemanticsNodes().size == 1 }
+            ui.onNodeWithText("以后按此条件").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+            ui.onNodeWithText("确认修改").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+            waitForText("适用范围：以后按此条件")
+            ui.onNodeWithText("尚未补充当前目标条件。").assertExists()
+            ui.onNodeWithText("长期条件：only on weekdays", substring = true).assertExists()
         }
     }
 
@@ -108,12 +124,15 @@ class RecordFlowTest {
                 api.reviseMemory(original.id, original.revision, "weekends", CorrectionScope.THIS_TIME, UUID.randomUUID().toString())
             }
             assertTrue(competing.success)
-            ui.onNodeWithText("确认修改").performClick()
-            ui.onNodeWithText("查看最新版本").performClick()
-            waitForText("当前条件：weekends")
+            ui.onNodeWithText("确认修改").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+            waitForText("查看最新版本")
+            ui.onNodeWithText("查看最新版本").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+            ui.waitUntil(10_000) {
+                ui.onAllNodes(hasText("本次目标条件：weekends") and hasAnyAncestor(isDialog())).fetchSemanticsNodes().isNotEmpty()
+            }
             ui.onNode(hasSetTextAction() and hasText("workday overtime")).assertExists()
-            ui.onNodeWithText("以后按此条件").performClick()
-            ui.onNodeWithText("确认修改").performClick()
+            ui.onNodeWithText("以后按此条件").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
+            ui.onNodeWithText("确认修改").performScrollTo().performSemanticsAction(SemanticsActions.OnClick)
             waitForText("适用范围：以后按此条件")
             val updated = runBlocking { requireNotNull(api.getRecord(original.id)) }
             assertEquals("workday overtime", updated.currentCondition)

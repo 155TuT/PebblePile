@@ -169,6 +169,32 @@ class CoreContractTest {
         assertEquals(2L, api.queryRecords().libraryRevision)
     }
 
+    @Test fun previousEvidenceResolvesTheStoredSourceAndPreservesCodePointOffsets() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val name = "evidence-upgrade-${UUID.randomUUID()}"
+        val preferences = context.getSharedPreferences(name, Context.MODE_PRIVATE)
+        try {
+            val oldRecords = """[{"id":"r1","rawText":"🍜晚餐","suggestions":[{"id":"s1","evidence":[
+                {"id":"e1","quote":"🍜晚","sourceRecordId":"r1"},
+                {"id":"e2","quote":"不在原文","sourceRecordId":"r1"}
+            ]}]}]"""
+            val oldState = """{"revision":1,"sources":[{"sourceId":"original-uuid","sourceVersion":1,
+                "recordId":"r1","text":"🍜晚餐","captureMethod":"app","capturedAt":"2026-11-16 20:00"}]}"""
+            assertTrue(preferences.edit().putString("records", oldRecords).putString("core_state", oldState).commit())
+            val api = LocalCoreApi(DemoLibraryStore(preferences).repository())
+            assertTrue(api.updateRecordTitle("r1", 1, "旧记录", "persist-migration").success)
+            val reopened = LocalCoreApi(DemoLibraryStore(preferences).repository())
+            val evidence = requireNotNull(reopened.getRecord("r1")).suggestions.single().evidence
+            assertEquals("original-uuid", evidence[0].sourceRef.sourceId)
+            assertEquals(2, evidence[0].end)
+            assertEquals("🍜晚餐", reopened.getRecordDetail("r1", evidence[0].sourceRef)?.sources?.single()?.text)
+            assertNotNull(evidence[1].unavailableReason)
+            assertNull(reopened.getRecordDetail("r1", evidence[1].sourceRef))
+        } finally {
+            context.deleteSharedPreferences(name)
+        }
+    }
+
     @Test fun singleExplicitPreferenceFromIssue14RemainsQueryable() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val name = "core-upgrade-${UUID.randomUUID()}"

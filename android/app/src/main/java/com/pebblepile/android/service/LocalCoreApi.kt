@@ -11,9 +11,12 @@ import com.pebblepile.android.model.DeleteRequest
 import com.pebblepile.android.model.DeleteTarget
 import com.pebblepile.android.model.DeleteTargetType
 import com.pebblepile.android.model.DeletionResult
+import com.pebblepile.android.model.ItemStatus
 import com.pebblepile.android.model.OutcomeItem
 import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.SourceRef
+import com.pebblepile.android.model.TagAction
+import com.pebblepile.android.model.TagReviewState
 import com.pebblepile.android.model.TaskAction
 import com.pebblepile.android.model.TaskKind
 import com.pebblepile.android.model.TaskState
@@ -70,12 +73,19 @@ data class LocalContext(
 class LocalCoreApi(
     private val repository: CoreRepository,
     private val clientId: String = "android",
-    private val autoOrganize: Boolean = true,
+    @Volatile private var autoOrganize: Boolean = true,
     private val clock: () -> String = { LocalDateTime.now().format(dateTimeFormat) },
     private val newId: () -> String = { UUID.randomUUID().toString() },
-    private val decorateSampleRecord: (PebbleRecord) -> PebbleRecord = { it }
+    private val decorateSampleRecord: (PebbleRecord) -> PebbleRecord = { it },
+    private val decorateCreatedRecord: (PebbleRecord, SourceRef) -> PebbleRecord = { record, _ ->
+        decorateSampleRecord(record)
+    },
 ) : CoreApi {
     private val deletionTokens by lazy { DeletionPreviewTokens() }
+
+    override fun setAutoOrganize(enabled: Boolean) {
+        autoOrganize = enabled
+    }
 
     override suspend fun recordExperience(
         text: String,
@@ -106,13 +116,15 @@ class LocalCoreApi(
         }
         val recordId = old?.id ?: newId()
         val capturedAt = request.capturedAt ?: clock()
-        val record = old?.copy(revision = old.revision + 1) ?: decorateSampleRecord(
-            PebbleRecord(recordId, request.text, capturedAt, request.captureMethod)
-        )
         val source = SourceRef(newId(), 1)
+        val organize = autoOrganize
+        val record = old?.copy(revision = old.revision + 1) ?: run {
+            val captured = PebbleRecord(recordId, request.text, capturedAt, request.captureMethod)
+            if (organize) decorateCreatedRecord(captured, source) else captured
+        }
         tx.putRecord(record)
         tx.putSource(CapturedSource(source, recordId, request.text, request.captureMethod, capturedAt))
-        saved(record, "已保存").copy(source = source, jobId = enqueue(tx, record, TaskKind.ORGANIZE))
+        saved(record, "已保存").copy(source = source, jobId = enqueue(tx, record, TaskKind.ORGANIZE, organize))
     }
 
     override suspend fun getRecord(recordId: String): PebbleRecord? = getRecordDetail(recordId)?.record
@@ -121,8 +133,8 @@ class LocalCoreApi(
         val record = tx.record(recordId) ?: return@read null
         val sources = tx.sources(recordId).filter { sourceRef == null || it.ref == sourceRef }
         if (sourceRef != null && sources.isEmpty()) return@read null
-        val jobs = tx.tasks(recordId).filter { canReadTask(tx, it) }.map { it.id }
-        RecordDetail(record, sources, jobs, tx.revision, tx.futureCondition)
+        val tasks = tx.tasks(recordId).filter { canReadTask(tx, it) }
+        RecordDetail(record, sources, tasks.map { it.id }, tx.revision, tx.futureCondition)
     }
 
     override suspend fun recentRecords(): List<PebbleRecord> = queryRecords().records
@@ -130,7 +142,7 @@ class LocalCoreApi(
     override fun queryRecords(tags: Set<String>): RecordQueryResult = repository.read { tx ->
         val records = tx.records().asReversed().filter { record ->
             tags.all { name -> record.tags.any { it.name == name && !it.excluded } }
-        }.map { it to captureInstant(it.capturedAt) }
+        }.map { record -> record to captureInstant(record.capturedAt) }
             .sortedByDescending { it.second }
             .map { it.first }
         RecordQueryResult(records, tx.revision)
@@ -243,22 +255,71 @@ class LocalCoreApi(
     }
 
     override suspend fun reviseTags(recordId: String, baseRevision: Long, tagId: String, operationId: String): ApiReceipt =
-        changeRecord(recordId, baseRevision, operationId, "revise_tags", tagId) { tx, record ->
-            if (record.tags.none { it.id == tagId }) return@changeRecord invalid("标签不存在")
-            val updated = record.copy(
-                revision = record.revision + 1,
-                tags = record.tags.map { if (it.id == tagId) it.copy(excluded = true) else it }
-            )
-            tx.putRecord(updated)
-            saved(updated, "已排除标签")
+        reviseTag(recordId, baseRevision, tagId, TagAction.EXCLUDE, null, operationId)
+
+    override suspend fun reviseTag(
+        recordId: String,
+        baseRevision: Long,
+        tagId: String,
+        action: TagAction,
+        name: String?,
+        operationId: String,
+    ): ApiReceipt = changeRecord(
+        recordId, baseRevision, operationId,
+        if (action == TagAction.EXCLUDE) "revise_tags" else "revise_tag",
+        *(if (action == TagAction.EXCLUDE) arrayOf(tagId) else arrayOf(tagId, action.name, name.orEmpty())),
+    ) { tx, record ->
+        if (record.tags.none { it.id == tagId }) return@changeRecord invalid("标签不存在")
+        if (action == TagAction.MODIFY && name.isNullOrBlank()) return@changeRecord invalid("修改后的标签不能为空")
+        val updated = record.copy(
+            revision = record.revision + 1,
+            tags = record.tags.map { tag ->
+                if (tag.id != tagId) tag else when (action) {
+                    TagAction.CONFIRM -> tag.copy(excluded = false, reviewState = TagReviewState.CONFIRMED)
+                    TagAction.MODIFY -> tag.copy(name = name!!.trim(), excluded = false, reviewState = TagReviewState.CONFIRMED)
+                    TagAction.EXCLUDE -> tag.copy(excluded = true, reviewState = TagReviewState.CONFIRMED)
+                    TagAction.REVIEW -> tag.copy(excluded = false, reviewState = TagReviewState.NEEDS_REVIEW)
+                }
+            },
+        )
+        tx.putRecord(updated)
+        val message = when (action) {
+            TagAction.CONFIRM -> if (record.tags.single { it.id == tagId }.excluded) "标签已恢复" else "标签已确认"
+            TagAction.MODIFY -> "标签已修改"
+            TagAction.EXCLUDE -> "已排除标签"
+            TagAction.REVIEW -> "标签已标记为待核对"
         }
+        saved(updated, message)
+    }
+
+    override suspend fun updateRecordGoal(
+        recordId: String,
+        baseRevision: Long,
+        title: String,
+        status: ItemStatus,
+        operationId: String,
+    ): ApiReceipt = changeRecord(
+        recordId, baseRevision, operationId, "update_record_goal", title, status.name,
+    ) { tx, record ->
+        if (title.isBlank()) return@changeRecord invalid("事项名称不能为空")
+        val updated = record.copy(
+            revision = record.revision + 1,
+            title = title.trim(),
+            itemStatus = status,
+        )
+        tx.putRecord(updated)
+        saved(updated, "事项信息已更新")
+    }
 
     override suspend fun recordOutcome(
         recordId: String, baseRevision: Long, choice: String, experience: String, operationId: String
     ): ApiReceipt = changeRecord(recordId, baseRevision, operationId, "record_outcome", choice, experience) { tx, record ->
         if (choice.isBlank() && experience.isBlank()) return@changeRecord invalid("请补充实际选择或体验")
         val outcome = OutcomeItem(newId(), choice, experience, clock())
-        val updated = record.copy(revision = record.revision + 1, outcomes = record.outcomes + outcome)
+        val updated = record.copy(
+            revision = record.revision + 1,
+            outcomes = record.outcomes + outcome,
+        )
         tx.putRecord(updated)
         saved(updated, "实际反馈已保存").copy(outcomeId = outcome.id, jobId = enqueue(tx, updated, TaskKind.APPLY_FEEDBACK))
     }
@@ -279,7 +340,7 @@ class LocalCoreApi(
             currentCondition = condition,
             conditionScope = scope,
             revision = record.revision + 1,
-            currentGoalCondition = if (scope == CorrectionScope.THIS_TIME) condition else record.currentGoalCondition
+            currentGoalCondition = if (scope == CorrectionScope.THIS_TIME) condition else record.currentGoalCondition,
         )
         tx.putRecord(updated)
         if (scope == CorrectionScope.THIS_TIME) {
@@ -303,6 +364,7 @@ class LocalCoreApi(
                 TaskAction.PAUSE -> task.copy(state = TaskState.WAITING, waitReason = "user_paused")
                 TaskAction.RESUME -> task.copy(state = TaskState.QUEUED, waitReason = null)
                 TaskAction.CANCEL -> task.copy(state = TaskState.CANCELLED, waitReason = null)
+                TaskAction.RETRY -> task.copy(state = TaskState.QUEUED, waitReason = null, phase = "retry_queued")
             }.copy(revision = task.revision + 1)
             tx.putTask(updated)
             ApiReceipt(true, recordId = updated.recordId, jobId = updated.id, task = updated)
@@ -317,7 +379,8 @@ class LocalCoreApi(
         change: (CoreWriter, PebbleRecord) -> ApiReceipt
     ): ApiReceipt = write(operationId, method, recordId, baseRevision.toString(), *params) { tx ->
         val record = tx.record(recordId) ?: return@write invalid("记录不存在")
-        checkRevision(record, baseRevision) ?: change(tx, record)
+        val conflict = checkRevision(record, baseRevision)
+        conflict ?: change(tx, record)
     }
 
     private fun write(
@@ -412,8 +475,8 @@ class LocalCoreApi(
         code = "REVISION_CONFLICT", currentRevision = revision, nextAction = "preview_again"
     )
 
-    private fun enqueue(tx: CoreWriter, record: PebbleRecord, kind: TaskKind): String? {
-        if (!autoOrganize) return null
+    private fun enqueue(tx: CoreWriter, record: PebbleRecord, kind: TaskKind, enabled: Boolean = autoOrganize): String? {
+        if (!enabled) return null
         val task = CoreTask(newId(), record.id, kind, record.revision)
         tx.putTask(task)
         return task.id

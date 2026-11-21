@@ -1,9 +1,45 @@
 package com.pebblepile.android.model
 
-data class RecordTag(val id: String, val name: String, val sourceQuote: String, val algorithmVersion: String, val excluded: Boolean = false)
-data class EvidenceItem(val id: String, val title: String, val quote: String, val recordDate: String, val sourceRecordId: String)
+enum class TagReviewState(val label: String) {
+    AUTO("自动整理"),
+    NEEDS_REVIEW("待核对"),
+    CONFIRMED("已确认"),
+}
+
+enum class TagAction { CONFIRM, MODIFY, EXCLUDE, REVIEW }
+
+data class RecordTag(
+    val id: String,
+    val name: String,
+    val sourceQuote: String,
+    val algorithmVersion: String,
+    val excluded: Boolean = false,
+    val reviewState: TagReviewState = TagReviewState.AUTO,
+    val sourceRef: SourceRef? = null,
+)
+
+data class EvidenceItem(
+    val id: String,
+    val title: String,
+    val quote: String,
+    val recordDate: String,
+    val sourceRecordId: String,
+    val sourceRef: SourceRef = SourceRef(sourceRecordId, 1),
+    val start: Int = 0,
+    val end: Int = quote.codePointCount(0, quote.length),
+    val unavailableReason: String? = null,
+)
+
 data class SuggestionItem(val id: String, val title: String, val reason: String, val evidence: List<EvidenceItem>)
 data class OutcomeItem(val id: String, val choice: String, val experience: String, val createdAt: String)
+
+enum class ItemStatus(val label: String) {
+    OPEN("待开始"),
+    IN_PROGRESS("进行中"),
+    WAITING("等待条件"),
+    NEEDS_REVIEW("待核对"),
+    COMPLETED("已完成"),
+}
 
 data class PebbleRecord(
     val id: String,
@@ -21,7 +57,9 @@ data class PebbleRecord(
     // currentCondition and conditionScope describe the last change displayed by the UI.
     val currentGoalCondition: String? = currentCondition.takeIf {
         it.isNotBlank() && conditionScope != CorrectionScope.FUTURE
-    }
+    },
+    val people: List<String> = emptyList(),
+    val itemStatus: ItemStatus = ItemStatus.OPEN,
 )
 
 enum class CorrectionScope(val label: String) {
@@ -62,7 +100,7 @@ data class CapturedSource(
 )
 
 enum class TaskState { QUEUED, RUNNING, WAITING, NEEDS_REVIEW, COMPLETED, FAILED, CANCELLED, STALE }
-enum class TaskAction { PAUSE, RESUME, CANCEL }
+enum class TaskAction { PAUSE, RESUME, CANCEL, RETRY }
 enum class TaskKind { ORGANIZE, APPLY_FEEDBACK, REBUILD_CONTEXT, DELETE_CLEANUP }
 
 data class CoreTask(
@@ -84,6 +122,7 @@ data class CoreTask(
                 setOf(TaskAction.CANCEL)
             }
             TaskState.NEEDS_REVIEW -> setOf(TaskAction.CANCEL)
+            TaskState.FAILED -> setOf(TaskAction.RETRY)
             else -> emptySet()
         }
 }

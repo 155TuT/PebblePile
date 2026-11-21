@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -70,6 +71,12 @@ fun PebbleCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.(
 /** A static quote, message or impact note. Optional actions keep their own focus and click targets. */
 @Composable
 fun PebbleQuote(text: String, modifier: Modifier = Modifier, source: String? = null,
+                actions: (@Composable ColumnScope.() -> Unit)? = null) {
+    PebbleQuote(AnnotatedString(text), modifier, source, actions)
+}
+
+@Composable
+fun PebbleQuote(text: AnnotatedString, modifier: Modifier = Modifier, source: String? = null,
                 actions: (@Composable ColumnScope.() -> Unit)? = null) {
     Column(modifier.widthIn(max = 640.dp).fillMaxWidth().background(PebbleVisuals.SurfaceMuted, RoundedCornerShape(16.dp)).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
