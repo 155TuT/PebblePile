@@ -1,21 +1,17 @@
 package com.pebblepile.android.service
 
 import com.google.gson.Gson
-import com.pebblepile.android.model.CapturedSource
-import com.pebblepile.android.model.ConditionSetting
-import com.pebblepile.android.model.CoreTask
 import com.pebblepile.android.model.CorrectionScope
 import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.RecordTag
 import com.pebblepile.android.model.SourceRef
 import com.pebblepile.android.model.TaskAction
 import com.pebblepile.android.model.TaskState
-import com.pebblepile.android.repository.CoreReader
 import com.pebblepile.android.repository.CoreRepository
 import com.pebblepile.android.repository.CoreWriter
 import com.pebblepile.android.repository.OperationKey
 import com.pebblepile.android.repository.RepositoryWriteException
-import com.pebblepile.android.repository.StoredReceipt
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -28,15 +24,14 @@ import org.junit.Test
 /**
  * Issue #10 contract cases that any `CoreRepository` must satisfy.
  *
- * Inputs come from the shared docs/testing/issue10 fixtures. Subclasses provide a repository-backed
- * harness; the in-memory snapshot implementation runs today, and the SQLite implementation from #7
- * can be added without duplicating these assertions.
+ * Each test starts with an empty repository supplied by the subclass. All backends use
+ * the same client, clock, generated IDs and frozen inputs.
  */
 abstract class CoreApiContractSuite {
 
-    protected val E01 = Issue10Fixtures.E01
-    protected val E02 = Issue10Fixtures.E02
-    protected val C01 = Issue10Fixtures.C01
+    private val E01 = Issue10Fixtures.E01
+    private val E02 = Issue10Fixtures.E02
+    private val C01 = Issue10Fixtures.C01
 
     @Test
     fun k01SaveReturnsReceiptSourceAndOrganizeTask() = runBlocking {
@@ -70,7 +65,7 @@ abstract class CoreApiContractSuite {
 
         assertEquals(first, replay)
         println("K02 " + Gson().toJson(replay))
-        assertEquals(first, h.repository.read { it.receipt(OperationKey("issue10-test", "op-save"))?.receipt })
+        assertEquals(first, h.repository.read { it.receipt(OperationKey(clientId, "op-save"))?.receipt })
         val detail = h.core.getRecordDetail(first.recordId!!)!!
         assertEquals(1, detail.sources.size)
         assertEquals(1, detail.jobIds.size)
@@ -341,14 +336,22 @@ abstract class CoreApiContractSuite {
     fun invalidCapturedAtIsRejectedWithoutWriting() = runBlocking {
         val h = harness()
 
-        val receipt = h.core.recordExperience(
-            CaptureRequest(E01, "app_home_record", "op-bad-time", capturedAt = "not-a-time")
-        )
+        val request = CaptureRequest(E01, "app_home_record", "op-bad-time", capturedAt = "not-a-time")
+        val receipt = h.core.recordExperience(request)
 
         assertFalse(receipt.success)
         assertEquals("INVALID_INPUT", receipt.code)
-        assertEquals(0, h.core.queryRecords().records.size)
-        assertEquals(0L, h.core.queryRecords().libraryRevision)
+        h.repository.read { tx ->
+            assertNull(tx.receipt(OperationKey(clientId, request.operationId)))
+            assertTrue(tx.records().isEmpty())
+            assertEquals(0L, tx.revision)
+        }
+
+        val corrected = request.copy(capturedAt = "2026-11-16T20:30:00+08:00")
+        val saved = h.core.recordExperience(corrected)
+        assertTrue(saved.success)
+        assertEquals(1L, saved.libraryRevision)
+        assertEquals(saved, h.core.recordExperience(corrected))
     }
 
     @Test
@@ -364,6 +367,8 @@ abstract class CoreApiContractSuite {
         assertEquals("加班晚餐", renamed.title)
         assertEquals(2L, renamed.revision!!)
         assertEquals("加班晚餐", h.core.getRecord(saved.recordId!!)!!.title)
+        assertEquals(renamed, h.core.updateRecordTitle(saved.recordId!!, saved.revision!!, "加班晚餐", "op-rename"))
+        assertEquals(renamed, h.repository.read { it.receipt(OperationKey(clientId, "op-rename"))?.receipt })
     }
 
     @Test
@@ -398,14 +403,30 @@ abstract class CoreApiContractSuite {
 
     @Test
     fun repositoryWriteFailureReturnsRetryableReceipt() = runBlocking {
-        val core = LocalCoreApi(FailingRepository())
+        val repository = createRepository()
+        val key = OperationKey(clientId, "op-failing")
+        var attemptedRecordId: String? = null
+        val failing = object : CoreRepository by repository {
+            override fun <T> write(block: (CoreWriter) -> T): T = repository.write { tx ->
+                block(tx)
+                attemptedRecordId = requireNotNull(tx.receipt(key)?.receipt?.recordId)
+                throw RepositoryWriteException()
+            }
+        }
 
-        val receipt = core.recordExperience(E01, "app_home_record", "op-failing")
-
+        val receipt = harness(repository = failing).core.recordExperience(E01, "app_home_record", key.operationId)
         assertFalse(receipt.success)
         assertEquals("PROCESSING_FAILED", receipt.code)
         assertTrue(receipt.retryable)
         assertEquals("retry", receipt.nextAction)
+        val id = requireNotNull(attemptedRecordId)
+        repository.read { tx ->
+            assertNull(tx.record(id))
+            assertTrue(tx.sources(id).isEmpty())
+            assertTrue(tx.tasks(id).isEmpty())
+            assertNull(tx.receipt(key))
+            assertEquals(0L, tx.revision)
+        }
     }
 
     @Test
@@ -432,32 +453,25 @@ abstract class CoreApiContractSuite {
         assertTrue(h.core.recordOutcome(id, current.revision, "热汤面", "省事", "feedback").success)
     }
 
-    protected class Harness(val core: CoreApi, val repository: CoreRepository)
+    protected abstract fun createRepository(): CoreRepository
 
-    protected abstract fun createHarness(
-        autoOrganize: Boolean,
-        decorate: (PebbleRecord) -> PebbleRecord
-    ): Harness
+    private val clientId = "issue10-test"
+    private class Harness(val core: CoreApi, val repository: CoreRepository)
 
-    protected fun harness(
+    private fun harness(
         autoOrganize: Boolean = true,
-        decorate: (PebbleRecord) -> PebbleRecord = { it }
-    ): Harness = createHarness(autoOrganize, decorate)
-
-    protected class FailingRepository : CoreRepository {
-        override fun <T> read(block: (CoreReader) -> T): T = block(EmptyReader)
-
-        override fun <T> write(block: (CoreWriter) -> T): T = throw RepositoryWriteException()
+        decorate: (PebbleRecord) -> PebbleRecord = { it },
+        repository: CoreRepository = createRepository(),
+    ): Harness {
+        val ids = AtomicInteger()
+        val core = LocalCoreApi(
+            repository = repository,
+            clientId = clientId,
+            autoOrganize = autoOrganize,
+            clock = { "2026-11-16 20:30" },
+            newId = { "id-${ids.incrementAndGet()}" },
+            decorateSampleRecord = decorate,
+        )
+        return Harness(core, repository)
     }
-}
-
-private object EmptyReader : CoreReader {
-    override val revision: Long = 0L
-    override val futureCondition: ConditionSetting? = null
-    override fun record(id: String): PebbleRecord? = null
-    override fun records(): List<PebbleRecord> = emptyList()
-    override fun sources(recordId: String): List<CapturedSource> = emptyList()
-    override fun task(id: String): CoreTask? = null
-    override fun tasks(recordId: String): List<CoreTask> = emptyList()
-    override fun receipt(key: OperationKey): StoredReceipt? = null
 }

@@ -20,22 +20,7 @@ import org.junit.Test
  */
 class LocalCoreApiContractTest : CoreApiContractSuite() {
 
-    override fun createHarness(
-        autoOrganize: Boolean,
-        decorate: (PebbleRecord) -> PebbleRecord
-    ): CoreApiContractSuite.Harness {
-        val repository = SnapshotCoreRepository()
-        val ids = AtomicInteger()
-        val core = LocalCoreApi(
-            repository = repository,
-            clientId = "issue10-test",
-            autoOrganize = autoOrganize,
-            clock = { "2026-11-16 20:30" },
-            newId = { "id-${ids.incrementAndGet()}" },
-            decorateSampleRecord = decorate
-        )
-        return CoreApiContractSuite.Harness(core, repository)
-    }
+    override fun createRepository() = SnapshotCoreRepository()
 
     @Test
     fun snapshotRepositoryRollsBackWhenWriteThrows() {
