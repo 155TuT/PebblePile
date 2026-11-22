@@ -1,0 +1,70 @@
+{
+  "datasetId": "issue10-dinner-v1",
+  "datasetVersion": "0.1.1",
+  "status": "pending_baseline",
+  "owner": "张洋 (hydrazZYT) · #9",
+  "manifest": {
+    "algorithmVersion": "local-rules-0.1.0",
+    "scenePackVersion": "diet-scene-pack-0.1.0",
+    "extractor": "rule-extractor-0.1.0",
+    "updater": "evidence-updater-0.1.0",
+    "ranker": "condition-score-ranker-0.1.0",
+    "inferenceModel": "local-rule-only",
+    "minIndependentSupports": 2
+  },
+  "menu": [
+    { "id": "noodle-soup", "name": "热汤面", "priceCny": 18, "prepMinutes": 10, "cleanupNeeded": false, "convenienceScore": 9, "matchedMeal": "热汤面" },
+    { "id": "rice-bowl", "name": "盖饭", "priceCny": 16, "prepMinutes": 10, "cleanupNeeded": false, "convenienceScore": 9, "matchedMeal": "盖饭" },
+    { "id": "bento", "name": "轻食便当", "priceCny": 19, "prepMinutes": 5, "cleanupNeeded": false, "convenienceScore": 8 },
+    { "id": "stirfry", "name": "家常炒菜", "priceCny": 15, "prepMinutes": 35, "cleanupNeeded": true, "convenienceScore": 3 },
+    { "id": "tomato-egg-noodle", "name": "番茄鸡蛋面", "priceCny": 20, "prepMinutes": 40, "cleanupNeeded": true, "convenienceScore": 2, "matchedMeal": "番茄鸡蛋面" },
+    { "id": "hotpot", "name": "麻辣烫", "priceCny": 22, "prepMinutes": 15, "cleanupNeeded": true, "convenienceScore": 5 }
+  ],
+  "cases": {
+    "Q01": {
+      "scopeMatch": null,
+      "appliedPreferences": [],
+      "cited": ["E01", "E02"],
+      "excludedEvidence": ["E03"],
+      "order": ["rice-bowl", "noodle-soup", "bento", "stirfry", "tomato-egg-noodle"],
+      "filteredOut": ["hotpot"]
+    },
+    "Q02": {
+      "scopeMatch": null,
+      "appliedPreferences": [],
+      "cited": ["E03"],
+      "order": ["tomato-egg-noodle", "stirfry", "bento", "rice-bowl", "noodle-soup"],
+      "filteredOut": ["hotpot"]
+    },
+    "Q03": {
+      "scopeMatch": false,
+      "appliedPreferences": [],
+      "cited": [],
+      "ruleScopeMatch": false,
+      "mustNotApplyConvenienceRule": true,
+      "order": ["rice-bowl", "noodle-soup", "bento", "stirfry", "tomato-egg-noodle"],
+      "filteredOut": ["hotpot"]
+    },
+    "Q01b": {
+      "scopeMatch": true,
+      "prefer": "convenience",
+      "appliedPreferences": ["pref-explicit-weekday_overtime_convenience"],
+      "cited": ["E01", "E02"],
+      "order": ["rice-bowl", "noodle-soup", "bento", "stirfry", "tomato-egg-noodle"],
+      "filteredOut": ["hotpot"]
+    }
+  },
+  "runs": 3,
+  "mustBeStable": true,
+  "inferenceCallsPerQuery": 0,
+  "latencyMillis": {
+    "note": "同一输入跑三次取均值，由 CI 或首测机实测后回填；本地规则无远程调用。",
+    "extractAverage": null,
+    "updateAverage": null,
+    "rankAverage": null
+  },
+  "alternatives": {
+    "extraction": "本版：本地词表、别名与句式规则离线抽取。备选：经授权的模型 API 经 InferencePort 返回同构候选，启用远程增强时由用户选择发送片段。",
+    "ranking": "本版：先按显式预算/条件硬筛选，再按有效证据条件计分。备选：特征与权重版本化的在线逻辑回归，见 system-design §6.2，作为下版增量参数候选。"
+  }
+}
