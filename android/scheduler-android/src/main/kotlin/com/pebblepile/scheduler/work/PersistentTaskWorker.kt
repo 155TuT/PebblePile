@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 /**
- * Android 工程 (#4) 接入后使用的 WorkManager 适配器。
+ * WorkManager 从输入数据读取任务标识。
  * 核心状态机不依赖 Android，本文件只负责领取一次持久任务并按结果返回 Worker 结果。
  */
 class PersistentTaskWorker(
@@ -29,36 +29,22 @@ class PersistentTaskWorker(
     override suspend fun doWork(): Result {
         val jobId = inputData.getString(KEY_JOB_ID) ?: return Result.failure()
         val outcome = withContext(Dispatchers.IO) { coordinator.runJob(jobId) }
-        return when (outcome) {
-            TaskRunOutcome.COMPLETED,
-            TaskRunOutcome.NEEDS_REVIEW,
-            TaskRunOutcome.STALE,
-            TaskRunOutcome.CANCELLED,
-            TaskRunOutcome.IDLE,
-            -> Result.success()
-            TaskRunOutcome.WAITING -> if (
-                coordinator.getTask(jobId)?.waitingReason == WAITING_RETRY_PENDING
-            ) {
-                Result.retry()
-            } else {
-                Result.success()
-            }
-            TaskRunOutcome.FAILED -> Result.failure()
-        }
+        val waitingReason = if (outcome == TaskRunOutcome.WAITING) coordinator.getTask(jobId)?.waitingReason else null
+        return workerResult(outcome, waitingReason)
     }
 
     companion object {
         const val KEY_JOB_ID = "jobId"
         private const val UNIQUE_PREFIX = "pebblepile-task-"
 
-        fun enqueue(context: Context, jobId: String) {
+        fun enqueue(context: Context, jobId: String, policy: ExistingWorkPolicy = ExistingWorkPolicy.KEEP) {
             val request = OneTimeWorkRequestBuilder<PersistentTaskWorker>()
                 .setInputData(workDataOf(KEY_JOB_ID to jobId))
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_PREFIX + jobId,
-                ExistingWorkPolicy.KEEP,
+                policy,
                 request,
             )
         }
@@ -84,3 +70,16 @@ class PersistentTaskWorkerFactory(
     }
 }
 
+
+
+internal fun workerResult(outcome: TaskRunOutcome, waitingReason: String?): ListenableWorker.Result = when (outcome) {
+    TaskRunOutcome.BUSY -> ListenableWorker.Result.retry()
+    TaskRunOutcome.WAITING -> if (waitingReason == WAITING_RETRY_PENDING) {
+        ListenableWorker.Result.retry()
+    } else {
+        ListenableWorker.Result.success()
+    }
+    TaskRunOutcome.FAILED -> ListenableWorker.Result.failure()
+    TaskRunOutcome.COMPLETED, TaskRunOutcome.NEEDS_REVIEW, TaskRunOutcome.STALE,
+    TaskRunOutcome.CANCELLED, TaskRunOutcome.IDLE -> ListenableWorker.Result.success()
+}

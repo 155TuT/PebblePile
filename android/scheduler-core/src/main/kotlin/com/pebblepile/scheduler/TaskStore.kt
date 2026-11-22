@@ -12,22 +12,17 @@ interface TaskStore {
         stage: TaskStage,
         output: StageOutput,
         now: Long,
+        leaseMillis: Long,
     ): TaskJob
     fun markWaiting(jobId: String, leaseToken: Long, reason: String, now: Long): TaskJob
     fun markFailed(jobId: String, leaseToken: Long, retryable: Boolean, now: Long): TaskJob
-    fun markStale(jobId: String, now: Long): TaskJob
-    fun markCompleted(
+    fun markStale(jobId: String, leaseToken: Long, now: Long): TaskJob
+    /** 在同一事务校验租约和输入修订，再发布决定、证据与任务终态。 */
+    fun finishIfCurrent(
         jobId: String,
         leaseToken: Long,
-        decisionId: String,
-        evidenceRefs: List<String>,
-        now: Long,
-    ): TaskJob
-    fun markNeedsReview(
-        jobId: String,
-        leaseToken: Long,
-        decisionId: String,
-        evidenceRefs: List<String>,
+        result: CommitOutput,
+        revisions: RevisionProvider,
         now: Long,
     ): TaskJob
     fun control(jobId: String, action: TaskAction, now: Long): TaskJob
@@ -44,9 +39,11 @@ class InMemoryTaskStore : TaskStore {
 
     @Synchronized
     override fun createOrGet(job: TaskJob): TaskJob {
-        idempotency[job.idempotencyKey]?.let { return jobs.getValue(it) }
-        val existing = jobs[job.jobId]
-        if (existing != null) return existing
+        idempotency[job.idempotencyKey]?.let {
+            val existing = jobs.getValue(it)
+            require(existing.inputDigest == job.inputDigest) { "同一修订的记录内容须一致" }
+            return existing
+        }
         jobs[job.jobId] = job
         idempotency[job.idempotencyKey] = job.jobId
         return job
@@ -100,9 +97,10 @@ class InMemoryTaskStore : TaskStore {
         stage: TaskStage,
         output: StageOutput,
         now: Long,
+        leaseMillis: Long,
     ): TaskJob {
         val job = requireLease(jobId, leaseToken, now)
-        if (stage == TaskStage.COMMIT) throw IllegalArgumentException("提交阶段使用 markCompleted")
+        if (stage == TaskStage.COMMIT) throw IllegalArgumentException("提交阶段使用 finishIfCurrent")
         val existing = job.checkpoints[stage]
         if (existing != null) {
             if (existing != output) throw IllegalStateException("同一阶段出现冲突结果：$stage")
@@ -113,6 +111,7 @@ class InMemoryTaskStore : TaskStore {
         val updated = job.copy(
             currentStage = next,
             checkpoints = job.checkpoints + (stage to output),
+            leaseUntil = now + leaseMillis,
             updatedAt = now,
         )
         jobs[jobId] = updated
@@ -150,9 +149,8 @@ class InMemoryTaskStore : TaskStore {
     }
 
     @Synchronized
-    override fun markStale(jobId: String, now: Long): TaskJob {
-        val job = jobs[jobId] ?: throw IllegalArgumentException("任务不存在：$jobId")
-        if (job.status == TaskStatus.COMPLETED || job.status == TaskStatus.STALE) return job
+    override fun markStale(jobId: String, leaseToken: Long, now: Long): TaskJob {
+        val job = requireLease(jobId, leaseToken, now)
         val updated = job.copy(
             status = TaskStatus.STALE,
             waitingReason = null,
@@ -166,42 +164,24 @@ class InMemoryTaskStore : TaskStore {
     }
 
     @Synchronized
-    override fun markCompleted(
+    override fun finishIfCurrent(
         jobId: String,
         leaseToken: Long,
-        decisionId: String,
-        evidenceRefs: List<String>,
+        result: CommitOutput,
+        revisions: RevisionProvider,
         now: Long,
     ): TaskJob {
         val job = requireLease(jobId, leaseToken, now)
+        check(job.currentStage == TaskStage.COMMIT) { "发布结果前须完成 RANK 检查点" }
+        if (revisions.currentRevision(job.recordId) != RevisionSnapshot(job.inputRevision, job.preferenceRevision)) {
+            return markStale(jobId, leaseToken, now)
+        }
         val updated = job.copy(
-            status = TaskStatus.COMPLETED,
-            currentStage = TaskStage.COMMIT,
+            status = if (result.needsReview) TaskStatus.NEEDS_REVIEW else TaskStatus.COMPLETED,
             waitingReason = null,
             retryable = false,
-            decisionId = decisionId,
-            evidenceRefs = evidenceRefs,
-            leaseToken = job.leaseToken + 1,
-            leaseUntil = 0,
-            updatedAt = now,
-        )
-        jobs[jobId] = updated
-        return updated
-    }
-
-    @Synchronized
-    override fun markNeedsReview(
-        jobId: String,
-        leaseToken: Long,
-        decisionId: String,
-        evidenceRefs: List<String>,
-        now: Long,
-    ): TaskJob {
-        val job = requireLease(jobId, leaseToken, now)
-        val updated = job.copy(
-            status = TaskStatus.NEEDS_REVIEW,
-            decisionId = decisionId,
-            evidenceRefs = evidenceRefs,
+            decisionId = result.decisionId,
+            evidenceRefs = (job.checkpoints.values.flatMap { it.evidenceRefs } + result.evidenceRefs).distinct(),
             leaseToken = job.leaseToken + 1,
             leaseUntil = 0,
             updatedAt = now,
@@ -216,42 +196,22 @@ class InMemoryTaskStore : TaskStore {
         if (job.status == TaskStatus.COMPLETED || job.status == TaskStatus.CANCELLED || job.status == TaskStatus.STALE) {
             return job
         }
+        check(action in job.toView().actions) { "任务 ${job.status} 可执行 ${job.toView().actions}" }
         val updated = when (action) {
-            TaskAction.PAUSE -> {
-                if (job.status != TaskStatus.QUEUED && job.status != TaskStatus.RUNNING && job.status != TaskStatus.WAITING) {
-                    throw IllegalStateException("当前状态不能暂停")
-                }
-                job.copy(
-                    status = TaskStatus.WAITING,
-                    waitingReason = WAITING_USER_PAUSED,
-                    retryable = true,
-                    leaseToken = job.leaseToken + 1,
-                    leaseUntil = 0,
-                    updatedAt = now,
-                )
-            }
-            TaskAction.RESUME -> {
-                if (job.status != TaskStatus.WAITING || job.waitingReason != WAITING_USER_PAUSED) {
-                    throw IllegalStateException("当前状态不能继续")
-                }
-                job.copy(
-                    status = TaskStatus.QUEUED,
-                    waitingReason = null,
-                    retryable = false,
-                    updatedAt = now,
-                )
-            }
-            TaskAction.RETRY -> {
-                if (job.status != TaskStatus.FAILED && job.status != TaskStatus.WAITING) {
-                    throw IllegalStateException("当前状态不能重试")
-                }
-                job.copy(
-                    status = TaskStatus.QUEUED,
-                    waitingReason = null,
-                    retryable = false,
-                    updatedAt = now,
-                )
-            }
+            TaskAction.PAUSE -> job.copy(
+                status = TaskStatus.WAITING,
+                waitingReason = WAITING_USER_PAUSED,
+                retryable = false,
+                leaseToken = job.leaseToken + 1,
+                leaseUntil = 0,
+                updatedAt = now,
+            )
+            TaskAction.RESUME, TaskAction.RETRY -> job.copy(
+                status = TaskStatus.QUEUED,
+                waitingReason = null,
+                retryable = false,
+                updatedAt = now,
+            )
             TaskAction.CANCEL -> job.copy(
                 status = TaskStatus.CANCELLED,
                 waitingReason = null,

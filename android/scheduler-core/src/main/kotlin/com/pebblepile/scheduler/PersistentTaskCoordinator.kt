@@ -13,7 +13,8 @@ interface AgentTaskPipeline {
         completed: Map<TaskStage, StageOutput>,
     ): StageOutput
 
-    fun commit(
+    /** 计算待提交结果，业务写入统一由 TaskStore.finishIfCurrent 完成。 */
+    fun prepareCommit(
         input: TaskInput,
         completed: Map<TaskStage, StageOutput>,
     ): CommitOutput
@@ -26,18 +27,14 @@ class PersistentTaskCoordinator(
     private val now: () -> Long = { System.currentTimeMillis() },
     private val leaseMillis: Long = 60_000,
 ) {
+    init { require(leaseMillis > 0) { "任务租期须大于零" } }
+
     fun submit(input: TaskInput): TaskView {
         val at = now()
         val digest = inputDigest(input)
-        val key = listOf(
-            input.recordId,
-            input.revision,
-            input.preferenceRevision,
-            input.algorithmVersion,
-        ).joinToString(":")
         val job = TaskJob(
             jobId = stableJobId(input),
-            idempotencyKey = key,
+            idempotencyKey = taskKey(input),
             recordId = input.recordId,
             inputRevision = input.revision,
             preferenceRevision = input.preferenceRevision,
@@ -66,14 +63,20 @@ class PersistentTaskCoordinator(
         return store.get(jobId)?.let(::terminalOutcome) ?: TaskRunOutcome.IDLE
     }
 
-    private fun execute(claimed: TaskJob): TaskRunOutcome {
+    private fun execute(claimed: TaskJob): TaskRunOutcome = try {
+        executeWithLease(claimed)
+    } catch (_: LeaseLostException) {
+        store.get(claimed.jobId)?.let(::terminalOutcome) ?: TaskRunOutcome.IDLE
+    }
+
+    private fun executeWithLease(claimed: TaskJob): TaskRunOutcome {
         var job = claimed
         return try {
             for (stage in TaskStage.entries.filter { it != TaskStage.COMMIT }) {
                 if (job.checkpoints.containsKey(stage)) continue
                 assertRevisionCurrent(job)
                 val output = pipeline.runStage(stage, job.input(), job.checkpoints)
-                // 计算期间用户又修改了材料或偏好时，不发布该阶段结果。
+                // 检查计算期间材料和偏好的修订。
                 assertRevisionCurrent(job)
                 job = store.recordCheckpoint(
                     jobId = job.jobId,
@@ -81,33 +84,23 @@ class PersistentTaskCoordinator(
                     stage = stage,
                     output = output,
                     now = now(),
+                    leaseMillis = leaseMillis,
                 )
             }
 
             assertRevisionCurrent(job)
-            val commit = pipeline.commit(job.input(), job.checkpoints)
-            val evidence = (job.checkpoints.values.flatMap { it.evidenceRefs } + commit.evidenceRefs).distinct()
-            store.markCompleted(
-                jobId = job.jobId,
-                leaseToken = job.leaseToken,
-                decisionId = commit.decisionId,
-                evidenceRefs = evidence,
-                now = now(),
-            )
-            TaskRunOutcome.COMPLETED
-        } catch (cause: StaleInputException) {
-            runCatching { store.markStale(job.jobId, now()) }
-            TaskRunOutcome.STALE
-        } catch (_: LeaseLostException) {
-            TaskRunOutcome.IDLE
-        } catch (cause: RetryableTaskException) {
-            runCatching { store.markWaiting(job.jobId, job.leaseToken, WAITING_RETRY_PENDING, now()) }
-            TaskRunOutcome.WAITING
-        } catch (cause: Throwable) {
-            if (store.get(job.jobId)?.status == TaskStatus.RUNNING) {
-                runCatching { store.markFailed(job.jobId, job.leaseToken, true, now()) }
-            }
-            TaskRunOutcome.FAILED
+            val result = pipeline.prepareCommit(job.input(), job.checkpoints)
+            terminalOutcome(store.finishIfCurrent(job.jobId, job.leaseToken, result, revisions, now()))
+        } catch (_: StaleInputException) {
+            terminalOutcome(store.markStale(job.jobId, job.leaseToken, now()))
+        } catch (cause: LeaseLostException) {
+            throw cause
+        } catch (cause: java.util.concurrent.CancellationException) {
+            throw cause
+        } catch (_: RetryableTaskException) {
+            terminalOutcome(store.markWaiting(job.jobId, job.leaseToken, WAITING_RETRY_PENDING, now()))
+        } catch (_: Exception) {
+            terminalOutcome(store.markFailed(job.jobId, job.leaseToken, true, now()))
         }
     }
 
@@ -129,6 +122,6 @@ class PersistentTaskCoordinator(
         TaskStatus.STALE -> TaskRunOutcome.STALE
         TaskStatus.FAILED -> TaskRunOutcome.FAILED
         TaskStatus.CANCELLED -> TaskRunOutcome.CANCELLED
-        TaskStatus.QUEUED, TaskStatus.RUNNING -> TaskRunOutcome.IDLE
+        TaskStatus.QUEUED, TaskStatus.RUNNING -> TaskRunOutcome.BUSY
     }
 }

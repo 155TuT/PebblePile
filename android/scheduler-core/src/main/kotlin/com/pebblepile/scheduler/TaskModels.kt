@@ -34,6 +34,7 @@ enum class TaskAction {
 
 enum class TaskRunOutcome {
     IDLE,
+    BUSY,
     COMPLETED,
     WAITING,
     NEEDS_REVIEW,
@@ -64,6 +65,7 @@ data class StageOutput(
 data class CommitOutput(
     val decisionId: String,
     val evidenceRefs: List<String> = emptyList(),
+    val needsReview: Boolean = false,
 )
 
 data class TaskJob(
@@ -118,7 +120,7 @@ data class TaskJob(
         } else {
             listOf(TaskAction.RETRY, TaskAction.CANCEL)
         }
-        TaskStatus.FAILED -> listOf(TaskAction.RETRY, TaskAction.CANCEL)
+        TaskStatus.FAILED -> if (retryable) listOf(TaskAction.RETRY, TaskAction.CANCEL) else listOf(TaskAction.CANCEL)
         TaskStatus.NEEDS_REVIEW -> listOf(TaskAction.OPEN_DETAIL, TaskAction.CANCEL)
         TaskStatus.COMPLETED, TaskStatus.CANCELLED, TaskStatus.STALE -> emptyList()
     }
@@ -149,24 +151,17 @@ class StaleInputException(message: String) : IllegalStateException(message)
 
 class RetryableTaskException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
 
-fun inputDigest(input: TaskInput): String {
-    val raw = listOf(
-        input.recordId,
-        input.revision.toString(),
-        input.preferenceRevision.toString(),
-        input.text,
-        input.algorithmVersion,
-    ).joinToString("\u0000")
+private fun digest(parts: List<String>): String {
+    val raw = parts.joinToString("") { "${it.length}:$it" }
     return MessageDigest.getInstance("SHA-256")
         .digest(raw.toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it.toInt() and 0xff) }
 }
 
-fun stableJobId(input: TaskInput): String {
-    val key = "${input.recordId}:${input.revision}:${input.preferenceRevision}:${input.algorithmVersion}"
-    return "job-" + MessageDigest.getInstance("SHA-256")
-        .digest(key.toByteArray(Charsets.UTF_8))
-        .take(16)
-        .joinToString("") { "%02x".format(it.toInt() and 0xff) }
-}
+internal fun taskKey(input: TaskInput): String = digest(
+    listOf(input.recordId, input.revision.toString(), input.preferenceRevision.toString(), input.algorithmVersion),
+)
 
+fun inputDigest(input: TaskInput): String = digest(listOf(taskKey(input), input.text))
+
+fun stableJobId(input: TaskInput): String = "job-${taskKey(input)}"

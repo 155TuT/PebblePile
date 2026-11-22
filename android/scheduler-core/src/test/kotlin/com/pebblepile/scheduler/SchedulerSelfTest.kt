@@ -1,6 +1,7 @@
 package com.pebblepile.scheduler
 
-import kotlin.system.exitProcess
+import org.junit.Test
+import org.junit.Assert.assertThrows
 
 private class MutableRevisions(var value: RevisionSnapshot?) : RevisionProvider {
     override fun currentRevision(recordId: String): RevisionSnapshot? = value
@@ -12,6 +13,8 @@ private class FakePipeline : AgentTaskPipeline {
     var fatalStage: TaskStage? = null
     var beforeRank: (() -> Unit)? = null
     var commitCalls = 0
+    var beforeCommit: (() -> Unit)? = null
+    var needsReview = false
 
     override fun runStage(
         stage: TaskStage,
@@ -28,9 +31,10 @@ private class FakePipeline : AgentTaskPipeline {
         return StageOutput("$stage:${input.recordId}", listOf("evidence:${stage.name}"))
     }
 
-    override fun commit(input: TaskInput, completed: Map<TaskStage, StageOutput>): CommitOutput {
+    override fun prepareCommit(input: TaskInput, completed: Map<TaskStage, StageOutput>): CommitOutput {
         commitCalls += 1
-        return CommitOutput("decision-1", listOf("evidence:commit"))
+        beforeCommit?.invoke()
+        return CommitOutput("decision-1", listOf("evidence:commit"), needsReview)
     }
 }
 
@@ -46,40 +50,29 @@ private fun fixture(): Triple<PersistentTaskCoordinator, InMemoryTaskStore, Fake
     val revisions = MutableRevisions(RevisionSnapshot(7, 3))
     val store = InMemoryTaskStore()
     val pipeline = FakePipeline()
-    var now = 1_000L
+    val now = 1_000L
     val coordinator = PersistentTaskCoordinator(store, revisions, pipeline, now = { now }, leaseMillis = 100)
     return Triple(coordinator, store, pipeline)
-}
-
-private var passed = 0
-
-private fun test(name: String, block: () -> Unit) {
-    try {
-        block()
-        passed += 1
-        println("PASS  $name")
-    } catch (cause: Throwable) {
-        println("FAIL  $name")
-        cause.printStackTrace()
-        exitProcess(1)
-    }
 }
 
 private fun expect(condition: Boolean, message: String) {
     if (!condition) throw AssertionError(message)
 }
 
-fun main() {
-    test("相同输入幂等创建，偏好版本变化创建新任务") {
+class SchedulerSelfTest {
+    @Test
+    fun replaysIdenticalInput() {
         val (coordinator, _, _) = fixture()
         val first = coordinator.submit(baseInput)
-        val second = coordinator.submit(baseInput.copy(text = "另一段文本"))
+        val second = coordinator.submit(baseInput)
+        assertThrows(IllegalArgumentException::class.java) { coordinator.submit(baseInput.copy(text = "另一段文本")) }
         expect(first.jobId == second.jobId, "相同 record/revision/preference/algorithm 应复用任务")
         val newPreference = coordinator.submit(baseInput.copy(preferenceRevision = 4))
         expect(first.jobId != newPreference.jobId, "偏好变化应创建新任务")
     }
 
-    test("完整流程按 EXTRACT→UPDATE→CONTEXT→RANK→COMMIT 执行") {
+    @Test
+    fun runsAllStages() {
         val (coordinator, _, pipeline) = fixture()
         val submitted = coordinator.submit(baseInput)
         expect(coordinator.runJob(submitted.jobId) == TaskRunOutcome.COMPLETED, "任务应完成")
@@ -91,7 +84,8 @@ fun main() {
         expect(view.checkpoint == TaskStage.RANK, "最后检查点应为 RANK")
     }
 
-    test("可重试错误进入 waiting，重试复用已提交检查点") {
+    @Test
+    fun resumesFromCheckpoint() {
         val (coordinator, _, pipeline) = fixture()
         pipeline.retryStage = TaskStage.CONTEXT
         val job = coordinator.submit(baseInput)
@@ -105,11 +99,12 @@ fun main() {
         expect(pipeline.calls.count { it == TaskStage.CONTEXT } == 2, "失败阶段应重试一次")
     }
 
-    test("运行中偏好变化会在提交前转为 stale") {
-        val (coordinator, _, pipeline) = fixture()
+    @Test
+    fun marksChangedPreferencesStale() {
+        val (_, _, pipeline) = fixture()
         val revisions = MutableRevisions(RevisionSnapshot(7, 3))
         val store = InMemoryTaskStore()
-        var now = 1_000L
+        val now = 1_000L
         val local = PersistentTaskCoordinator(store, revisions, pipeline, now = { now }, leaseMillis = 100)
         pipeline.beforeRank = { revisions.value = RevisionSnapshot(7, 4) }
         val job = local.submit(baseInput)
@@ -118,7 +113,8 @@ fun main() {
         expect(local.getTask(job.jobId)!!.status == TaskStatus.STALE, "状态应为 stale")
     }
 
-    test("暂停会撤销租约，旧执行者不能写入检查点") {
+    @Test
+    fun fencesPausedLease() {
         val (coordinator, store, _) = fixture()
         val job = coordinator.submit(baseInput)
         val claimed = store.claim(job.jobId, 1_000L, 100L)!!
@@ -128,7 +124,7 @@ fun main() {
         expect(paused.actions.contains(TaskAction.RESUME), "应提供继续操作")
         var lost = false
         try {
-            store.recordCheckpoint(job.jobId, claimed.leaseToken, TaskStage.EXTRACT, StageOutput("late"), 1_010L)
+            store.recordCheckpoint(job.jobId, claimed.leaseToken, TaskStage.EXTRACT, StageOutput("late"), 1_010L, 100L)
         } catch (_: LeaseLostException) {
             lost = true
         }
@@ -136,7 +132,8 @@ fun main() {
         expect(coordinator.controlTask(job.jobId, TaskAction.RESUME).status == TaskStatus.QUEUED, "继续后应重新排队")
     }
 
-    test("进程中断后从已提交检查点恢复") {
+    @Test
+    fun recoversExpiredLease() {
         val revisions = MutableRevisions(RevisionSnapshot(7, 3))
         val store = InMemoryTaskStore()
         val pipeline = FakePipeline()
@@ -144,22 +141,27 @@ fun main() {
         val coordinator = PersistentTaskCoordinator(store, revisions, pipeline, now = { now }, leaseMillis = 10L)
         val job = coordinator.submit(baseInput)
         val claimed = store.claim(job.jobId, now, 10L)!!
-        store.recordCheckpoint(job.jobId, claimed.leaseToken, TaskStage.EXTRACT, StageOutput("saved-extract"), 1_002L)
-        store.recordCheckpoint(job.jobId, claimed.leaseToken, TaskStage.UPDATE, StageOutput("saved-update"), 1_004L)
+        store.recordCheckpoint(job.jobId, claimed.leaseToken, TaskStage.EXTRACT, StageOutput("saved-extract"), 1_002L, 10L)
+        store.recordCheckpoint(job.jobId, claimed.leaseToken, TaskStage.UPDATE, StageOutput("saved-update"), 1_004L, 10L)
+        expect(coordinator.runJob(job.jobId) == TaskRunOutcome.BUSY, "租约有效时应安排稍后重试")
+        now = 1_012L
+        expect(coordinator.runJob(job.jobId) == TaskRunOutcome.BUSY, "检查点应延长当前租约")
         now = 1_020L
         expect(coordinator.runJob(job.jobId) == TaskRunOutcome.COMPLETED, "过期租约应恢复并完成")
         expect(pipeline.calls.first() == TaskStage.CONTEXT, "恢复时应跳过已提交的 EXTRACT/UPDATE")
         expect(pipeline.calls.contains(TaskStage.EXTRACT).not(), "不应重复执行抽取")
         expect(pipeline.calls.contains(TaskStage.UPDATE).not(), "不应重复执行更新")
     }
-    test("同一活动租约不能被重复领取") {
+    @Test
+    fun preventsDoubleClaim() {
         val (coordinator, store, _) = fixture()
         val job = coordinator.submit(baseInput)
         expect(store.claim(job.jobId, 1_000L, 100L) != null, "首次领取应成功")
         expect(store.claim(job.jobId, 1_005L, 100L) == null, "活动租约不应重复领取")
     }
 
-    test("过期租约可以被恢复执行者重新领取") {
+    @Test
+    fun increasesFenceOnRecovery() {
         val (coordinator, store, _) = fixture()
         val job = coordinator.submit(baseInput)
         val first = store.claim(job.jobId, 1_000L, 10L)!!
@@ -169,7 +171,8 @@ fun main() {
         expect(recovered.attempts == 2, "恢复应记录尝试次数")
     }
 
-    test("取消后任务进入终态并可查询") {
+    @Test
+    fun retainsCancelledReceipt() {
         val (coordinator, _, _) = fixture()
         val job = coordinator.submit(baseInput)
         val view = coordinator.controlTask(job.jobId, TaskAction.CANCEL)
@@ -177,7 +180,8 @@ fun main() {
         expect(view.actions.isEmpty(), "终态不应有操作")
     }
 
-    test("不可重试异常保留 failed 并可手动重试") {
+    @Test
+    fun retriesFailureOnRequest() {
         val (coordinator, _, pipeline) = fixture()
         pipeline.fatalStage = TaskStage.UPDATE
         val job = coordinator.submit(baseInput)
@@ -190,7 +194,8 @@ fun main() {
         expect(coordinator.runJob(job.jobId) == TaskRunOutcome.COMPLETED, "人工重试后应完成")
     }
 
-    test("runNext 只领取一个排队任务并完成") {
+    @Test
+    fun claimsOneQueuedJob() {
         val (coordinator, store, _) = fixture()
         val first = coordinator.submit(baseInput)
         coordinator.submit(baseInput.copy(recordId = "record-2"))
@@ -200,7 +205,8 @@ fun main() {
         expect(coordinator.getTask(first.jobId)!!.status != TaskStatus.QUEUED, "最老任务应被领取")
     }
 
-    test("输入修订变化会拒绝旧任务") {
+    @Test
+    fun rejectsOldRevision() {
         val revisions = MutableRevisions(RevisionSnapshot(8, 3))
         val store = InMemoryTaskStore()
         val pipeline = FakePipeline()
@@ -210,19 +216,75 @@ fun main() {
         expect(coordinator.getTask(job.jobId)!!.status == TaskStatus.STALE, "状态应为 stale")
     }
 
-    test("检查点只允许当前阶段写入") {
+    @Test
+    fun enforcesStageOrder() {
         val (coordinator, store, _) = fixture()
         val job = coordinator.submit(baseInput)
         val claimed = store.claim(job.jobId, 1_000L, 100L)!!
         var rejected = false
         try {
-            store.recordCheckpoint(job.jobId, claimed.leaseToken, TaskStage.RANK, StageOutput("skip"), 1_010L)
+            store.recordCheckpoint(job.jobId, claimed.leaseToken, TaskStage.RANK, StageOutput("skip"), 1_010L, 100L)
         } catch (_: IllegalStateException) {
             rejected = true
         }
         expect(rejected, "不能跳过前置阶段")
     }
 
-    println("\n${passed} scheduler tests passed")
-}
+    @Test
+    fun fencesFinalWriteAfterCorrection() {
+        val store = InMemoryTaskStore()
+        val revisions = MutableRevisions(RevisionSnapshot(7, 3))
+        val pipeline = FakePipeline().apply { beforeCommit = { revisions.value = RevisionSnapshot(7, 4) } }
+        val coordinator = PersistentTaskCoordinator(store, revisions, pipeline)
+        val job = coordinator.submit(baseInput)
+        expect(coordinator.runJob(job.jobId) == TaskRunOutcome.STALE, "晚到的计算结果应转为过期")
+        val view = coordinator.getTask(job.jobId)!!
+        expect(view.decisionId == null && view.evidenceRefs.isEmpty(), "旧决定与证据应一起丢弃")
+    }
 
+    @Test
+    fun cancellationWinsOverStaleWorker() {
+        val store = InMemoryTaskStore()
+        val revisions = MutableRevisions(RevisionSnapshot(7, 3))
+        val pipeline = FakePipeline()
+        val coordinator = PersistentTaskCoordinator(store, revisions, pipeline)
+        val job = coordinator.submit(baseInput)
+        pipeline.beforeRank = {
+            coordinator.controlTask(job.jobId, TaskAction.CANCEL)
+            revisions.value = null
+        }
+        expect(coordinator.runJob(job.jobId) == TaskRunOutcome.CANCELLED, "原执行者应返回当前取消状态")
+        expect(coordinator.getTask(job.jobId)!!.status == TaskStatus.CANCELLED, "取消回执应保留")
+    }
+
+    @Test
+    fun retryHonorsAvailableActions() {
+        val (coordinator, store, _) = fixture()
+        val job = coordinator.submit(baseInput)
+        coordinator.controlTask(job.jobId, TaskAction.PAUSE)
+        assertThrows(IllegalStateException::class.java) { coordinator.controlTask(job.jobId, TaskAction.RETRY) }
+        coordinator.controlTask(job.jobId, TaskAction.RESUME)
+        val active = store.claim(job.jobId, 1_000L, 100L)!!
+        val failed = store.markFailed(job.jobId, active.leaseToken, false, 1_010L).toView()
+        expect(TaskAction.RETRY !in failed.actions, "永久失败仅支持取消")
+        assertThrows(IllegalStateException::class.java) { coordinator.controlTask(job.jobId, TaskAction.RETRY) }
+    }
+
+    @Test
+    fun publishesDecisionForReview() {
+        val (coordinator, _, pipeline) = fixture()
+        pipeline.needsReview = true
+        val job = coordinator.submit(baseInput)
+        expect(coordinator.runJob(job.jobId) == TaskRunOutcome.NEEDS_REVIEW, "待确认决定保留独立终态")
+        expect(coordinator.getTask(job.jobId)!!.actions.contains(TaskAction.OPEN_DETAIL), "应可查看依据")
+    }
+
+    @Test
+    fun workCancellationPropagates() {
+        val (coordinator, _, pipeline) = fixture()
+        pipeline.beforeRank = { throw java.util.concurrent.CancellationException() }
+        val job = coordinator.submit(baseInput)
+        assertThrows(java.util.concurrent.CancellationException::class.java) { coordinator.runJob(job.jobId) }
+        expect(coordinator.getTask(job.jobId)!!.checkpoint == TaskStage.CONTEXT, "保留最后成功的检查点")
+    }
+}
