@@ -97,6 +97,8 @@ class PersistentTaskCoordinator(
             throw cause
         } catch (cause: java.util.concurrent.CancellationException) {
             throw cause
+        } catch (_: AlgorithmUnavailableException) {
+            terminalOutcome(store.markWaiting(job.jobId, job.leaseToken, WAITING_ALGORITHM_UNAVAILABLE, now()))
         } catch (_: RetryableTaskException) {
             terminalOutcome(store.markWaiting(job.jobId, job.leaseToken, WAITING_RETRY_PENDING, now()))
         } catch (_: Exception) {

@@ -2,6 +2,13 @@ package com.pebblepile.android
 
 import android.content.Context
 import com.pebblepile.android.db.RoomStore
+import com.pebblepile.android.model.CoreTask
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
 import com.pebblepile.android.repository.CoreRepository
 import com.pebblepile.android.model.EvidenceItem
 import com.pebblepile.android.model.PebbleRecord
@@ -13,11 +20,25 @@ import com.pebblepile.android.service.CoreApi
 import com.pebblepile.android.service.LocalCoreApi
 
 /** Android assembly. Uses the Room-backed CoreRepository by default (Issue #7). */
-class DemoCoreApi internal constructor(repository: CoreRepository) : CoreApi by LocalCoreApi(
+class DemoCoreApi internal constructor(
+    repository: CoreRepository,
+    onQueued: (CoreTask, Boolean) -> Unit = { _, _ -> },
+    private val revisions: ((List<String>) -> Flow<List<Long>>)? = null,
+) : CoreApi by LocalCoreApi(
+    onTaskQueued = onQueued,
     repository = repository,
     decorateCreatedRecord = Companion::withDemoContent,
 ) {
-    constructor(context: Context) : this(RoomStore.repository(context))
+    constructor(context: Context) : this(
+        RoomStore.repository(context),
+        (context.applicationContext as PebblePileApplication).taskRuntime::enqueue,
+        RoomStore.database(context).taskDao()::observedRevisions,
+    )
+
+    override fun observeTasks(ids: List<String>): Flow<List<CoreTask>> =
+        (revisions?.invoke(ids) ?: flowOf(emptyList())).distinctUntilChanged().map {
+            ids.mapNotNull(::getTask)
+        }.flowOn(Dispatchers.IO)
 
     private companion object {
         fun withDemoContent(record: PebbleRecord, sourceRef: SourceRef): PebbleRecord {

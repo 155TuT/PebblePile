@@ -116,10 +116,10 @@ data class CoreTask(
     val allowedActions: Set<TaskAction>
         get() = if (kind == TaskKind.DELETE_CLEANUP) emptySet() else when (state) {
             TaskState.QUEUED, TaskState.RUNNING -> setOf(TaskAction.PAUSE, TaskAction.CANCEL)
-            TaskState.WAITING -> if (waitReason == "user_paused") {
-                setOf(TaskAction.RESUME, TaskAction.CANCEL)
-            } else {
-                setOf(TaskAction.CANCEL)
+            TaskState.WAITING -> when (waitReason) {
+                "user_paused" -> setOf(TaskAction.RESUME, TaskAction.CANCEL)
+                "retry_pending", "algorithm_unavailable" -> setOf(TaskAction.RETRY, TaskAction.CANCEL)
+                else -> setOf(TaskAction.CANCEL)
             }
             TaskState.NEEDS_REVIEW -> setOf(TaskAction.CANCEL)
             TaskState.FAILED -> setOf(TaskAction.RETRY)

@@ -23,8 +23,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DeletionMarkerEntity::class,
         DeletionJobEntity::class,
         TaskCheckpointEntity::class,
+        ScheduledJobEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class PebbleDatabase : RoomDatabase() {
@@ -35,6 +36,7 @@ abstract class PebbleDatabase : RoomDatabase() {
     abstract fun taskDao(): TaskDao
     abstract fun receiptDao(): ReceiptDao
     abstract fun deletionDao(): DeletionDao
+    abstract fun schedulerDao(): SchedulerDao
     abstract fun checkpointDao(): CheckpointDao
 
     companion object {
@@ -59,6 +61,14 @@ abstract class PebbleDatabase : RoomDatabase() {
             }
         }
 
+        private val addScheduler = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE scheduler_jobs (
+                    job_id TEXT NOT NULL PRIMARY KEY, input_key TEXT NOT NULL, snapshot_json TEXT NOT NULL)""")
+                db.execSQL("CREATE UNIQUE INDEX index_scheduler_jobs_input_key ON scheduler_jobs(input_key)")
+            }
+        }
+
         private val pragmaCallback = object : Callback() {
             override fun onOpen(db: SupportSQLiteDatabase) {
                 db.execSQL("PRAGMA synchronous=FULL")
@@ -68,7 +78,7 @@ abstract class PebbleDatabase : RoomDatabase() {
 
         fun build(context: Context, name: String): PebbleDatabase =
             Room.databaseBuilder(context, PebbleDatabase::class.java, name)
-                .addMigrations(migrateKeys)
+                .addMigrations(migrateKeys, addScheduler)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(pragmaCallback)
                 .build()

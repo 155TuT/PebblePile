@@ -29,52 +29,46 @@ interface TaskStore {
     fun list(): List<TaskJob>
 }
 
-/**
- * 内存实现用于契约测试和接入前的端到端编排。
- * 真实 Android 工程应由 #7 的 Room/SQLite 实现替换，保持相同原子语义。
- */
-class InMemoryTaskStore : TaskStore {
-    private val jobs = LinkedHashMap<String, TaskJob>()
-    private val idempotency = mutableMapOf<String, String>()
+/** Transitions are shared by the in-memory and SQLite stores. The backend serializes each operation. */
+abstract class TransactionalTaskStore : TaskStore {
+    protected abstract fun <T> transaction(block: () -> T): T
+    protected abstract fun find(id: String): TaskJob?
+    protected abstract fun findByKey(key: String): TaskJob?
+    protected abstract fun readAll(): List<TaskJob>
+    protected abstract fun save(job: TaskJob)
 
-    @Synchronized
-    override fun createOrGet(job: TaskJob): TaskJob {
-        idempotency[job.idempotencyKey]?.let {
-            val existing = jobs.getValue(it)
+    override fun createOrGet(job: TaskJob): TaskJob = transaction {
+        findByKey(job.idempotencyKey)?.let { existing ->
             require(existing.inputDigest == job.inputDigest) { "同一修订的记录内容须一致" }
-            return existing
+            return@transaction existing
         }
-        jobs[job.jobId] = job
-        idempotency[job.idempotencyKey] = job.jobId
-        return job
+        save(job)
+        job
     }
 
-    @Synchronized
-    override fun get(jobId: String): TaskJob? = jobs[jobId]
+    override fun get(jobId: String): TaskJob? = transaction { find(jobId) }
 
-    @Synchronized
-    override fun claim(jobId: String, now: Long, leaseMillis: Long): TaskJob? {
-        val job = jobs[jobId] ?: return null
-        return claimInternal(job, now, leaseMillis)
+    override fun claim(jobId: String, now: Long, leaseMillis: Long): TaskJob? = transaction {
+        val job = find(jobId) ?: return@transaction null
+        claimInternal(job, now, leaseMillis)
     }
 
-    @Synchronized
-    override fun claimNext(now: Long, leaseMillis: Long): TaskJob? {
-        val next = jobs.values
+    override fun claimNext(now: Long, leaseMillis: Long): TaskJob? = transaction {
+        val next = readAll()
             .filter {
                 it.status == TaskStatus.QUEUED ||
-                    (it.status == TaskStatus.WAITING && it.waitingReason != WAITING_USER_PAUSED) ||
+                    (it.status == TaskStatus.WAITING && it.waitingReason == WAITING_RETRY_PENDING) ||
                     (it.status == TaskStatus.RUNNING && it.leaseUntil <= now)
             }
             .sortedBy { it.createdAt }
             .firstOrNull { it.leaseUntil <= now }
-            ?: return null
-        return claimInternal(next, now, leaseMillis)
+            ?: return@transaction null
+        claimInternal(next, now, leaseMillis)
     }
 
     private fun claimInternal(job: TaskJob, now: Long, leaseMillis: Long): TaskJob? {
         val runnable = job.status == TaskStatus.QUEUED ||
-            (job.status == TaskStatus.WAITING && job.waitingReason != WAITING_USER_PAUSED) ||
+            (job.status == TaskStatus.WAITING && job.waitingReason == WAITING_RETRY_PENDING) ||
             (job.status == TaskStatus.RUNNING && job.leaseUntil <= now)
         if (!runnable || job.leaseUntil > now) return null
         val updated = job.copy(
@@ -86,11 +80,10 @@ class InMemoryTaskStore : TaskStore {
             leaseUntil = now + leaseMillis,
             updatedAt = now,
         )
-        jobs[job.jobId] = updated
+        save(updated)
         return updated
     }
 
-    @Synchronized
     override fun recordCheckpoint(
         jobId: String,
         leaseToken: Long,
@@ -98,13 +91,13 @@ class InMemoryTaskStore : TaskStore {
         output: StageOutput,
         now: Long,
         leaseMillis: Long,
-    ): TaskJob {
+    ): TaskJob = transaction {
         val job = requireLease(jobId, leaseToken, now)
         if (stage == TaskStage.COMMIT) throw IllegalArgumentException("提交阶段使用 finishIfCurrent")
         val existing = job.checkpoints[stage]
         if (existing != null) {
             if (existing != output) throw IllegalStateException("同一阶段出现冲突结果：$stage")
-            return job
+            return@transaction job
         }
         if (job.currentStage != stage) throw IllegalStateException("阶段顺序不匹配：期望 ${job.currentStage}，实际 $stage")
         val next = stage.next() ?: TaskStage.COMMIT
@@ -114,12 +107,11 @@ class InMemoryTaskStore : TaskStore {
             leaseUntil = now + leaseMillis,
             updatedAt = now,
         )
-        jobs[jobId] = updated
-        return updated
+        save(updated)
+        updated
     }
 
-    @Synchronized
-    override fun markWaiting(jobId: String, leaseToken: Long, reason: String, now: Long): TaskJob {
+    override fun markWaiting(jobId: String, leaseToken: Long, reason: String, now: Long): TaskJob = transaction {
         val job = requireLease(jobId, leaseToken, now)
         val updated = job.copy(
             status = TaskStatus.WAITING,
@@ -129,12 +121,11 @@ class InMemoryTaskStore : TaskStore {
             leaseUntil = 0,
             updatedAt = now,
         )
-        jobs[jobId] = updated
-        return updated
+        save(updated)
+        updated
     }
 
-    @Synchronized
-    override fun markFailed(jobId: String, leaseToken: Long, retryable: Boolean, now: Long): TaskJob {
+    override fun markFailed(jobId: String, leaseToken: Long, retryable: Boolean, now: Long): TaskJob = transaction {
         val job = requireLease(jobId, leaseToken, now)
         val updated = job.copy(
             status = TaskStatus.FAILED,
@@ -144,12 +135,11 @@ class InMemoryTaskStore : TaskStore {
             leaseUntil = 0,
             updatedAt = now,
         )
-        jobs[jobId] = updated
-        return updated
+        save(updated)
+        updated
     }
 
-    @Synchronized
-    override fun markStale(jobId: String, leaseToken: Long, now: Long): TaskJob {
+    override fun markStale(jobId: String, leaseToken: Long, now: Long): TaskJob = transaction {
         val job = requireLease(jobId, leaseToken, now)
         val updated = job.copy(
             status = TaskStatus.STALE,
@@ -159,22 +149,21 @@ class InMemoryTaskStore : TaskStore {
             leaseUntil = 0,
             updatedAt = now,
         )
-        jobs[jobId] = updated
-        return updated
+        save(updated)
+        updated
     }
 
-    @Synchronized
     override fun finishIfCurrent(
         jobId: String,
         leaseToken: Long,
         result: CommitOutput,
         revisions: RevisionProvider,
         now: Long,
-    ): TaskJob {
+    ): TaskJob = transaction {
         val job = requireLease(jobId, leaseToken, now)
         check(job.currentStage == TaskStage.COMMIT) { "发布结果前须完成 RANK 检查点" }
         if (revisions.currentRevision(job.recordId) != RevisionSnapshot(job.inputRevision, job.preferenceRevision)) {
-            return markStale(jobId, leaseToken, now)
+            return@transaction markStale(jobId, leaseToken, now)
         }
         val updated = job.copy(
             status = if (result.needsReview) TaskStatus.NEEDS_REVIEW else TaskStatus.COMPLETED,
@@ -186,15 +175,14 @@ class InMemoryTaskStore : TaskStore {
             leaseUntil = 0,
             updatedAt = now,
         )
-        jobs[jobId] = updated
-        return updated
+        save(updated)
+        updated
     }
 
-    @Synchronized
-    override fun control(jobId: String, action: TaskAction, now: Long): TaskJob {
-        val job = jobs[jobId] ?: throw IllegalArgumentException("任务不存在：$jobId")
+    override fun control(jobId: String, action: TaskAction, now: Long): TaskJob = transaction {
+        val job = find(jobId) ?: throw IllegalArgumentException("任务不存在：$jobId")
         if (job.status == TaskStatus.COMPLETED || job.status == TaskStatus.CANCELLED || job.status == TaskStatus.STALE) {
-            return job
+            return@transaction job
         }
         check(action in job.toView().actions) { "任务 ${job.status} 可执行 ${job.toView().actions}" }
         val updated = when (action) {
@@ -222,15 +210,14 @@ class InMemoryTaskStore : TaskStore {
             )
             TaskAction.OPEN_DETAIL -> job
         }
-        jobs[jobId] = updated
-        return updated
+        save(updated)
+        updated
     }
 
-    @Synchronized
-    override fun list(): List<TaskJob> = jobs.values.sortedBy { it.createdAt }
+    override fun list(): List<TaskJob> = transaction { readAll().sortedBy { it.createdAt } }
 
     private fun requireLease(jobId: String, leaseToken: Long, now: Long): TaskJob {
-        val job = jobs[jobId] ?: throw IllegalArgumentException("任务不存在：$jobId")
+        val job = find(jobId) ?: throw IllegalArgumentException("任务不存在：$jobId")
         if (job.status != TaskStatus.RUNNING || job.leaseToken != leaseToken || job.leaseUntil <= now) {
             throw LeaseLostException(jobId)
         }
@@ -238,3 +225,15 @@ class InMemoryTaskStore : TaskStore {
     }
 }
 
+class InMemoryTaskStore : TransactionalTaskStore() {
+    private val jobs = LinkedHashMap<String, TaskJob>()
+    private val keys = mutableMapOf<String, String>()
+    override fun <T> transaction(block: () -> T): T = synchronized(this, block)
+    override fun find(id: String) = jobs[id]
+    override fun findByKey(key: String) = keys[key]?.let(jobs::get)
+    override fun readAll() = jobs.values.toList()
+    override fun save(job: TaskJob) {
+        jobs[job.jobId] = job
+        keys[job.idempotencyKey] = job.jobId
+    }
+}

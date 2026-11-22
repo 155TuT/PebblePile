@@ -9,16 +9,20 @@ import com.pebblepile.android.repository.RepositoryWriteException
 import org.json.JSONException
 
 internal object RoomStore {
-    private var instance: CoreRepository? = null
+    private var databaseInstance: PebbleDatabase? = null
+    private var repositoryInstance: CoreRepository? = null
 
     @Synchronized
-    fun repository(context: Context): CoreRepository {
-        val app = context.applicationContext
-        return instance ?: MigratingRoomRepository(
-            PebbleDatabase.build(app, "pebblepile.sqlite"),
-            app.getSharedPreferences("pebblepile_issue4_demo", Context.MODE_PRIVATE),
-        ).also { instance = it }
-    }
+    fun database(context: Context): PebbleDatabase =
+        databaseInstance ?: PebbleDatabase.build(context.applicationContext, "pebblepile.sqlite")
+            .also { databaseInstance = it }
+
+    @Synchronized
+    fun repository(context: Context): CoreRepository =
+        repositoryInstance ?: MigratingRoomRepository(
+            database(context),
+            context.applicationContext.getSharedPreferences("pebblepile_issue4_demo", Context.MODE_PRIVATE),
+        ).also { repositoryInstance = it }
 }
 
 /** Open and import on the first repository operation, which Android dispatches on its IO thread. */

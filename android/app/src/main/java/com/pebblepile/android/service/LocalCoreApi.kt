@@ -80,6 +80,7 @@ class LocalCoreApi(
     private val decorateCreatedRecord: (PebbleRecord, SourceRef) -> PebbleRecord = { record, _ ->
         decorateSampleRecord(record)
     },
+    private val onTaskQueued: (CoreTask, Boolean) -> Unit = { _, _ -> },
 ) : CoreApi {
     private val deletionTokens by lazy { DeletionPreviewTokens() }
 
@@ -400,23 +401,33 @@ class LocalCoreApi(
     ): ApiReceipt {
         if (operationId.isBlank()) return invalid("缺少操作标识")
         val key = OperationKey(clientId, operationId)
-        return try {
+        var wake: CoreTask? = null
+        var replace = false
+        val receipt = try {
             repository.write { tx ->
                 val previous = tx.receipt(key)
                 authorize(tx, previous?.takeIf { it.requestHash == hash })?.let { return@write it }
                 if (previous != null) {
-                    return@write if (previous.requestHash == hash) previous.receipt
+                    return@write if (previous.requestHash == hash) {
+                        wake = previous.receipt.jobId?.let(tx::task)?.takeIf { it.state == TaskState.QUEUED }
+                        previous.receipt
+                    }
                     else invalid("操作标识已用于其他内容").copy(reason = "OPERATION_ID_REUSED", libraryRevision = tx.revision)
                 }
                 val (result, scope) = apply(tx)
                 if (!result.success) return@write result.copy(libraryRevision = tx.revision)
                 val committed = result.copy(libraryRevision = tx.advanceRevision())
                 tx.putReceipt(key, StoredReceipt(hash, committed, scope))
+                wake = committed.jobId?.let(tx::task)?.takeIf { it.state == TaskState.QUEUED }
+                // A fresh resume or retry must supersede a still-finishing Worker for the old lease.
+                replace = committed.task != null
                 committed
             }
         } catch (_: RepositoryWriteException) {
             ApiReceipt(false, message = "保存失败，请重试", code = "PROCESSING_FAILED", nextAction = "retry", retryable = true)
         }
+        if (receipt.success) wake?.let { onTaskQueued(it, replace) }
+        return receipt
     }
 
     private fun authorizeDeletion(

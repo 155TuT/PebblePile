@@ -21,6 +21,8 @@ class RoomCoreRepository(
     private val failPoint: (() -> Unit)? = null,
 ) : CoreRepository {
 
+    private val scheduler = RoomTaskStore(database)
+
     override fun <T> read(block: (CoreReader) -> T): T =
         database.runInTransaction(Callable { block(RoomWriter()) })
 
@@ -117,7 +119,8 @@ class RoomCoreRepository(
                     inputRevision = task.inputRevision,
                 )
             )
-            // A task's phase is its most recent durable checkpoint (job_steps.checkpoint baseline).
+            // Control receipts may change phase; preserve the last committed scheduler payload.
+            if (scheduler.onBusinessTaskWritten(task)) return
             task.phase?.let { phase ->
                 database.checkpointDao().put(
                     TaskCheckpointEntity(
