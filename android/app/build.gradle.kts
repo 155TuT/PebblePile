@@ -64,7 +64,12 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    sourceSets.getByName("test").resources.srcDir(rootProject.file("../docs/testing/issue10"))
+    listOf("test", "androidTest").forEach { name ->
+        sourceSets.getByName(name).apply {
+            java.srcDir("src/sharedTest/java")
+            resources.srcDir(rootProject.file("../docs/testing/issue10"))
+        }
+    }
 
     buildFeatures { compose = true }
     compileOptions {
