@@ -1,7 +1,8 @@
 package com.pebblepile.android
 
 import android.content.Context
-import com.pebblepile.android.db.DemoLibraryStore
+import com.pebblepile.android.db.RoomStore
+import com.pebblepile.android.repository.CoreRepository
 import com.pebblepile.android.model.EvidenceItem
 import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.RecordTag
@@ -11,18 +12,14 @@ import com.pebblepile.android.model.TagReviewState
 import com.pebblepile.android.service.CoreApi
 import com.pebblepile.android.service.LocalCoreApi
 
-/** Android assembly for the demo. SQLite can use the same CoreRepository interface. */
-class DemoCoreApi(context: Context) : CoreApi by coreFor(context) {
-    private companion object {
-        fun coreFor(context: Context): LocalCoreApi {
-            val preferences = context.getSharedPreferences("pebblepile_issue4_demo", Context.MODE_PRIVATE)
-            val store = DemoLibraryStore(preferences)
-            return LocalCoreApi(
-                repository = store.repository(),
-                decorateCreatedRecord = ::withDemoContent,
-            )
-        }
+/** Android assembly. Uses the Room-backed CoreRepository by default (Issue #7). */
+class DemoCoreApi internal constructor(repository: CoreRepository) : CoreApi by LocalCoreApi(
+    repository = repository,
+    decorateCreatedRecord = Companion::withDemoContent,
+) {
+    constructor(context: Context) : this(RoomStore.repository(context))
 
+    private companion object {
         fun withDemoContent(record: PebbleRecord, sourceRef: SourceRef): PebbleRecord {
             val snippetLength = record.rawText.codePointCount(0, record.rawText.length)
             fun snippet(limit: Int): String = record.rawText.substring(
