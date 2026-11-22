@@ -117,6 +117,7 @@ cd android
 | 文档 | 内容 |
 | --- | --- |
 | [构建、签名与发布](docs/android-build-release.md) | 环境基线、版本规则、签名材料、候选包验证与原文件 Release 流程 |
+| [后台任务调度](android/scheduler-core/README.md) | 阶段检查点、任务控制与 WorkManager 接入 |
 | [Android 工程说明](android/README.md) | 当前功能、调试构建和模拟器复验命令 |
 | [业务接口与仓储契约](docs/core-api-contract.md) | 调用入口、请求与回执、仓储事务和来源版本 |
 | [晚餐验收材料](docs/issue10-testing.md) | 固定输入、回执对照、算法回放与真机验收 |

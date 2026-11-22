@@ -7,3 +7,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "PebblePileAndroid"
 include(":app")
+include(":scheduler-core", ":scheduler-android")

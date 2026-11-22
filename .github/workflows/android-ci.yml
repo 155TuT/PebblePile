@@ -58,6 +58,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon \
+            :scheduler-core:test :scheduler-android:testDebugUnitTest :scheduler-android:assembleDebug :scheduler-android:lintDebug \
             :app:testDebugUnitTest \
             :app:lintDebug \
             :app:assembleDebug
@@ -73,11 +74,13 @@ jobs:
           grep -F "package: name='com.pebblepile.android' versionCode='$version_code' versionName='$version_name'" <<< "$badging"
 
       - name: Upload JVM test report
-        if: ${{ !cancelled() && hashFiles('android/app/build/test-results/testDebugUnitTest/TEST-*.xml') != '' }}
+        if: ${{ !cancelled() && hashFiles('android/*/build/test-results/*/TEST-*.xml') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: android-unit-test-report-${{ github.sha }}
           path: |
+            android/scheduler-core/build/test-results/test/TEST-*.xml
+            android/scheduler-android/build/test-results/testDebugUnitTest/TEST-*.xml
             android/app/build/reports/tests/testDebugUnitTest/
             android/app/build/test-results/testDebugUnitTest/TEST-*.xml
           retention-days: 14
