@@ -10,7 +10,7 @@ on:
       - ".github/workflows/android-release.yml"
       - ".github/scripts/android-*"
       - ".github/tests/test_android_promotion.py"
-      - "docs/testing/issue10/fixtures.json"
+      - "docs/testing/issue10/*.json"
   pull_request:
     paths:
       - "android/**"
@@ -18,7 +18,7 @@ on:
       - ".github/workflows/android-release.yml"
       - ".github/scripts/android-*"
       - ".github/tests/test_android_promotion.py"
-      - "docs/testing/issue10/fixtures.json"
+      - "docs/testing/issue10/*.json"
   workflow_dispatch:
 
 permissions:

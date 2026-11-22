@@ -111,7 +111,7 @@
         "budgetFilter": "price <= 20",
         "mustCite": ["E01", "E02"],
         "excludedFromPreferenceEvidence": ["E03"],
-        "ranking": "baseline_pending"
+        "ranking": "algorithm-baseline.json"
       }
     },
     {
@@ -126,7 +126,7 @@
         "budgetFilter": "price <= 20",
         "mustCite": ["E03"],
         "mustExplainContrastWithOvertime": true,
-        "ranking": "baseline_pending"
+        "ranking": "algorithm-baseline.json"
       }
     },
     {
@@ -141,7 +141,7 @@
         "budgetFilter": "price <= 20",
         "ruleScopeMatch": false,
         "mustNotApplyConvenienceRule": true,
-        "ranking": "baseline_pending"
+        "ranking": "algorithm-baseline.json"
       }
     },
     {
@@ -157,7 +157,7 @@
         "ruleScopeMatch": true,
         "prefer": "convenience",
         "mustCite": ["E01", "E02"],
-        "ranking": "baseline_pending"
+        "ranking": "algorithm-baseline.json"
       }
     }
   ],
