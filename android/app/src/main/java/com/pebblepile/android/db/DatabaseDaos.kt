@@ -103,8 +103,9 @@ interface ReceiptDao {
 
 @Dao
 interface DeletionDao {
-    @Query("SELECT * FROM deletion_markers WHERE key = :key")
-    fun marker(key: String): DeletionMarkerEntity?
+    @Query("""SELECT EXISTS(SELECT 1 FROM deletion_markers WHERE type = :type AND id = :id
+        AND version IS :version AND related_id IS :relatedId)""")
+    fun isDeleted(type: String, id: String, version: Long?, relatedId: String?): Boolean
 
     @Query("SELECT * FROM deletion_markers")
     fun markers(): List<DeletionMarkerEntity>

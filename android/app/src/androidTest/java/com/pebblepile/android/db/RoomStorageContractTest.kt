@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pebblepile.android.model.CorrectionScope
+import com.pebblepile.android.repository.DeletionObject
 import com.pebblepile.android.repository.RepositoryWriteException
 import com.pebblepile.android.service.CaptureRequest
 import com.pebblepile.android.service.CoreApiContractSuite
@@ -98,6 +99,9 @@ class RoomStorageContractTest : CoreApiContractSuite() {
                 old.execSQL("""CREATE TABLE deletion_jobs (job_id TEXT NOT NULL, plan_json TEXT NOT NULL,
                     access_json TEXT NOT NULL, row_key TEXT NOT NULL PRIMARY KEY)""")
                 old.execSQL("INSERT INTO deletion_jobs VALUES ('cleanup', '{}', '{}', 'cleanup')")
+                old.execSQL("""INSERT INTO deletion_markers
+                    (key, type, id, version, related_id, deleted_revision)
+                    VALUES ('source_version|source|1|', 'source_version', 'source', 1, NULL, 2)""")
                 old.version = 1
                 old.setTransactionSuccessful()
             } finally {
@@ -110,6 +114,11 @@ class RoomStorageContractTest : CoreApiContractSuite() {
         database.receiptDao().put(row)
         assertEquals(1, database.receiptDao().all().size)
         assertEquals("{}", database.deletionDao().job("cleanup")?.planJson)
+        createRepository().read { tx ->
+            val deletion = requireNotNull(tx.deletion)
+            assertTrue(deletion.isDeleted(DeletionObject("source_version", "source", 1)))
+            assertFalse(deletion.isDeleted(DeletionObject("source_version", "source", 2)))
+        }
     }
 
     @Test fun conflictingSnapshotsKeepBothCopies() {

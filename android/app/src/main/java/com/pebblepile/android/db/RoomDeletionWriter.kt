@@ -39,7 +39,7 @@ internal class RoomDeletionWriter(
     ): Boolean = authority == authority("")
 
     override fun isDeleted(ref: DeletionObject): Boolean =
-        database.deletionDao().marker(DeletionKeys.of(ref)) != null
+        database.deletionDao().isDeleted(ref.type, ref.id, ref.version, ref.relatedId)
 
     override fun item(ref: DeletionObject): DeletionItem? {
         if (isDeleted(ref)) return null
