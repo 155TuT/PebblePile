@@ -5,7 +5,7 @@
     "LXGW WenKai",
     "Leftist Mono Serif"
   ],
-  "scope": "Source metadata, current-user installation, Paper recognition and local Chrome prototype glyph sources verified. Native app/device rendering remains unverified.",
+  "scope": "Source metadata, current-user installation, Paper recognition and local Chrome prototype glyph sources verified. Android Chinese font files are verified against these hashes. See docs/android-components-compose.md for device checks.",
   "localStorage": ".local/fonts/ (ignored; three original TTF files present)",
   "families": [
     {
@@ -74,7 +74,8 @@
       },
       "unitsPerEm": 1000,
       "variableAxes": [],
-      "fontBinaryIncludedInRepository": false
+      "fontBinaryIncludedInRepository": true,
+      "androidResource": "android/app/src/main/res/font/lxgw_wenkai_regular.ttf"
     },
     {
       "file": "LXGWWenKai-Medium.ttf",
@@ -111,7 +112,8 @@
       },
       "unitsPerEm": 1000,
       "variableAxes": [],
-      "fontBinaryIncludedInRepository": false
+      "fontBinaryIncludedInRepository": true,
+      "androidResource": "android/app/src/main/res/font/lxgw_wenkai_medium.ttf"
     },
     {
       "file": "LeftistMonoSerif.ttf",

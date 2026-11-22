@@ -2,11 +2,11 @@
 
 [组件任务 #3](https://github.com/155TuT/PebblePile/issues/3) · [冲刺计划](https://github.com/155TuT/2601-fzu-SoftwareEngineering-YuezhongWu/blob/main/homework/team/task8/plan.md) · [VI 规范](vi-design.md) · [字体说明](../assets/fonts/README.md)
 
-整理于 2026-11-20。
+整理于 2026-11-20。四类组件的调用方式、模拟器截图与设备测试见 [Compose 组件交接](android-components-compose.md)。
 
 ## 一、范围与依赖
 
-本稿约定输入框、语义标签、依据卡片和处理反馈的接口与样例。陈柏睿交出可安装的 Android 工程，并和陈柯男选定 UI 框架后，马晨曦实现四类组件。陈柏睿接入首页或记录库，陈柯男接入详情或纠正页，林叶鑫按设备清单验收。
+本稿约定输入框、语义标签、依据卡片和处理反馈的接口与样例。马晨曦已在纵向 Compose 工程提交四类组件。组件构建通过后，陈柏睿接入首页或记录库，陈柯男接入详情或纠正页，林叶鑫按设备清单验收。[组件 PR #18](https://github.com/155TuT/PebblePile/pull/18)
 
 ## 二、共同视觉约束
 
@@ -20,7 +20,7 @@
 
 ## 三、建议组件契约
 
-两位前端与郑嘉文确认字段和回调，函数签名随选定的 UI 框架落实。
+两位前端按 Compose 约定组件参数和回调，涉及保存、修订和冲突的字段与郑嘉文核对。[业务接口与仓储契约](core-api-contract.md)
 
 ### ExperienceInput
 

@@ -8,7 +8,7 @@
 | 中文标题、品牌、按钮、标签、导航 | `LXGWWenKai-Medium.ttf` | 500 | 同上 |
 | 英文与数字 | `LeftistMonoSerif.ttf` | 400 | [Domenico Catapano 发布页](https://www.dafont.com/leftist-mono-serif.font) |
 
-[manifest.json](manifest.json)记录文件版本、真实名称、字重与 SHA-256。本地字体统一存放在忽略目录 `.local/fonts/`；本目录只保存规范与许可。
+[manifest.json](manifest.json)记录文件版本、真实名称、字重与 SHA-256。设计用原件存放在 `.local/fonts/`。Android 在 `res/font` 打包清单所列的文楷 Regular 和 Medium，OFL 许可随 APK 提供。[Android 组件排版](../../docs/android-components-compose.md)
 
 ## 加载
 
@@ -31,7 +31,7 @@ Web 中，中文继承主题字体，英文片段显式使用 `.pp-latin` 或 `d
 
 主题设置 `font-synthesis: none`。英文强调采用字号、间隔与颜色；中文强调使用文楷 500。Leftist 的字母为比例宽度，所核文件的十个阿拉伯数字宽度相同；文件没有 `tnum`、`lnum` 等 OpenType 特性记录，数字样式仍以实际排字结果为准。
 
-应用打包时按平台注册字体文件与字重，中文和英文分别指定文本角色。Web 托管需补充获准文件的 `url()` 来源；当前主题只声明本机字体。缺少字体时，系统回退保证内容可读；验收应检查实际渲染字体、中文 400/500、英文 400、长句换行与文字放大。
+Android 组件用文楷 400/500 显示中文，英文和数字用系统无衬线 400。Web 托管需补充获准文件的 `url()` 来源；当前主题只声明本机字体。缺少字体时，系统回退保证内容可读；验收应检查实际渲染字体、中文 400/500、英文 400、长句换行与文字放大。
 
 ## 许可
 
