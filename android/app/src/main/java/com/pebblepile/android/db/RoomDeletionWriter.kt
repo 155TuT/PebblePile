@@ -1,5 +1,9 @@
 package com.pebblepile.android.db
 
+import com.pebblepile.android.model.ApiReceipt
+import com.pebblepile.android.model.ConditionSetting
+import com.pebblepile.android.model.PebbleRecord
+import com.pebblepile.android.model.TaskKind
 import com.pebblepile.android.model.CoreTask
 import com.pebblepile.android.model.SourceRef
 import com.pebblepile.android.model.TaskState
@@ -11,19 +15,14 @@ import com.pebblepile.android.repository.DeletionLinkKind
 import com.pebblepile.android.repository.DeletionObject
 import com.pebblepile.android.repository.DeletionPermission
 import com.pebblepile.android.repository.DeletionPlan
-import com.pebblepile.android.repository.DeletionReader
 import com.pebblepile.android.repository.DeletionTraversal
 import com.pebblepile.android.repository.DeletionWriter
 
-/**
- * Room-backed deletion capability, bound to the enclosing CoreRepository write transaction.
- *
- * The dependency graph is derived from persisted records, sources and tasks rather than
- * hard-coded fixtures (as in the contract test's in-memory repository). For a single-user local
- * library, authority is fixed and every in-scope object is allowed; tombstones are persisted so
- * readers omit isolated rows after reopen.
- */
-internal class RoomDeletionWriter(private val database: PebbleDatabase) : DeletionWriter {
+/** Dependency traversal and projection changes share the enclosing SQLite transaction. */
+internal class RoomDeletionWriter(
+    private val database: PebbleDatabase,
+    private val saveTask: (CoreTask) -> Unit,
+) : DeletionWriter {
 
     override fun authority(clientId: String): DeletionAuthority = DeletionAuthority(
         authorityInstanceId = "local-demo",
@@ -37,149 +36,170 @@ internal class RoomDeletionWriter(private val database: PebbleDatabase) : Deleti
         authority: DeletionAuthority,
         permission: DeletionPermission,
         objects: Set<DeletionObject>
-    ): Boolean = authority.principalId == "owner"
+    ): Boolean = authority == authority("")
 
     override fun isDeleted(ref: DeletionObject): Boolean =
         database.deletionDao().marker(DeletionKeys.of(ref)) != null
 
-    override fun item(ref: DeletionObject): DeletionItem? = when (ref.type) {
-        "record" -> database.recordDao().get(ref.id)?.let { DeletionItem(ref, it.revision) }
-        "source" -> {
-            val versions = database.sourceDao().all().filter { it.sourceId == ref.id }
-            versions.firstOrNull()?.let { DeletionItem(ref, 1) }
+    override fun item(ref: DeletionObject): DeletionItem? {
+        if (isDeleted(ref)) return null
+        val revision = when (ref.type) {
+            "record" -> database.recordDao().visible(ref.id)?.revision
+            "source" -> database.sourceDao().all().filter { it.sourceId == ref.id && !isDeleted(it.versionRef) }
+                .maxOfOrNull { it.sourceVersion }
+            "source_version" -> database.sourceDao().get(ref.id, ref.version ?: return null)?.sourceVersion
+            "job" -> database.taskDao().get(ref.id)?.revision
+            else -> null
         }
-        "source_version" -> database.sourceDao().get(ref.id, ref.version ?: -1)
-            ?.let { DeletionItem(ref, 1) }
-        "job" -> database.taskDao().get(ref.id)?.let { DeletionItem(ref, it.revision) }
-        else -> null
+        return revision?.let { DeletionItem(ref, it) }
     }
 
-    override fun dependents(ref: DeletionObject, traversal: DeletionTraversal): List<DeletionLink> {
-        val links = mutableListOf<DeletionLink>()
+    private val SourceVersionEntity.versionRef
+        get() = DeletionObject("source_version", sourceId, sourceVersion)
+
+    private fun PebbleRecord.references(source: SourceRef) =
+        tags.any { it.sourceRef == source } || suggestions.any { entry -> entry.evidence.any { it.sourceRef == source } }
+
+    override fun dependents(ref: DeletionObject, traversal: DeletionTraversal): List<DeletionLink> = buildList {
+        fun link(target: DeletionObject, revision: Long, kind: DeletionLinkKind) {
+            if (!isDeleted(target)) add(DeletionLink(DeletionItem(target, revision), kind))
+        }
+        fun view(recordId: String) {
+            database.recordDao().visible(recordId)?.let {
+                link(DeletionObject("record", it.id), it.revision, DeletionLinkKind.RECORD_VIEW)
+            }
+        }
         when (ref.type) {
             "record" -> {
-                // Owned source associations and exact versions of self-owned sources.
                 if (traversal == DeletionTraversal.FULL_OBJECT) {
-                    database.sourceDao().forRecord(ref.id).forEach { source ->
-                        links += DeletionLink(
-                            DeletionItem(
-                                DeletionObject("source_version", source.sourceId, source.sourceVersion),
-                                1,
-                            ),
-                            DeletionLinkKind.REMOVE_WITH_INPUT,
-                        )
+                    val versions = database.sourceDao().visibleSources(ref.id)
+                    for (source in versions) {
+                        link(source.versionRef, source.sourceVersion, DeletionLinkKind.REMOVE_WITH_INPUT)
                     }
-                    database.taskDao().forRecord(ref.id).forEach { task ->
-                        links += DeletionLink(
-                            DeletionItem(DeletionObject("job", task.id), task.revision),
-                            DeletionLinkKind.ACTIVE_JOB,
-                        )
+                    for (sourceId in versions.map { it.sourceId }.distinct()) {
+                        val live = database.sourceDao().all().filter { it.sourceId == sourceId && !isDeleted(it.versionRef) }
+                        if (live.isNotEmpty() && live.all { it.recordId == ref.id }) {
+                            link(DeletionObject("source", sourceId), live.maxOf { it.sourceVersion }, DeletionLinkKind.REMOVE_WITH_INPUT)
+                        }
+                    }
+                }
+                for (row in database.taskDao().forRecord(ref.id)) {
+                    val task = checkNotNull(DbJson.decode<CoreTask>(row.taskJson))
+                    if (task.kind != TaskKind.DELETE_CLEANUP && task.allowedActions.isNotEmpty()) {
+                        link(DeletionObject("job", task.id), task.revision, DeletionLinkKind.ACTIVE_JOB)
                     }
                 }
             }
-            "source" -> {
-                database.sourceDao().all().filter { it.sourceId == ref.id }.forEach { version ->
-                    links += DeletionLink(
-                        DeletionItem(
-                            DeletionObject("source_version", version.sourceId, version.sourceVersion),
-                            1,
-                        ),
-                        DeletionLinkKind.REMOVE_WITH_INPUT,
-                    )
-                }
+            "source" -> database.sourceDao().all().filter { it.sourceId == ref.id }.forEach {
+                link(it.versionRef, it.sourceVersion, DeletionLinkKind.REMOVE_WITH_INPUT)
             }
             "source_version" -> {
-                // Other records referencing this exact version see a changed projection.
-                val sourceId = ref.id
-                val version = ref.version
-                database.sourceDao().all()
-                    .filter { it.sourceId == sourceId && it.sourceVersion == version && it.recordId != ref.relatedId }
-                    .forEach { reference ->
-                        val record = database.recordDao().get(reference.recordId)
-                        links += DeletionLink(
-                            DeletionItem(
-                                DeletionObject("record", reference.recordId),
-                                record?.revision ?: 1,
-                            ),
-                            DeletionLinkKind.RECORD_VIEW,
-                        )
+                val source = SourceRef(ref.id, requireNotNull(ref.version))
+                val owner = database.sourceDao().get(source.sourceId, source.sourceVersion)?.recordId
+                if (owner != null) view(owner)
+                for (row in database.recordDao().visibleRecords()) {
+                    val record = checkNotNull(DbJson.decode<PebbleRecord>(row.recordJson))
+                    if (row.id != owner && record.references(source)) {
+                        link(DeletionObject("record_source", ref.id, ref.version, row.id),
+                            row.revision, DeletionLinkKind.REMOVE_WITH_INPUT)
                     }
+                }
             }
+            "record_source" -> ref.relatedId?.let(::view)
         }
-        return links.filterNot { isDeleted(it.item.ref) }
     }
 
-    override fun supportGroups(ref: DeletionObject): List<Set<DeletionObject>> {
-        // A source version has independent support from the record that owns it.
-        return when (ref.type) {
-            "source_version" -> database.sourceDao().get(ref.id, ref.version ?: -1)
-                ?.let { listOf(setOf(DeletionObject("record", it.recordId))) }
-                ?: emptyList()
-            else -> emptyList()
-        }
-    }
+    // This schema stores captures and record projections. Separate algorithm artifacts will
+    // supply their own support groups when they enter the repository.
+    override fun supportGroups(ref: DeletionObject): List<Set<DeletionObject>> = emptyList()
 
     override fun sourceReference(recordId: String, source: SourceRef): DeletionItem? {
-        val found = database.sourceDao().forRecord(recordId)
-            .firstOrNull { it.sourceId == source.sourceId && it.sourceVersion == source.sourceVersion }
-            ?: return null
-        if (isDeleted(DeletionObject("source_version", source.sourceId, source.sourceVersion))) return null
-        return DeletionItem(
-            DeletionObject("record_source", source.sourceId, source.sourceVersion, recordId),
-            1L,
-        )
+        val row = database.recordDao().visible(recordId) ?: return null
+        val owner = database.sourceDao().get(source.sourceId, source.sourceVersion) ?: return null
+        val ref = DeletionObject("record_source", source.sourceId, source.sourceVersion, recordId)
+        if (owner.recordId == recordId || isDeleted(owner.versionRef) || isDeleted(ref)) return null
+        val record = checkNotNull(DbJson.decode<PebbleRecord>(row.recordJson))
+        return DeletionItem(ref, row.revision).takeIf { record.references(source) }
     }
 
     override fun cleanupAccess(jobId: String): DeletionJobAccess? =
         database.deletionDao().job(jobId)?.let { DbJson.decode<DeletionJobAccess>(it.accessJson) }
 
     override fun isolate(plan: DeletionPlan, deletionRevision: Long): Boolean {
-        plan.remove.forEach { item ->
-            database.deletionDao().putMarker(
-                DeletionMarkerEntity(
-                    key = DeletionKeys.of(item.ref),
-                    type = item.ref.type,
-                    id = item.ref.id,
-                    version = item.ref.version,
-                    relatedId = item.ref.relatedId,
-                    deletedRevision = deletionRevision,
-                )
+        val removed = plan.remove.map { it.ref }.toSet()
+        for (ref in removed) {
+            database.deletionDao().putMarker(DeletionMarkerEntity(
+                key = DeletionKeys.of(ref), type = ref.type, id = ref.id, version = ref.version,
+                relatedId = ref.relatedId, deletedRevision = deletionRevision,
+            ))
+        }
+        val changedRecords = plan.invalidate.filter { it.ref.type == "record" }.map { it.ref.id }.toSet()
+        for (id in changedRecords) redactRecord(id, removed)
+        val cancelledJobs = plan.cancel.map { it.ref.id }.toSet()
+        for (item in plan.cancel) {
+            val row = checkNotNull(database.taskDao().get(item.ref.id))
+            val task = checkNotNull(DbJson.decode<CoreTask>(row.taskJson))
+            val cancelled = task.copy(state = TaskState.CANCELLED, waitReason = null, revision = task.revision + 1)
+            database.taskDao().put(row.copy(taskJson = DbJson.encode(cancelled), state = cancelled.state.name,
+                revision = cancelled.revision))
+        }
+        val deletedRecords = removed.filter { it.type == "record" }.map { it.id }.toSet()
+        database.libraryDao().get()?.let { library ->
+            val setting = DbJson.decode<ConditionSetting>(library.futureConditionJson)
+            if (setting?.recordId in deletedRecords) database.libraryDao().put(library.copy(futureConditionJson = null))
+        }
+        for (row in database.receiptDao().all()) {
+            val old = checkNotNull(DbJson.decode<ApiReceipt>(row.receiptJson))
+            val updated = old.copy(
+                title = old.title.takeUnless { old.recordId in deletedRecords },
+                currentRecord = old.currentRecord?.takeUnless { it.id in deletedRecords || it.id in changedRecords },
+                currentPreference = old.currentPreference?.takeUnless { it.recordId in deletedRecords },
+                source = old.source?.takeUnless { DeletionObject("source_version", it.sourceId, it.sourceVersion) in removed },
+                task = old.task?.let { task ->
+                    if (task.id in cancelledJobs) database.taskDao().get(task.id)?.let { DbJson.decode<CoreTask>(it.taskJson) }
+                    else task
+                },
             )
-        }
-        // Surviving records whose projection changes have their revision bumped.
-        plan.invalidate.filter { it.ref.type == "record" }.forEach { item ->
-            database.recordDao().get(item.ref.id)?.let { entity ->
-                val record = DbJson.decode<com.pebblepile.android.model.PebbleRecord>(entity.recordJson)
-                if (record != null) {
-                    val redacted = record.copy(revision = record.revision + 1)
-                    database.recordDao().put(entity.copy(recordJson = DbJson.encode(redacted), revision = redacted.revision))
-                }
-            }
-        }
-        plan.cancel.forEach { item ->
-            database.taskDao().get(item.ref.id)?.let { entity ->
-                val task = DbJson.decode<CoreTask>(entity.taskJson)
-                if (task != null) {
-                    val cancelled = task.copy(state = TaskState.CANCELLED, revision = task.revision + 1)
-                    database.taskDao().put(entity.copy(taskJson = DbJson.encode(cancelled), state = cancelled.state.name, revision = cancelled.revision))
-                }
-            }
+            if (updated != old) database.receiptDao().put(row.copy(receiptJson = DbJson.encode(updated)))
         }
         return true
     }
 
-    override fun putCleanupTask(task: CoreTask, plan: DeletionPlan, access: DeletionJobAccess) {
-        database.taskDao().put(
-            TaskEntity(
-                id = task.id,
-                taskJson = DbJson.encode(task),
-                recordId = task.recordId,
-                kind = task.kind.name,
-                state = task.state.name,
-                revision = task.revision,
-                inputRevision = task.inputRevision,
+    private fun redactRecord(id: String, removed: Set<DeletionObject>) {
+        val row = checkNotNull(database.recordDao().get(id))
+        val old = checkNotNull(DbJson.decode<PebbleRecord>(row.recordJson))
+        fun loses(source: SourceRef?) = source != null && (
+            DeletionObject("source_version", source.sourceId, source.sourceVersion) in removed ||
+                DeletionObject("record_source", source.sourceId, source.sourceVersion, id) in removed
             )
+
+        val owned = database.sourceDao().forRecord(id)
+        val surviving = database.sourceDao().visibleSources(id)
+        val losesPrimary = owned.any { it.versionRef in removed && it.text == old.rawText } &&
+            surviving.none { it.text == old.rawText }
+        val replacement = if (losesPrimary) surviving.firstOrNull()?.text.orEmpty() else old.rawText
+        // Android's capture decorator derives the initial title and @people from the primary text.
+        fun captureTitle(text: String): String = text.substring(0,
+            text.offsetByCodePoints(0, minOf(18, text.codePointCount(0, text.length))))
+        val updated = old.copy(
+            revision = old.revision + 1,
+            title = if (losesPrimary && old.title == captureTitle(old.rawText)) captureTitle(replacement) else old.title,
+            people = if (losesPrimary) old.people.filter { person ->
+                surviving.any { source -> Regex("""@([\p{L}\p{N}_]{1,20})""").findAll(source.text)
+                    .any { it.groupValues[1] == person } }
+            } else old.people,
+            rawText = replacement,
+            tags = old.tags.filterNot { loses(it.sourceRef) || (losesPrimary && it.sourceRef == null) },
+            // The title and reason of a suggestion can repeat a removed quote.
+            suggestions = old.suggestions.filterNot { suggestion ->
+                suggestion.evidence.any { loses(it.sourceRef) } || (losesPrimary && suggestion.evidence.isEmpty())
+            },
         )
+        database.recordDao().put(row.copy(recordJson = DbJson.encode(updated), revision = updated.revision, title = updated.title))
+    }
+
+    override fun putCleanupTask(task: CoreTask, plan: DeletionPlan, access: DeletionJobAccess) {
+        saveTask(task)
         database.deletionDao().putJob(
             DeletionJobEntity(
                 jobId = task.id,

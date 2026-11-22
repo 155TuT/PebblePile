@@ -44,7 +44,7 @@ internal class DemoLibraryStore(private val preferences: SharedPreferences) {
         }
     }
 
-    private fun load(): DemoLibrary {
+    internal fun load(): DemoLibrary {
         val state = preferences.getString("core_state", null)?.let { JSONObject(it) }
         val sources = state?.objects("sources").orEmpty().map { source ->
             CapturedSource(

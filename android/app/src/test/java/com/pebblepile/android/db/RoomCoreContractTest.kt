@@ -2,6 +2,7 @@ package com.pebblepile.android.db
 
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import com.pebblepile.android.model.ApiReceipt
 import com.pebblepile.android.model.CorrectionScope
 import com.pebblepile.android.repository.OperationKey
 import com.pebblepile.android.repository.RepositoryWriteException
@@ -190,12 +191,19 @@ class RoomCoreContractTest {
         val workers = Executors.newFixedThreadPool(2)
         try {
             val latch = CountDownLatch(1)
-            val first = workers.submit { latch.await(); api.recordExperience(CaptureRequest(e01, "app_home_record", "save-dinner")) }
-            val second = workers.submit { latch.await(); api.recordExperience(CaptureRequest(e01, "app_home_record", "save-dinner")) }
+            fun submit() = workers.submit<ApiReceipt> {
+                latch.await()
+                api.recordExperience(CaptureRequest(e01, "app_home_record", "save-dinner"))
+            }
+            val first = submit()
+            val second = submit()
             latch.countDown()
-            val a = first.get()
-            val b = second.get()
-            assertEquals(a, b)
+            val receipt = first.get()
+            assertTrue(receipt.success)
+            assertEquals(receipt, second.get())
+            val detail = requireNotNull(api.getRecordDetail(requireNotNull(receipt.recordId)))
+            assertEquals(listOf(receipt.source), detail.sources.map { it.ref })
+            assertEquals(listOf(receipt.jobId), detail.jobIds)
         } finally {
             workers.shutdownNow()
         }
@@ -217,13 +225,14 @@ class RoomCoreContractTest {
     }
 
     @Test
-    fun queryByTimeFindsRecord() = runBlocking {
-        val repo = newRepo()
-        val api = core(repo)
-        val saved = api.recordExperience(e01, "app_home_record", "save")
-        val result = api.queryRecords()
-        assertEquals(1, result.records.size)
-        assertEquals(saved.recordId, result.records.single().id)
-        assertEquals(e01, result.records.single().rawText)
+    fun timelineOrdersByInstantAcrossTimeZones() = runBlocking {
+        val api = core(newRepo())
+        val latest = api.recordExperience(CaptureRequest(e01, "app_home_record", "save-latest",
+            capturedAt = "2026-11-16T16:00:00Z"))
+        val earliest = api.recordExperience(CaptureRequest(e02, "android_share", "save-earliest",
+            capturedAt = "2026-11-16T21:00:00+08:00"))
+        assertTrue(latest.success)
+        assertTrue(earliest.success)
+        assertEquals(listOf(latest.recordId, earliest.recordId), api.queryRecords().records.map { it.id })
     }
 }

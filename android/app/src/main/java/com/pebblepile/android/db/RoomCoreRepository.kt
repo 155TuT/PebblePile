@@ -1,5 +1,7 @@
 package com.pebblepile.android.db
 
+import android.database.sqlite.SQLiteException
+import java.util.concurrent.Callable
 import com.pebblepile.android.model.ApiReceipt
 import com.pebblepile.android.model.CapturedSource
 import com.pebblepile.android.model.ConditionSetting
@@ -13,59 +15,22 @@ import com.pebblepile.android.repository.OperationKey
 import com.pebblepile.android.repository.RepositoryWriteException
 import com.pebblepile.android.repository.StoredReceipt
 
-/**
- * Room-backed [CoreRepository]. One instance is bound to one library (the default library row).
- *
- * - [write] runs the whole callback in one SQLite transaction; any exception rolls back and is
- *   surfaced as [RepositoryWriteException] so the business layer can return a retryable receipt.
- * - [read] serves the callback from a single immutable snapshot, giving a consistent read view.
- *
- * @param failPoint optional hook invoked right after a source is written, used to inject a
- *   "write succeeded but receipt not committed" failure for rollback tests.
- */
+/** Executes each CoreAPI callback against one SQLite transaction and one library. */
 class RoomCoreRepository(
     private val database: PebbleDatabase,
     private val failPoint: (() -> Unit)? = null,
 ) : CoreRepository {
 
-    override fun <T> read(block: (CoreReader) -> T): T = block(snapshotReader())
+    override fun <T> read(block: (CoreReader) -> T): T =
+        database.runInTransaction(Callable { block(RoomWriter()) })
 
-    override fun <T> write(block: (CoreWriter) -> T): T {
-        val supportDb = database.openHelper.writableDatabase
-        supportDb.beginTransaction()
-        try {
-            val tx = RoomWriter()
-            val result = block(tx)
-            supportDb.setTransactionSuccessful()
-            return result
-        } catch (e: RepositoryWriteException) {
-            throw e
-        } catch (e: Throwable) {
-            throw RepositoryWriteException().apply { initCause(e) }
-        } finally {
-            supportDb.endTransaction()
-        }
+    override fun <T> write(block: (CoreWriter) -> T): T = try {
+        database.runInTransaction(Callable { block(RoomWriter()) })
+    } catch (error: SQLiteException) {
+        throw RepositoryWriteException().apply { initCause(error) }
     }
 
-    /** Close the underlying database; reopening a file-backed database restores all state. */
     fun close() = database.close()
-
-    private fun snapshotReader(): CoreReader {
-        val library = database.libraryDao().get() ?: LibraryEntity()
-        val records = database.recordDao().all().mapNotNull { DbJson.decode<PebbleRecord>(it.recordJson) }
-        val sources = database.sourceDao().all().mapNotNull { DbJson.decode<CapturedSource>(it.sourceJson) }
-        val tasks = database.taskDao().all().mapNotNull { DbJson.decode<CoreTask>(it.taskJson) }
-        val receipts = database.receiptDao().all().associate { entity ->
-            OperationKey(entity.clientId, entity.operationId) to StoredReceipt(
-                requestHash = entity.requestHash,
-                receipt = DbJson.decode<ApiReceipt>(entity.receiptJson) ?: ApiReceipt(false),
-                deletionScope = DbJson.decode<Set<DeletionObject>>(entity.deletionScopeJson) ?: emptySet(),
-            )
-        }
-        val deleted = database.deletionDao().markers().map { it.key }.toSet()
-        val future = DbJson.decode<ConditionSetting>(library.futureConditionJson)
-        return SnapshotReader(library.revision, future, records, sources, tasks, receipts, deleted)
-    }
 
     private inner class RoomWriter : CoreWriter {
         override val revision: Long
@@ -74,16 +39,29 @@ class RoomCoreRepository(
         override val futureCondition: ConditionSetting?
             get() = DbJson.decode(database.libraryDao().get()?.futureConditionJson)
 
-        override val deletion = RoomDeletionWriter(database)
+        override val deletion = RoomDeletionWriter(database, ::putTask)
 
         override fun record(id: String): PebbleRecord? =
-            database.recordDao().get(id)?.let { DbJson.decode(it.recordJson) }
+            database.recordDao().visible(id)?.let { DbJson.decode(it.recordJson) }
 
         override fun records(): List<PebbleRecord> =
-            database.recordDao().all().mapNotNull { DbJson.decode(it.recordJson) }
+            database.recordDao().visibleRecords().mapNotNull { DbJson.decode(it.recordJson) }
 
-        override fun sources(recordId: String): List<CapturedSource> =
-            database.sourceDao().forRecord(recordId).mapNotNull { DbJson.decode(it.sourceJson) }
+        override fun sources(recordId: String): List<CapturedSource> {
+            val record = record(recordId) ?: return emptyList()
+            val owned = database.sourceDao().visibleSources(recordId).map { row ->
+                checkNotNull(DbJson.decode<CapturedSource>(row.sourceJson))
+            }
+            val references = record.tags.mapNotNull { it.sourceRef } +
+                record.suggestions.flatMap { suggestion -> suggestion.evidence.map { it.sourceRef } }
+            val external = (references.toSet() - owned.map { it.ref }.toSet()).mapNotNull { ref ->
+                val link = DeletionObject("record_source", ref.sourceId, ref.sourceVersion, recordId)
+                val version = DeletionObject("source_version", ref.sourceId, ref.sourceVersion)
+                if (deletion.isDeleted(link) || deletion.isDeleted(version)) return@mapNotNull null
+                database.sourceDao().get(ref.sourceId, ref.sourceVersion)?.let { DbJson.decode<CapturedSource>(it.sourceJson) }
+            }
+            return owned + external
+        }
 
         override fun task(id: String): CoreTask? =
             database.taskDao().get(id)?.let { DbJson.decode(it.taskJson) }
@@ -146,7 +124,7 @@ class RoomCoreRepository(
                         taskId = task.id,
                         stage = phase,
                         checkpointJson = DbJson.encode(mapOf("phase" to phase, "waitReason" to task.waitReason)),
-                        updatedAt = "",
+                        updatedAt = java.time.Instant.now().toString(),
                     )
                 )
             }
@@ -177,29 +155,5 @@ class RoomCoreRepository(
             database.libraryDao().advance()
             return database.libraryDao().get()?.revision ?: 0
         }
-    }
-
-    private class SnapshotReader(
-        override val revision: Long,
-        override val futureCondition: ConditionSetting?,
-        private val records: List<PebbleRecord>,
-        private val sources: List<CapturedSource>,
-        private val tasks: List<CoreTask>,
-        private val receipts: Map<OperationKey, StoredReceipt>,
-        private val deleted: Set<String>,
-    ) : CoreReader {
-        override val deletion = null
-        override fun record(id: String) = records.firstOrNull { it.id == id && !isDeleted("record", id) }
-        override fun records() = records.filterNot { isDeleted("record", it.id) }
-        override fun sources(recordId: String) = sources.filter { source ->
-            source.recordId == recordId &&
-                !isDeleted("source_version", source.ref.sourceId, source.ref.sourceVersion)
-        }
-        override fun task(id: String) = tasks.firstOrNull { it.id == id }
-        override fun tasks(recordId: String) = tasks.filter { it.recordId == recordId }
-        override fun receipt(key: OperationKey) = receipts[key]
-
-        private fun isDeleted(type: String, id: String, version: Long? = null): Boolean =
-            DeletionKeys.of(DeletionObject(type, id, version)) in deleted
     }
 }

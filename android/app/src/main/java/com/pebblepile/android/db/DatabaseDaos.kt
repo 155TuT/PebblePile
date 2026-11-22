@@ -4,7 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Transaction
+import androidx.room.Upsert
 
 @Dao
 interface LibraryDao {
@@ -18,15 +18,24 @@ interface LibraryDao {
     fun advance(id: String = LibraryEntity.DEFAULT_ID): Int
 }
 
+private const val VISIBLE_RECORDS = "SELECT r.* FROM records r WHERE NOT EXISTS " +
+    "(SELECT 1 FROM deletion_markers m WHERE m.type = 'record' AND m.id = r.id)"
+
 @Dao
 interface RecordDao {
+    @Query(VISIBLE_RECORDS + " AND r.id = :id")
+    fun visible(id: String): RecordEntity?
+
+    @Query(VISIBLE_RECORDS + " ORDER BY r.rowid")
+    fun visibleRecords(): List<RecordEntity>
+
     @Query("SELECT * FROM records WHERE id = :id")
     fun get(id: String): RecordEntity?
 
     @Query("SELECT * FROM records ORDER BY captured_at DESC")
     fun all(): List<RecordEntity>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     fun put(record: RecordEntity)
 
     @Query("DELETE FROM records WHERE id = :id")
@@ -35,6 +44,14 @@ interface RecordDao {
 
 @Dao
 interface SourceDao {
+    @Query("""SELECT s.* FROM source_versions s WHERE s.record_id = :recordId
+        AND NOT EXISTS (SELECT 1 FROM deletion_markers m WHERE
+            (m.type = 'record' AND m.id = s.record_id) OR
+            (m.type = 'source' AND m.id = s.source_id) OR
+            (m.type = 'source_version' AND m.id = s.source_id AND m.version = s.source_version))
+        ORDER BY s.source_version, s.rowid""")
+    fun visibleSources(recordId: String): List<SourceVersionEntity>
+
     @Query("SELECT * FROM source_versions WHERE record_id = :recordId ORDER BY source_version ASC")
     fun forRecord(recordId: String): List<SourceVersionEntity>
 

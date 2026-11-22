@@ -59,7 +59,7 @@ data class TaskEntity(
 )
 
 /** Original successful receipt, keyed by (clientId, operationId) inside this library. */
-@Entity(tableName = "operation_receipts")
+@Entity(tableName = "operation_receipts", primaryKeys = ["client_id", "operation_id"])
 data class OperationReceiptEntity(
     @ColumnInfo(name = "client_id") val clientId: String,
     @ColumnInfo(name = "operation_id") val operationId: String,
@@ -67,7 +67,6 @@ data class OperationReceiptEntity(
     @ColumnInfo(name = "receipt_json") val receiptJson: String,
     @ColumnInfo(name = "deletion_scope_json") val deletionScopeJson: String,
     @ColumnInfo(name = "committed_revision") val committedRevision: Long,
-    @PrimaryKey(autoGenerate = true) @ColumnInfo(name = "row_id") val rowId: Long = 0,
 )
 
 /** Tombstone for an isolated deletion object. */
@@ -84,10 +83,9 @@ data class DeletionMarkerEntity(
 /** Persisted cleanup job plan and authorization scope for DELETE_CLEANUP tasks. */
 @Entity(tableName = "deletion_jobs")
 data class DeletionJobEntity(
-    @ColumnInfo(name = "job_id") val jobId: String,
+    @PrimaryKey @ColumnInfo(name = "job_id") val jobId: String,
     @ColumnInfo(name = "plan_json") val planJson: String,
     @ColumnInfo(name = "access_json") val accessJson: String,
-    @PrimaryKey @ColumnInfo(name = "row_key") val rowKey: String = jobId,
 )
 
 /** Most recent durable checkpoint for a task (job_steps.checkpoint in the database design). */

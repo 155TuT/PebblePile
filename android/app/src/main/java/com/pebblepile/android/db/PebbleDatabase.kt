@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
@@ -23,7 +24,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         DeletionJobEntity::class,
         TaskCheckpointEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class PebbleDatabase : RoomDatabase() {
@@ -37,29 +38,38 @@ abstract class PebbleDatabase : RoomDatabase() {
     abstract fun checkpointDao(): CheckpointDao
 
     companion object {
+        private val migrateKeys = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE operation_receipts_v2 (
+                    client_id TEXT NOT NULL, operation_id TEXT NOT NULL, request_hash TEXT NOT NULL,
+                    receipt_json TEXT NOT NULL, deletion_scope_json TEXT NOT NULL, committed_revision INTEGER NOT NULL,
+                    PRIMARY KEY (client_id, operation_id))""")
+                // Older builds could store the same operation twice. Keep the latest projection.
+                db.execSQL("""INSERT OR REPLACE INTO operation_receipts_v2
+                    SELECT client_id, operation_id, request_hash, receipt_json, deletion_scope_json, committed_revision
+                    FROM operation_receipts ORDER BY row_id""")
+                db.execSQL("DROP TABLE operation_receipts")
+                db.execSQL("ALTER TABLE operation_receipts_v2 RENAME TO operation_receipts")
+                db.execSQL("""CREATE TABLE deletion_jobs_v2 (
+                    job_id TEXT NOT NULL PRIMARY KEY, plan_json TEXT NOT NULL, access_json TEXT NOT NULL)""")
+                db.execSQL("""INSERT OR REPLACE INTO deletion_jobs_v2
+                    SELECT job_id, plan_json, access_json FROM deletion_jobs ORDER BY rowid""")
+                db.execSQL("DROP TABLE deletion_jobs")
+                db.execSQL("ALTER TABLE deletion_jobs_v2 RENAME TO deletion_jobs")
+            }
+        }
+
         private val pragmaCallback = object : Callback() {
-            override fun onCreate(db: SupportSQLiteDatabase) {
-                applyPragmas(db)
-            }
-
             override fun onOpen(db: SupportSQLiteDatabase) {
-                // WAL cannot be enabled on some in-memory test databases; never let PRAGMA block startup.
-                try {
-                    applyPragmas(db)
-                } catch (_: Exception) {
-                    // best effort for in-memory / restricted environments
-                }
-            }
-
-            private fun applyPragmas(db: SupportSQLiteDatabase) {
-                db.execSQL("PRAGMA journal_mode=WAL")
                 db.execSQL("PRAGMA synchronous=FULL")
-                db.execSQL("PRAGMA foreign_keys=ON")
+                db.setForeignKeyConstraintsEnabled(true)
             }
         }
 
         fun build(context: Context, name: String): PebbleDatabase =
             Room.databaseBuilder(context, PebbleDatabase::class.java, name)
+                .addMigrations(migrateKeys)
+                .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(pragmaCallback)
                 .build()
 
