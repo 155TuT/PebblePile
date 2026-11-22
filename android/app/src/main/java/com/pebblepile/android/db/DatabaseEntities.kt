@@ -96,3 +96,11 @@ data class TaskCheckpointEntity(
     @ColumnInfo(name = "checkpoint_json") val checkpointJson: String,
     @ColumnInfo(name = "updated_at") val updatedAt: String,
 )
+
+/** One scheduler snapshot per CoreAPI job. Each phase keeps its own immutable output in the snapshot. */
+@Entity(tableName = "scheduler_jobs", indices = [Index(value = ["input_key"], unique = true)])
+data class ScheduledJobEntity(
+    @PrimaryKey @ColumnInfo(name = "job_id") val jobId: String,
+    @ColumnInfo(name = "input_key") val inputKey: String,
+    @ColumnInfo(name = "snapshot_json") val snapshotJson: String,
+)

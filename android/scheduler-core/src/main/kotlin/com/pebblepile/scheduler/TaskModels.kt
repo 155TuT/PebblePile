@@ -147,6 +147,8 @@ const val WAITING_ALGORITHM_UNAVAILABLE = "algorithm_unavailable"
 
 class LeaseLostException(jobId: String) : IllegalStateException("任务租约已失效：$jobId")
 
+class AlgorithmUnavailableException : IllegalStateException("等待整理算法就绪")
+
 class StaleInputException(message: String) : IllegalStateException(message)
 
 class RetryableTaskException(message: String, cause: Throwable? = null) : IllegalStateException(message, cause)
@@ -158,7 +160,7 @@ private fun digest(parts: List<String>): String {
         .joinToString("") { "%02x".format(it.toInt() and 0xff) }
 }
 
-internal fun taskKey(input: TaskInput): String = digest(
+fun taskKey(input: TaskInput): String = digest(
     listOf(input.recordId, input.revision.toString(), input.preferenceRevision.toString(), input.algorithmVersion),
 )
 

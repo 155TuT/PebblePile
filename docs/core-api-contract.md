@@ -80,7 +80,16 @@ Android 调用 `CoreApi.previewDeleteMemory` 读取 `ApiReceipt.deletePreview`�
 
 周恪玄在 SQLite 的一次读写事务内接入 `CoreReader.deletion` 和 `CoreWriter.deletion`。读取依赖时区分两种情况。删除整个对象（`FULL_OBJECT`）时，返回它拥有的材料和使用其内容的副本。只更新引用记录的读视图（`RECORD_VIEW`）时，沿旧摘要、生成回答和缓存继续查找副本，保留该记录自己的材料。一组依据中的每一项都保留下来，这组依据才可用于重算。共享附件按仍然有效的引用决定去留。[仓储接口](../android/app/src/main/java/com/pebblepile/android/repository/DeletionRepository.kt)
 
-写入端在同一事务保存隔离结果、回执和清理任务。普通 Android 演示仓储调用删除接口时返回 `DELETION_STORAGE_UNAVAILABLE`。陈飞扬接手 `DELETE_CLEANUP` 任务时，初始状态为 `queued`，阶段为 `isolated`。调度器从这里继续清理，保存检查点，完成后把任务标为 `completed`。
+Android 端用 Room 在同一事务保存隔离结果、删除回执和清理任务。确认删除后，调用方用回执里的 `jobId` 查询进度。每一步与它的检查点一起提交：
+
+| 检查点 | 此时可以查到什么 |
+| --- | --- |
+| `isolated` | 数据已退出查询，依赖旧输入的任务已取消。只移除跨记录引用时，来源仍归原记录所有。 |
+| `sources_removed` | 删除计划列出的来源版本已从来源表移除。 |
+| `records_removed` | 已删除记录的正文和索引行随记录移除。保留记录仍能读到自己的原话。 |
+| `complete` | 清理前各受影响记录的旧任务已移除原文和阶段结果。后续修订创建的任务继续运行，清理任务转为 `completed`。 |
+
+写入失败时，本步回滚，Worker 按已提交的检查点重试。应用重开后沿用原 `jobId`。重发原删除请求仍能拿到首次回执，最新进度通过 `get_task` 查询。
 
 ### 验收场景
 

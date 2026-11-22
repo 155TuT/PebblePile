@@ -1,5 +1,6 @@
 package com.pebblepile.android
 
+import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
@@ -26,7 +27,9 @@ import androidx.test.espresso.Espresso
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.pebblepile.android.db.SnapshotCoreRepository
 import com.pebblepile.android.model.ItemStatus
+import com.pebblepile.android.service.LocalCoreApi
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertFalse
@@ -119,9 +122,9 @@ class FrontendFlowTest {
             ui.onNodeWithContentDescription("保存").activate()
             waitForText("当前事项")
             ui.onNodeWithContentDescription("返回").activate()
-            waitForText("已排队")
+            waitForText("等待整理算法就绪。")
             ui.onAllNodes(hasText("已保存 ·", substring = true))[0].assertExists()
-            ui.onNodeWithText("等待开始处理。").assertExists()
+            ui.onNodeWithText("等待条件").assertExists()
         }
     }
 
@@ -228,16 +231,21 @@ class FrontendFlowTest {
 
     @Test fun taskCanPauseAndContinueWithoutDeletingTheRecord() {
         val text = "需要暂停整理的原话 ${UUID.randomUUID()}"
+        // Hold the job in QUEUED so the manual controls can be exercised deterministically.
+        val localApi = LocalCoreApi(SnapshotCoreRepository())
         val receipt = runBlocking {
-            api.recordExperience(text, "app_home_record", "task-${UUID.randomUUID()}")
+            localApi.recordExperience(text, "app_home_record", "task-${UUID.randomUUID()}")
         }
         val id = requireNotNull(receipt.recordId)
 
-        ActivityScenario.launch(MainActivity::class.java).use {
-            waitForText("留下今天的原话")
-            ui.onNodeWithContentDescription("记录库").activate()
-            scrollLibraryTo("timeline_$id")
-            ui.onNodeWithText(text).activate()
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                activity.setContent {
+                    PebbleComponentTheme {
+                        RecordDetailScreen(localApi, id, true, {}, { _, _ -> })
+                    }
+                }
+            }
             waitForText("整理任务")
             ui.onNodeWithText("暂停").performScrollTo().activate()
             waitForText("继续")
@@ -247,10 +255,7 @@ class FrontendFlowTest {
             ui.onNodeWithText("等待开始处理。").assertExists()
             ui.onNodeWithText("取消任务").performScrollTo().activate()
             waitForText("本次任务已取消。")
-            assertTrue(runBlocking { api.getRecord(id) != null })
-            ui.onNodeWithContentDescription("返回").activate()
-            scrollLibraryTo("timeline_$id")
-            ui.onNodeWithText(text).assertExists()
+            assertTrue(runBlocking { localApi.getRecord(id)?.rawText == text })
         }
     }
 }

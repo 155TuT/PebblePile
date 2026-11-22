@@ -147,6 +147,11 @@ internal fun RecordDetailScreen(
 
     LaunchedEffect(recordId) { reload() }
 
+    val taskIds = tasks.map { it.id }
+    LaunchedEffect(api, recordId, taskIds) {
+        if (taskIds.isNotEmpty()) api.observeTasks(taskIds).collect { tasks = it }
+    }
+
     if (loading) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             PebbleFeedback(PebbleFeedbackState.PROCESSING, detail = "正在读取记录")
@@ -784,6 +789,8 @@ internal fun CoreTask.progressDescription(): String = when (state) {
         else -> "当前阶段：$phase"
     }
     TaskState.WAITING -> when (waitReason) {
+        "algorithm_unavailable" -> "等待整理算法就绪。"
+        "retry_pending" -> "等待重试。"
         "user_paused" -> "选择“继续”可恢复任务。"
         "network" -> "等待网络连接。"
         "model" -> "等待模型就绪。"

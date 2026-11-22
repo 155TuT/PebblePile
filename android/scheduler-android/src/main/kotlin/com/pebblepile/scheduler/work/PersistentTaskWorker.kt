@@ -5,6 +5,7 @@ import androidx.work.BackoffPolicy
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ListenableWorker
+import androidx.work.Operation
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerFactory
@@ -17,32 +18,40 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
-/**
- * WorkManager 从输入数据读取任务标识。
- * 核心状态机不依赖 Android，本文件只负责领取一次持久任务并按结果返回 Worker 结果。
- */
+/** The application routes a durable job ID to its business task. */
+fun interface PersistentJobRunner {
+    suspend fun run(jobId: String): ListenableWorker.Result
+}
+
+fun coordinatorRunner(coordinator: PersistentTaskCoordinator) = PersistentJobRunner { jobId ->
+    val outcome = coordinator.runJob(jobId)
+    val reason = if (outcome == TaskRunOutcome.WAITING) coordinator.getTask(jobId)?.waitingReason else null
+    workerResult(outcome, reason)
+}
+
 class PersistentTaskWorker(
     context: Context,
     parameters: WorkerParameters,
-    private val coordinator: PersistentTaskCoordinator,
+    private val runner: PersistentJobRunner,
 ) : CoroutineWorker(context, parameters) {
+    constructor(context: Context, parameters: WorkerParameters, coordinator: PersistentTaskCoordinator) :
+        this(context, parameters, coordinatorRunner(coordinator))
+
     override suspend fun doWork(): Result {
         val jobId = inputData.getString(KEY_JOB_ID) ?: return Result.failure()
-        val outcome = withContext(Dispatchers.IO) { coordinator.runJob(jobId) }
-        val waitingReason = if (outcome == TaskRunOutcome.WAITING) coordinator.getTask(jobId)?.waitingReason else null
-        return workerResult(outcome, waitingReason)
+        return withContext(Dispatchers.IO) { runner.run(jobId) }
     }
 
     companion object {
         const val KEY_JOB_ID = "jobId"
         private const val UNIQUE_PREFIX = "pebblepile-task-"
 
-        fun enqueue(context: Context, jobId: String, policy: ExistingWorkPolicy = ExistingWorkPolicy.KEEP) {
+        fun enqueue(context: Context, jobId: String, policy: ExistingWorkPolicy = ExistingWorkPolicy.KEEP): Operation {
             val request = OneTimeWorkRequestBuilder<PersistentTaskWorker>()
                 .setInputData(workDataOf(KEY_JOB_ID to jobId))
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork(
+            return WorkManager.getInstance(context).enqueueUniqueWork(
                 UNIQUE_PREFIX + jobId,
                 policy,
                 request,
@@ -57,20 +66,20 @@ class PersistentTaskWorker(
 
 /** 将协调器注入 Worker；应用需要使用 Configuration.Builder().setWorkerFactory() 安装。 */
 class PersistentTaskWorkerFactory(
-    private val coordinator: PersistentTaskCoordinator,
+    private val runner: PersistentJobRunner,
 ) : WorkerFactory() {
+    constructor(coordinator: PersistentTaskCoordinator) : this(coordinatorRunner(coordinator))
+
     override fun createWorker(
         appContext: Context,
         workerClassName: String,
         workerParameters: WorkerParameters,
     ): ListenableWorker? = if (workerClassName == PersistentTaskWorker::class.java.name) {
-        PersistentTaskWorker(appContext, workerParameters, coordinator)
+        PersistentTaskWorker(appContext, workerParameters, runner)
     } else {
         null
     }
 }
-
-
 
 internal fun workerResult(outcome: TaskRunOutcome, waitingReason: String?): ListenableWorker.Result = when (outcome) {
     TaskRunOutcome.BUSY -> ListenableWorker.Result.retry()

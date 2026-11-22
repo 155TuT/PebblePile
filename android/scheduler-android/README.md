@@ -2,12 +2,13 @@
 
 `:scheduler-android` 是 Android 库。它通过 `:scheduler-core` 执行任务，使用 AndroidX WorkManager 2.9.1 调度工作。
 
-## 应用接入
+## 保存后怎样唤醒任务
 
-1. `:app` 添加 `implementation(project(":scheduler-android"))`。在 `PebblePileApplication` 中用 Room 仓储、材料与偏好修订读取器、算法管线构造协调器。
-2. 让 Application 实现 `Configuration.Provider`，用 `Configuration.Builder().setWorkerFactory(PersistentTaskWorkerFactory(coordinator)).build()` 提供配置。在合并后的清单中移除 `androidx.startup.InitializationProvider` 下的 `androidx.work.WorkManagerInitializer` 元数据，保留同一 provider 中的其他初始化器。系统重建应用进程后，也会使用这套工厂。
-3. 保存事务提交任务后调用 `PersistentTaskWorker.enqueue(context, jobId)`。同一任务重复入队默认保留已有工作。用户继续或重试时，先通过 `controlTask` 更新业务状态，再用 `ExistingWorkPolicy.REPLACE` 重新入队，确保先前正在退出的 Worker 也能交接。
-4. 暂停或取消时，先更新任务状态并撤销租约，再调用 `PersistentTaskWorker.cancel(context, jobId)` 结束系统工作。
+首页和系统分享共用保存事务。Room 一起写入原话、业务任务和回执，提交后按回执中的 `jobId` 唤醒 WorkManager。现有工作按 `pebblepile-task-<jobId>` 去重。关闭自动整理时只保存原话。
+
+`PebblePileApplication` 提供 WorkerFactory。应用冷启动时，恢复任务从同一文件库读取已排队、执行中和等待重试的任务并补排，覆盖写库后、唤醒前进程退出的情况。暂停和取消先撤销业务租约，执行者在下一次提交时核对租约。用户继续或重试时，替换同一编号的系统工作。
+
+整理任务由 RoomTaskStore 领取。#9 的算法管线接入前，任务进入 `waiting / algorithm_unavailable`，首页和详情显示“等待整理算法就绪。”。删除清理独立执行，每次提交同时保存该阶段的删除结果和检查点。重开后从最近一次提交继续。
 
 | 任务结果 | Worker 处理 |
 | --- | --- |
@@ -16,4 +17,4 @@
 | 已完成、待确认、已过期、已取消或任务缺失 | 结束本次唤醒。 |
 | 失败 | 返回失败，页面按业务回执显示可执行操作。 |
 
-阶段计算需要在单次租约内完成，保存检查点会续租。集成后按设备实测耗时配置租期，再用进程回收场景验收持久恢复。
+阶段计算需要在单次租约内完成，保存检查点会续租。接入真实算法后，按设备上单阶段的实测耗时调整租期。

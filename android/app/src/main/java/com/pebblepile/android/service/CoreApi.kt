@@ -10,11 +10,19 @@ import com.pebblepile.android.model.SourceRef
 import com.pebblepile.android.model.TagAction
 import com.pebblepile.android.model.TaskAction
 import com.pebblepile.android.model.PebbleRecord
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 
 /**
  * UI-facing contract implemented by the local core. The Android assembly supplies a repository.
  */
 interface CoreApi {
+    /** Emit the visible state of the requested jobs, including their initial state. */
+    fun observeTasks(ids: List<String>): Flow<List<CoreTask>> =
+        flow { emit(ids.mapNotNull(::getTask)) }.flowOn(Dispatchers.IO)
+
     fun setAutoOrganize(enabled: Boolean)
     fun recordExperience(request: CaptureRequest): ApiReceipt
     fun getRecordDetail(recordId: String, sourceRef: SourceRef? = null): RecordDetail?

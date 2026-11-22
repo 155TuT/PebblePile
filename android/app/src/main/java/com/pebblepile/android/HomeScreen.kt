@@ -101,8 +101,10 @@ internal fun HomeEntryScreen(
         val jobId = receiptJobId ?: return@LaunchedEffect
         taskReadError = null
         try {
-            currentTask = withContext(Dispatchers.IO) { api.getTask(jobId) }
-            if (currentTask == null) taskReadError = "找不到本条记录的整理任务。"
+            api.observeTasks(listOf(jobId)).collect { tasks ->
+                currentTask = tasks.singleOrNull()
+                taskReadError = if (tasks.isEmpty()) "找不到本条记录的整理任务。" else null
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
