@@ -1,98 +1,95 @@
 package com.pebblepile.android.algorithm
 
-/**
- * #9 更新函数：`update(有效证据, 人工修订, 当前快照)`。
- *
- * 归并规则：
- * - 同一真实经历的重复分享按 [ExtractedEvent.eventKey] 归并，支持次数只计一次；
- * - 转述（[ObservationType.REPORTED]）与他人材料不计入本人偏好；
- * - 推断偏好至少由 [ScenePackage.minIndependentSupports] 次独立实际经历支持，否则为待核对弱候选；
- * - 本人明确设置（EXPLICIT）优先于推断；人工排除持续生效，重新整理不复现。
- */
-class PreferenceUpdater(private val scene: ScenePackage) {
+/** 同一来源的新版本替换旧版本，即使新版本已移除全部支持片段。 */
+internal fun latestEventVersions(events: List<ExtractedEvent>): List<ExtractedEvent> {
+    val newest = events.mapNotNull { it.source }.groupBy { it.sourceId }
+        .mapValues { (_, sources) -> sources.maxOf { it.sourceVersion } }
+    return events.filter { event ->
+        val source = event.source
+        source == null || source.sourceVersion == newest[source.sourceId]
+    }.distinct()
+}
 
-    fun update(
+internal fun ManualRevisions.excludes(event: ExtractedEvent, tags: Set<String>): Boolean {
+    val scoped = excludedTagsByRecord[event.source?.recordId].orEmpty() + excludedTagsByRecord[event.eventKey].orEmpty()
+    return tags.any { it in excludedTags || it in scoped }
+}
+
+class PreferenceUpdater(private val scene: ScenePackage) : PreferenceUpdate {
+    override val version = "evidence-updater-0.1.0"
+
+    override fun update(
         events: List<ExtractedEvent>,
         revisions: ManualRevisions,
-        snapshot: PreferenceSnapshot? = null,
+        snapshot: PreferenceSnapshot?,
     ): List<PreferenceCandidate> {
-        // 1. 按归并键去重：重复分享保留多条来源，但事件只计一次。
-        val merged = events.groupBy { it.eventKey }
-            .map { (_, group) -> group.first() }
-
-        val eligible = merged.filter { event ->
-            event.observationType == ObservationType.SELF_ACTUAL &&
-                event.tags.none { it in revisions.excludedTags }
+        val actual = latestEventVersions(events).filter { it.observationType == ObservationType.SELF_ACTUAL }
+        val grouped = actual.groupBy { it.eventKey }
+        val support = grouped.filterValues { group ->
+            group.none { revisions.excludes(it, SUPPORT_TAGS) }
+        }.values.flatten().filter { event ->
+            event.facts.overtime == true && event.facts.weekend == false && event.facts.convenienceMentioned &&
+                "饮食" in event.tags && event.evidence.any { it.role in SUPPORT_ROLES }
         }
-
-        // 2. 推断偏好：工作日加班 + 省事特征。
-        val supportEvents = eligible.filter { event ->
-            event.facts.overtime == true &&
-                event.facts.weekend != true &&
-                event.facts.convenienceMentioned
+        val keys = support.map { it.eventKey }.distinct().sorted()
+        val refs = support.flatMap { event -> event.evidence.filter { it.role in SUPPORT_ROLES } }.distinct()
+        val counters = grouped.values.flatMap { group ->
+            if (group.any { revisions.excludes(it, COUNTER_TAGS) }) emptyList() else group.mapNotNull { event ->
+                if (event.facts.exceptionFor != KEY) return@mapNotNull null
+                val role = when {
+                    event.facts.willingToCleanUp == true -> "cleanup_effort"
+                    event.facts.willingCookMinutes != null -> "time_cost"
+                    else -> "cooking_preference"
+                }
+                event.evidence.firstOrNull { it.role == role }
+            }
+        }.distinct()
+        val prior = snapshot?.preferences.orEmpty()
+        val explicit = linkedMapOf<String, ExplicitPreference>()
+        for (candidate in prior.filter { it.status == PreferenceStatus.EXPLICIT }) {
+            explicit[candidate.preferenceKey] = ExplicitPreference(candidate.preferenceKey, candidate.direction,
+                candidate.scope, candidate.explicitEvidence)
         }
-        val counterEvents = eligible.filter { event -> event.facts.exceptionFor != null }
-
-        val supportEvidence = supportEvents.flatMap { it.evidence.filter { ref -> ref.role in SUPPORT_ROLES } }
-        val counterEvidence = counterEvents.flatMap { it.evidence }
-        val supportKeys = supportEvents.map { it.eventKey }.distinct()
-
-        // 支持事件都发生在工作日时，推断条件泛化为「工作日且加班」；周末不命中该推断。
-        val supportWeekdays = supportEvents.mapNotNull { it.weekday }.toSet()
-        val inferredScope = if (supportEvents.isNotEmpty() && supportWeekdays.all { it !in setOf("sat", "sun") }) {
-            ConditionScope(weekdays = WORKDAYS, overtime = true)
-        } else {
-            ConditionScope(overtime = true)
-        }
-
-        val inferredStatus = when {
-            supportKeys.size >= scene.minIndependentSupports -> PreferenceStatus.INFERRED
-            supportKeys.isNotEmpty() -> PreferenceStatus.WEAK
-            else -> PreferenceStatus.WEAK
-        }
-
-        val inferred = PreferenceCandidate(
-            preferenceId = "pref-weekday-overtime-convenience",
-            preferenceKey = "weekday_overtime_convenience",
-            direction = "convenience",
-            scope = inferredScope,
-            status = inferredStatus,
-            support = supportEvidence,
-            counterExamples = counterEvidence,
-            supportEventKeys = supportKeys,
-            note = if (inferredStatus == PreferenceStatus.INFERRED) {
-                "由 ${supportKeys.size} 次独立加班经历推断"
-            } else "独立经历不足，待核对",
-        )
-
-        // 3. 本人明确设置，范围以纠正条件为准，优先于推断。
-        val explicit = revisions.explicit.map { setting ->
+        for (setting in revisions.explicit) explicit[setting.preferenceKey] = setting
+        val updated = explicit.values.map { setting ->
+            val matchesDirection = setting.preferenceKey == KEY && setting.direction == "convenience"
+            val matchingHistory = if (matchesDirection) support.filter { event ->
+                val scope = setting.scope
+                val dayMatches = scope.weekdays.isEmpty() || event.weekday in scope.weekdays ||
+                    (event.weekday == null && event.facts.weekend == false && scope.weekdays.containsAll(WORKDAYS))
+                dayMatches && (scope.overtime == null || scope.overtime == event.facts.overtime) &&
+                    (scope.weekend == null || scope.weekend == event.facts.weekend)
+            } else emptyList()
+            val historyRefs = matchingHistory.flatMap { it.evidence.filter { ref -> ref.role in SUPPORT_ROLES } }
             PreferenceCandidate(
                 preferenceId = "pref-explicit-${setting.preferenceKey}",
-                preferenceKey = setting.preferenceKey,
-                direction = setting.direction,
-                scope = setting.scope,
+                preferenceKey = setting.preferenceKey, direction = setting.direction, scope = setting.scope,
                 status = PreferenceStatus.EXPLICIT,
-                support = listOfNotNull(setting.evidence),
-                counterExamples = emptyList(),
-                supportEventKeys = emptyList(),
-                note = "本人明确设置",
+                support = (listOfNotNull(setting.evidence) + historyRefs).distinct(),
+                counterExamples = if (setting.preferenceKey == KEY) counters else emptyList(),
+                supportEventKeys = matchingHistory.map { it.eventKey }.distinct().sorted(),
+                note = "本人明确设置", explicitEvidence = setting.evidence,
+            )
+        }.toMutableList()
+        val excluded = prior.filter { it.status == PreferenceStatus.EXCLUDED && it.preferenceKey !in explicit }
+            .distinctBy { it.preferenceKey }.map { it.copy(support = emptyList(), counterExamples = emptyList(), supportEventKeys = emptyList()) }
+        if (KEY !in explicit && excluded.none { it.preferenceKey == KEY }) {
+            val status = if (keys.size >= scene.minIndependentSupports) PreferenceStatus.INFERRED else PreferenceStatus.WEAK
+            val scope = ConditionScope(weekdays = WORKDAYS, overtime = true)
+            updated += PreferenceCandidate(
+                preferenceId = "pref-weekday-overtime-convenience", preferenceKey = KEY, direction = "convenience",
+                scope = scope, status = status, support = refs, counterExamples = counters, supportEventKeys = keys,
+                note = if (status == PreferenceStatus.INFERRED) "由 ${keys.size} 次独立加班经历推断" else "独立经历不足，待核对",
             )
         }
-
-        // 4. 人工排除的候选保持 EXCLUDED；快照中其余候选沿用。
-        val excludedIds = revisions.excludedTags.map { "pref-$it" }.toSet()
-        val carried = snapshot?.preferences.orEmpty().filter { candidate ->
-            candidate.preferenceId !in (explicit.map { it.preferenceId } + inferred.preferenceId)
-        }.map { candidate ->
-            if (candidate.preferenceId in excludedIds) candidate.copy(status = PreferenceStatus.EXCLUDED) else candidate
-        }
-
-        return explicit + listOf(inferred) + carried
+        return updated + excluded
     }
 
     private companion object {
+        const val KEY = "weekday_overtime_convenience"
         val SUPPORT_ROLES = setOf("overtime", "time_cost", "prep_effort", "cleanup_effort", "self_evaluation", "meal")
+        val SUPPORT_TAGS = setOf("饮食", "加班", "省事")
+        val COUNTER_TAGS = setOf("饮食", "周末", "慢做饭")
         val WORKDAYS = setOf("mon", "tue", "wed", "thu", "fri")
     }
 }

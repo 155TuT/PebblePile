@@ -1,13 +1,12 @@
 {
   "datasetId": "issue10-dinner-v1",
-  "expectedVersion": "0.1.1",
+  "expectedVersion": "0.1.2",
   "datasetVersion": "0.1.1",
   "frozenAt": "2026-11-20",
   "status": "frozen",
   "owner": "林叶鑫（Mukyng）",
   "legend": {
     "frozen": "原文与语义判定已冻结，可直接执行",
-    "pending_baseline": "等 #9 的候选清单与版本化排序基线",
     "pending_contract": "按 #6 的回执样例逐项核对字段和错误码，由 #10 登记结果",
     "pending_apk": "等 #11 的签名 APK 与 SHA-256"
   },
@@ -245,12 +244,12 @@
   ],
   "ranking": {
     "source": "#9",
-    "baselineVersion": null,
-    "scenePackVersion": null,
-    "algorithmVersion": null,
+    "baselineVersion": "dinner-ranking-0.1.0",
+    "scenePackVersion": "diet-scene-pack-0.1.0",
+    "algorithmVersion": "local-rules-0.1.0",
     "cases": ["Q01", "Q01b", "Q02", "Q03"],
     "runs": 3,
     "mustBeStable": true,
-    "status": "pending_baseline"
+    "status": "frozen"
   }
 }

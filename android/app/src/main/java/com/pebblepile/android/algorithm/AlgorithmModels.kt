@@ -13,6 +13,8 @@ data class EvidenceSource(
     val sourceId: String,
     val sourceVersion: Long,
     val recordId: String,
+    /** 已核对的经历标识。重复分享可以跨记录沿用同一标识。 */
+    val eventId: String? = null,
 )
 
 /** Unicode 码点半开区间 `[start, end)`。 */
@@ -72,6 +74,7 @@ data class ExtractedEvent(
     val subject: String? = null,
     /** 事件发生的星期（mon…sun），无法识别时留空。 */
     val weekday: String? = null,
+    val source: EvidenceSource? = evidence.firstOrNull()?.source,
 )
 
 /** 条件范围：工作日集合、是否加班、是否周末。 */
@@ -101,6 +104,7 @@ data class PreferenceCandidate(
     val counterExamples: List<EvidenceRef>,
     val supportEventKeys: List<String>,
     val note: String = "",
+    val explicitEvidence: EvidenceRef? = null,
 )
 
 /** [CandidateRanker.rank] 输出的单个排序候选。 */
@@ -132,7 +136,12 @@ data class MenuItem(
     val convenienceScore: Int,
     /** 与历史经历菜名归一后的名称，用于证据关联加分。 */
     val matchedMeal: String? = null,
-)
+) {
+    init {
+        require(priceCny >= 0 && prepMinutes >= 0) { "Meal price and preparation time must be non-negative" }
+        require(convenienceScore in 0..10) { "Convenience score must be in 0..10" }
+    }
+}
 
 /** 饮食词表条目：规范词、别名与标签角色。 */
 data class VocabEntry(val canonical: String, val aliases: List<String>, val role: String)
@@ -146,7 +155,12 @@ data class ScenePackage(
     /** 形成一条推断偏好所需的最少独立实际经历数。 */
     val minIndependentSupports: Int,
     val currency: String = "CNY",
-)
+) {
+    init {
+        require(menu.distinctBy { it.id }.size == menu.size) { "Meal IDs must be unique within a scene" }
+        require(minIndependentSupports >= 2) { "A preference needs at least two independent experiences" }
+    }
+}
 
 /** rank 的完整结果。 */
 data class RankResult(
@@ -171,6 +185,7 @@ data class ExplicitPreference(
 data class ManualRevisions(
     val excludedTags: Set<String> = emptySet(),
     val explicit: List<ExplicitPreference> = emptyList(),
+    val excludedTagsByRecord: Map<String, Set<String>> = emptyMap(),
 )
 
 /** 上一版有效快照，update 时沿用其状态。 */

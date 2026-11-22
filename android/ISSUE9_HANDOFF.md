@@ -1,49 +1,29 @@
-# Issue #9 交接说明
+# Issue #9 饮食算法交接
 
-负责人：张洋（`hydrazZYT`）｜模块：饮食场景、证据与偏好算法｜对应 [#9](https://github.com/155TuT/PebblePile/issues/9)
+张洋负责本版饮食算法。#8 接三个计算接口，#6 接候选和证据结构，#10 按 `dinner-ranking-0.1.0` 回放固定样例。#2 可用周日休息、周六加班和周四加班三种条件复测产品解释。[任务 #9](https://github.com/155TuT/PebblePile/issues/9)
 
-## 当前可交付
+## 陈飞扬接调度，郑嘉文接提交
 
-- 三个可独立替换、单独测试的函数：`extract`、`update`、`rank`，位于 `com.pebblepile.android.algorithm` 包。
-- 饮食场景包 `ScenePackage`：词表、离线候选菜单、餐价、备菜与清理投入、最少独立经历数，版本随 `AlgorithmManifest` 发布。
-- 模型适配层 `InferencePort`：本地规则为默认离线实现；远程模型返回同构候选，未配置时返回 `null`，流程不依赖网络。
-- JVM 回归测试 `AlgorithmBaselineTest`：覆盖 E01–E03 抽取与区间、两次独立经历计数、D01 重复分享、R01 转述、T01 排除标签、C01 范围、Q01/Q02/Q03/Q01b 排序与三次顺序稳定性。
-- 排序基线快照 `docs/testing/issue10/algorithm-baseline.json`：候选清单、价格、预期顺序、引用证据、场景包与算法版本。
+`AlgorithmEngine` 装配 `EventExtractor`、`PreferenceUpdate` 和 `DinnerRanker`。默认使用随包饮食词表、菜单和离线规则。三步都在写事务外计算。
 
-## 函数契约
-
-| 函数 | 输入 | 输出 |
+| 接口 | 调用方传入 | 供下一步使用 |
 | --- | --- | --- |
-| `extract(source, text)` | `EvidenceSource(sourceId, sourceVersion, recordId)`、原文、场景包 | `ExtractedEvent`：归并键、观察类型、标签候选、`DietFacts`、原话区间证据 |
-| `update(events, revisions, snapshot)` | 有效事件、人工修订（排除标签 + 本人明确设置）、上一版快照 | `List<PreferenceCandidate>`：倾向、条件范围、状态、支持与反例证据、支持事件键 |
-| `rank(constraint, preferences, historyMeals)` | 当前约束、有效偏好、历史经历菜名 | `RankResult`：排好序的候选、采用与未命中的偏好、被硬筛掉的候选、每项条件与证据 |
+| `extract(source, text)` | 本次来源 ID、版本、所属记录和原文。已有经历归并记录时传 `eventId`。 | 观察类型、事件键、候选标签、饮食事实，以及支持它们的原文位置。 |
+| `update(events, revisions, snapshot)` | 当前有效经历、按记录排除的标签、本人确认的条件及上一版快照。 | 每条偏好的状态、适用范围、支持经历、可回查的引文与周末反例。 |
+| `rank(constraint, preferences, history = events)` | 本次预算、可用时间、星期和加班情况，更新后的偏好，以及带来源的经历。 | `RankResult` 返回候选顺序、采用和未命中的偏好、筛除项、条件和证据。 |
 
-编排入口为 `AlgorithmEngine`：`dinnerQuery(constraint, events, revisions, snapshot?)` 一次完成更新、排序，并返回 `Manifest`、耗时（毫秒）与模型调用次数。
+同一经历多次分享时沿用 `eventId`，各次分享保留各自的来源 ID 和版本。明确属于不同经历时传不同 ID。尚无归并信息时，相同原文按摘要保守去重。两次独立本人实际经历可形成推断偏好，单次支持记作 `WEAK` 供确认。明确纠正优先生效，按当前记录排除的标签会在重算时继续生效。
 
-## 证据口径
+来源按 `sourceId + sourceVersion` 定位，`CodePointSpan.quoteIn(text)` 用 Unicode 码点区间 `[start,end)` 取回原话。`DietVocabulary.parseCorrectionScope` 和 `correctionDirection` 返回已识别的条件与方向，无法识别时返回 `null`，交给用户确认。#6/#8 提交前复核记录与偏好修订，连同算法清单、决定及证据一起写入。O01 所属决定的持久关联由应用验收 A08 核对。
 
-- 证据带 `sourceId`、`sourceVersion` 和 Unicode 码点半开区间 `[start, end)`；引文用 `CodePointSpan.quoteIn(text)` 取回。
-- 区间按码点计数，含 emoji 时先 `offsetByCodePoints` 换算 UTF-16 下标再 `substring`，接口仍返回码点区间。
-- 推断偏好至少由 `ScenePackage.minIndependentSupports`（本版 2）次独立实际经历支持；不足为 `WEAK` 待核对。
-- 本人明确设置为 `EXPLICIT`，优先于推断；转述 `REPORTED` 与他人材料不计入本人偏好；重复分享按事件归并键去重，不新增计数。
+## 林叶鑫接回放，林金晶接条件复测
 
-## 交接给下游
-
-1. **#8 陈飞扬（调度）**：从 `AlgorithmEngine` 调用 `extract → update → rank`。算法在写事务外计算；提交时由核心复查输入修订、任务状态和人工排除。`Manifest` 随决策保存，候选证据可回查来源版本。
-2. **#6 郑嘉文（接口校验）**：候选结构沿用 `EvidenceRef`（来源、版本、区间）与上述字段；长期纠正条件经 `DietVocabulary.parseCorrectionScope` 解析为 `ConditionScope`。候选发布时复查预算、范围、人工排除与任务状态。
-3. **#10 林叶鑫（回归）**：读取 `algorithm-baseline.json` 的 `cases` 预期顺序；同一输入跑三次核对稳定性。基线版本字段：`algorithmVersion=local-rules-0.1.0`、`scenePackVersion=diet-scene-pack-0.1.0`。`expected.json` 的 `ranking.baselineVersion / scenePackVersion / algorithmVersion` 按清单回填。
-
-## 构建与测试
-
-配置 JDK 17 与 Android SDK 35 后：
+在 `android/` 执行以下命令，使用 JDK 17、Android SDK 35 和本机已有的 Gradle 依赖。
 
 ```powershell
-cd android
-.\gradlew.bat :app:testDebugUnitTest --tests "com.pebblepile.android.algorithm.AlgorithmBaselineTest"
+.\gradlew.bat --offline :app:testDebugUnitTest --tests "*AlgorithmBaselineTest" --rerun
 ```
 
-## 已知限制
+本次 PR 审查在 Windows 11 / JDK 17.0.15 上将 Q01、Q02、Q03、Q01b 各跑三次。四组均按预算筛除 22 元的麻辣烫。周四加班首选盖饭，周日休息首选番茄鸡蛋面，周六加班首选轻食便当。每次回放均为 0 次远程调用。[十二次分段耗时与完整候选顺序](../docs/testing/issue10/algorithm-baseline.json) · [逐项回归和待联调内容](../docs/issue10-testing.md#四算法回归)
 
-- 本版抽取与排序全部为本地规则，`inferenceCallsPerQuery=0`；远程模型增强经 `InferencePort` 接入，启用时由用户选择发送片段。
-- 耗时基线待 CI 或首测机三次实测后回填 `algorithm-baseline.json` 的 `latencyMillis`，当前不登记伪造数值。
-- 在线逻辑回归作为下版增量参数候选，本版仅保留对照说明，未训练参数。
+直接调用 `dinnerQuery` 时，引擎复用已经抽取的经历完成更新和排序，产物附本次查询耗时与调用量。`engine.inferenceCalls` 记录该引擎实际请求已配置模型端口的累计次数。更换策略后，用同一输入检查名次、引用、耗时和调用量。[本版选型与复跑口径](../docs/algorithm/issue9-baseline.md)

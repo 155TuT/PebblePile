@@ -33,6 +33,7 @@ data class AlgorithmManifest(
     /** 本次处理的远程模型调用次数；离线规则恒为 0。 */
     val inferenceCalls: Int,
     val description: String,
+    val minIndependentSupports: Int,
 )
 
 /**

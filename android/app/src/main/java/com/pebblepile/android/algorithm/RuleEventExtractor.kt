@@ -1,148 +1,153 @@
 package com.pebblepile.android.algorithm
 
-/**
- * #9 抽取函数：`extract(来源版本, 原文, 场景包)`。
- *
- * 本版默认走本地词表、别名与句式规则；[InferencePort] 返回的模型候选只作标签补充，
- * 可直接计算的事实字段仍以本地规则为准，保证离线可复现。
- */
+import java.security.MessageDigest
+import java.util.concurrent.CancellationException
+
+/** 离线抽取场景标签、事实和原话位置；模型补充的标签也要回到本条来源。 */
 class RuleEventExtractor(
     private val scene: ScenePackage,
     private val inference: InferencePort? = null,
-) {
-    fun extract(source: EvidenceSource, text: String): ExtractedEvent {
-        val reportedSubject = DietVocabulary.reportedSubject(text)
-        val observationType = if (reportedSubject != null) ObservationType.REPORTED else ObservationType.SELF_ACTUAL
+) : EventExtractor {
+    override val version = "rule-extractor-0.1.0"
 
+    override fun extract(source: EvidenceSource, text: String): ExtractedEvent {
+        val subject = DietVocabulary.reportedSubject(text)
+        val type = when {
+            subject != null -> ObservationType.REPORTED
+            text.isBlank() || OTHER.containsMatchIn(text) -> ObservationType.OTHER
+            PLAN.containsMatchIn(text) && !ACTUAL.containsMatchIn(text) -> ObservationType.SELF_PLAN
+            else -> ObservationType.SELF_ACTUAL
+        }
         val evidence = mutableListOf<EvidenceRef>()
-        fun addEvidence(role: String, span: CodePointSpan?) {
-            if (span != null && evidence.none { it.role == role && it.span == span }) {
-                evidence.add(EvidenceRef(source, span, role))
-            }
+        fun add(role: String, span: CodePointSpan?) {
+            if (span != null) evidence += EvidenceRef(source, span, role)
+        }
+        fun matchedSpan(match: MatchResult?, group: Int = 0): CodePointSpan? {
+            val range = match?.groups?.get(group)?.range ?: return null
+            return DietVocabulary.spanAt(text, range.first, range.last + 1)
+        }
+        fun phrase(role: String, phrases: List<String>): String? {
+            val found = phrases.firstOrNull(text::contains) ?: return null
+            add(role, DietVocabulary.spanOf(text, found))
+            return found
         }
 
         val weekday = DietVocabulary.weekdayOf(text)
-        val weekend = weekday == "sat" || weekday == "sun"
-
-        // 加班条件
-        val overtimeNegated = Regex("""没有加班|没加班|不加班""").containsMatchIn(text)
-        val overtime = when {
-            overtimeNegated -> false
-            text.contains("加班") -> true
+        val weekend = when {
+            weekday != null -> weekday in setOf("sat", "sun")
+            "周末" in text -> true
+            "工作日" in text -> false
             else -> null
         }
-        addEvidence("overtime", DietVocabulary.firstSpan(text, listOf("没有加班", "又加班了", "加班到八点半", "加班")))
-
-        // 预算：「预算二十元」「控制在二十元以内」；区间只取金额段（含“以内”）。
-        val budgetMatch = Regex("""(?:预算|控制在)([一二两三四五六七八九十]+)元(以内)?""").find(text)
-        val budgetCny = budgetMatch?.let { DietVocabulary.parseChineseNumber(it.groupValues[1]) }
-        val budgetPhrase = budgetMatch?.let { it.groupValues[1] + "元" + (it.groupValues.getOrNull(2) ?: "") }
-        val budgetSpan = budgetPhrase?.let { DietVocabulary.spanOf(text, it) }
-        addEvidence("budget", budgetSpan)
-
-        // 实付价格与菜名：「十八元的热汤面」「十六元的盖饭」；必须带“的”，避免误吞预算句。
-        val priceMatch = Regex("""([一二两三四五六七八九十]+)元的([一-龥]+)""").find(text)
-        val priceCny = priceMatch?.let { DietVocabulary.parseChineseNumber(it.groupValues[1]) }
-        var meal = priceMatch?.groupValues?.get(2)?.takeIf { it.isNotBlank() }
-        val priceSpan = priceMatch?.let { DietVocabulary.spanOf(text, it.value) }
-        addEvidence("meal", priceSpan)
-
-        // 菜单归一：原文直接提到的菜名
-        val menuMeal = scene.menu.firstNotNullOfOrNull { item ->
-            val matched = item.matchedMeal?.takeIf { text.contains(it) }
-            matched?.let { item to it }
+        val overtimePhrase = phrase("overtime", listOf("没有加班", "没加班", "不加班", "又加班了", "加班到八点半", "加班"))
+        val overtime = overtimePhrase?.let { !it.startsWith("没") && !it.startsWith("不") }
+        val budget = BUDGET.find(text)
+        add("budget", matchedSpan(budget, 1))
+        val price = PRICE.find(text)
+        // 金额后先找场景包中的菜名，避免把“热汤面很省事”整句当成菜名。
+        val names = scene.menu.flatMap { listOfNotNull(it.matchedMeal, it.name) }.distinct().sortedByDescending(String::length)
+        val mealStart = price?.range?.last?.plus(1)
+        val pricedMeal = mealStart?.let { start ->
+            names.firstOrNull { text.startsWith(it, start) }
         }
-        if (meal == null) meal = menuMeal?.second
-        if (menuMeal != null && priceSpan == null) {
-            addEvidence("meal", DietVocabulary.spanOf(text, menuMeal.second))
+        val meal = pricedMeal ?: names.mapNotNull { name ->
+            text.indexOf(name).takeIf { it >= 0 }?.let { it to name }
+        }.minByOrNull { it.first }?.second
+        if (price != null && pricedMeal != null) {
+            add("meal", DietVocabulary.spanAt(text, price.range.first, price.range.last + 1 + pricedMeal.length))
+        } else {
+            if (price != null) add("price", matchedSpan(price))
+            add("meal", meal?.let { DietVocabulary.spanOf(text, it) })
         }
-
-        // 时长：「十分钟就吃上了」「四十分钟」
-        val minuteMatch = DietVocabulary.minuteNumberRegex.find(text)
-        val minutes = minuteMatch?.let { DietVocabulary.parseChineseNumber(it.groupValues[1]) }
-        val timeSpan = DietVocabulary.firstSpan(text, listOf("十分钟就吃上了", "四十分钟"))
-            ?: minuteMatch?.let { DietVocabulary.spanOf(text, it.value) }
-        addEvidence("time_cost", timeSpan)
-
-        // 备菜投入
-        val prepNeeded = when {
-            text.contains("不用准备食材") -> false
-            text.contains("准备食材") || text.contains("做菜") -> true
+        val time = DietVocabulary.minuteNumberRegex.find(text)
+        val minutes = time?.let { DietVocabulary.parseChineseNumber(it.groupValues[1]) }
+        if (time != null) {
+            val end = time.range.last + 1
+            val suffix = if (text.startsWith("就吃上了", end)) "就吃上了" else ""
+            add("time_cost", DietVocabulary.spanAt(text, time.range.first, end + suffix.length))
+        }
+        val prep = phrase("prep_effort", listOf("不用准备食材", "准备食材", "做菜"))
+        val cleanup = phrase("cleanup_effort", listOf("也不用洗锅", "不用洗锅", "不用洗碗", "不愿意洗锅", "不愿意洗碗",
+            "愿意洗锅", "愿意洗碗", "洗锅", "洗碗"))
+        val willingClean = when {
+            cleanup?.startsWith("不愿意") == true -> false
+            cleanup?.startsWith("愿意") == true -> true
             else -> null
         }
-        addEvidence("prep_effort", DietVocabulary.firstSpan(text, listOf("不用准备食材", "准备食材")))
-
-        // 清理投入
-        val cleanupNeeded = when {
-            text.contains("不用洗锅") || text.contains("不用洗") -> false
-            text.contains("洗锅") || text.contains("洗碗") -> true
-            else -> null
+        val convenient = listOf("省事", "省时", "不用洗锅", "不用准备食材", "十分钟就吃上了", "很快").any(text::contains) &&
+            !NEGATIVE_CONVENIENCE.containsMatchIn(text)
+        val evaluation = if (NEGATIVE_CONVENIENCE.containsMatchIn(text)) {
+            val negative = NEGATIVE_CONVENIENCE.find(text)
+            add("self_evaluation", matchedSpan(negative))
+            negative?.value
+        } else {
+            val word = phrase("self_evaluation", listOf("省事", "放松", "满意", "省时"))
+            if ("省事让我很满意" in text) "省事让我很满意" else word
         }
-        val willingToCleanUp = if (text.contains("愿意洗锅") || text.contains("愿意洗碗")) true else cleanupNeeded?.takeIf { it }
-        addEvidence("cleanup_effort", DietVocabulary.firstSpan(text, listOf("也不用洗锅", "不用洗锅", "愿意洗锅", "洗锅")))
-
-        // 省事特征
-        val conveniencePhrases = listOf("省事", "省时", "不用洗锅", "不用准备食材", "十分钟就吃上了", "很快")
-        val convenienceMentioned = conveniencePhrases.any { text.contains(it) }
-
-        // 本人评价；引文区间取短词，事实文本保留完整感受。
-        val satisfactionPhrase = listOf("省事让我很满意", "放松", "满意", "省事").firstOrNull { text.contains(it) }
-        val satisfactionQuote = when {
-            text.contains("省事让我很满意") -> "省事让我很满意"
-            else -> satisfactionPhrase
-        }
-        val satisfactionSpan = DietVocabulary.firstSpan(text, listOf("省事", "放松"))
-        addEvidence("self_evaluation", satisfactionSpan)
-
-        // 周末例外：周末且愿意慢慢做饭、洗锅
-        val exceptionFor = if (weekend && (cleanupNeeded == true || minutes != null)) {
-            "weekday_overtime_convenience"
-        } else null
-
+        val willingMinutes = minutes?.takeIf { WILLING_TIME.containsMatchIn(text) }
+        if ("慢慢做饭" in text) add("cooking_preference", DietVocabulary.spanOf(text, "慢慢做饭"))
+        val exception = weekend == true && (willingMinutes != null || willingClean == true || "慢慢做饭" in text)
         val facts = DietFacts(
-            overtime = overtime,
-            weekend = weekend,
-            budgetCny = budgetCny,
-            priceCny = priceCny,
-            meal = meal,
-            durationMinutes = minutes?.takeIf { overtime == true },
-            prepNeeded = prepNeeded,
-            cleanupNeeded = cleanupNeeded,
-            convenienceMentioned = convenienceMentioned,
-            willingCookMinutes = minutes?.takeIf { weekend == true },
-            willingToCleanUp = willingToCleanUp,
-            satisfaction = satisfactionQuote,
-            exceptionFor = exceptionFor,
+            overtime = overtime, weekend = weekend,
+            budgetCny = budget?.let { DietVocabulary.parseChineseNumber(it.groupValues[2]) },
+            priceCny = price?.let { DietVocabulary.parseChineseNumber(it.groupValues[1]) },
+            meal = meal, durationMinutes = minutes?.takeUnless { willingMinutes != null },
+            prepNeeded = prep?.let { !it.startsWith("不用") },
+            cleanupNeeded = cleanup?.let { "不用" !in it },
+            convenienceMentioned = convenient, willingCookMinutes = willingMinutes, willingToCleanUp = willingClean,
+            satisfaction = evaluation, exceptionFor = if (exception) "weekday_overtime_convenience" else null,
         )
-
         val tags = buildList {
-            if (scene.labels.any { entry -> entry.aliases.any { text.contains(it) } }) add("饮食")
-            if (overtime == true) add("加班")
-            if (weekend) add("周末")
-            if (convenienceMentioned) add("省事")
-            if (exceptionFor != null) add("慢做饭")
+            for (label in scene.labels) {
+                val applies = when (label.canonical) {
+                    "加班" -> overtime == true
+                    "周末" -> weekend == true
+                    "省事" -> convenient
+                    "慢做饭" -> exception
+                    else -> label.aliases.any(text::contains) || label.canonical in text
+                }
+                if (applies) add(label.canonical)
+            }
+            addAll(modelTags(source, text))
             if (isEmpty()) add("待整理")
+        }.distinct()
+        val key = source.eventId?.takeIf { it.isNotBlank() } ?: run {
+            val normalized = text.trim().replace("\r\n", "\n").replace('\r', '\n')
+            val digest = MessageDigest.getInstance("SHA-256").digest(normalized.toByteArray(Charsets.UTF_8))
+            "text:" + digest.joinToString("") { "%02x".format(it) }
         }
+        return ExtractedEvent(key, type, tags, facts, evidence, text, subject, weekday, source)
+    }
 
-        val modelEvent = inference?.suggestExtraction(source, text, scene)
-        val mergedTags = (tags + (modelEvent?.tags ?: emptyList())).distinct()
+    private fun modelTags(source: EvidenceSource, text: String): List<String> {
+        val model = try {
+            inference?.suggestExtraction(source, text, scene)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (interrupted: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw interrupted
+        } catch (_: Exception) {
+            null
+        } ?: return emptyList()
+        val length = text.codePointCount(0, text.length)
+        if (model.rawText != text || model.source != source || model.evidence.isEmpty() ||
+            model.evidence.any { it.source != source || it.span.end > length || it.span.end == it.span.start }) return emptyList()
+        val quotes = model.evidence.map { it.span.quoteIn(text) }
+        return scene.labels.filter { label ->
+            label.canonical in model.tags && quotes.any { quote ->
+                label.canonical in quote || label.aliases.any { it.isNotBlank() && it in quote }
+            }
+        }.map { it.canonical }
+    }
 
-        val eventKey = listOf(
-            observationType.name,
-            weekday ?: "na",
-            overtime?.toString() ?: "na",
-            meal ?: "na",
-        ).joinToString("|")
-
-        return ExtractedEvent(
-            eventKey = eventKey,
-            observationType = observationType,
-            tags = mergedTags,
-            facts = facts,
-            evidence = evidence,
-            rawText = text,
-            subject = reportedSubject,
-            weekday = weekday,
-        )
+    private companion object {
+        val BUDGET = Regex("""(?:预算|控制在)\s*((${DietVocabulary.NUMBER})\s*元(?:以内)?)""")
+        val PRICE = Regex("""(?<![.0-9])(${DietVocabulary.NUMBER})\s*元的""")
+        val WILLING_TIME = Regex("""(?:愿意|可以|打算)花?\s*${DietVocabulary.NUMBER}\s*分钟""")
+        val OTHER = Regex("""^\s*(?:收藏|转发|摘录|菜谱|攻略|假如|假设|如果|AI[：:]|系统[：:])|[？?]\s*$""")
+        val PLAN = Regex("""(?:明天|下次|下周|准备去|计划|打算|准备吃|想吃|想点|想试|准备做)""")
+        val ACTUAL = Regex("""(?:我吃了|最后吃了|我点了|已经吃|刚吃完|吃上了|让我很满意|让我放松)""")
+        val NEGATIVE_CONVENIENCE = Regex("""(?:不太|并不|一点也不|不)(?:省事|省时|方便)""")
     }
 }

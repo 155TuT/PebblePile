@@ -1,6 +1,8 @@
 package com.pebblepile.android.algorithm
 
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -14,6 +16,7 @@ import org.junit.Test
 class AlgorithmBaselineTest {
 
     private val fixtures = loadJson("/fixtures.json")
+    private val expected = loadJson("/expected.json")
     private val baseline = loadJson("/algorithm-baseline.json")
 
     private fun record(id: String) = fixtures.getAsJsonArray("records")
@@ -29,7 +32,7 @@ class AlgorithmBaselineTest {
         .map { it.asJsonObject }.single { it["id"].asString == id }
 
     private fun extract(engine: AlgorithmEngine, id: String): ExtractedEvent {
-        val source = EvidenceSource(id, sourceVersion = 1, recordId = id)
+        val source = EvidenceSource(id, sourceVersion = 1, recordId = id, eventId = id)
         return engine.extract(source, record(id)["text"].asString)
     }
 
@@ -52,6 +55,7 @@ class AlgorithmBaselineTest {
         val engine = AlgorithmEngine()
         val event = extract(engine, "E01")
         val facts = event.facts
+        assertTrue(event.tags.containsAll(listOf("饮食", "加班")))
         assertEquals(true, facts.overtime)
         assertEquals(false, facts.weekend)
         assertEquals(20, facts.budgetCny)
@@ -69,6 +73,7 @@ class AlgorithmBaselineTest {
         val engine = AlgorithmEngine()
         val event = extract(engine, "E02")
         val facts = event.facts
+        assertTrue(event.tags.containsAll(listOf("饮食", "加班")))
         assertEquals(true, facts.overtime)
         assertEquals(false, facts.weekend)
         assertEquals(20, facts.budgetCny)
@@ -111,14 +116,14 @@ class AlgorithmBaselineTest {
     @Test fun duplicateShareDoesNotIncreaseSupportCount() {
         val engine = AlgorithmEngine()
         val first = extract(engine, "E01")
-        val duplicate = first.copy(
-            evidence = first.evidence.map { it.copy(source = EvidenceSource("D01", 1, "D01")) }
+        val duplicate = engine.extract(
+            EvidenceSource("D01", 1, "D01", eventId = "E01"), record("E01")["text"].asString,
         )
         val events = listOf(first, extract(engine, "E02"), extract(engine, "E03"), duplicate)
         val preferences = engine.update(events, ManualRevisions())
         val convenience = preferences.single { it.preferenceKey == "weekday_overtime_convenience" }
         assertEquals(2, convenience.supportEventKeys.size)
-        assertEquals(2, convenience.support.distinctBy { it.source.sourceId }.size)
+        assertEquals(setOf("E01", "E02", "D01"), convenience.support.map { it.source.sourceId }.toSet())
     }
 
     // G10 — R01 转述不计入本人偏好
@@ -141,10 +146,12 @@ class AlgorithmBaselineTest {
     @Test fun excludedTagStaysOutOfSupport() {
         val engine = AlgorithmEngine()
         val events = dinnerEvents(engine)
-        val revisions = ManualRevisions(excludedTags = setOf("加班"))
+        val revisions = ManualRevisions(excludedTagsByRecord = mapOf("E01" to setOf("省事")))
         val preferences = engine.update(events, revisions)
         val convenience = preferences.single { it.preferenceKey == "weekday_overtime_convenience" }
-        assertTrue(convenience.supportEventKeys.isEmpty())
+        assertEquals(listOf("E02"), convenience.supportEventKeys)
+        val replay = engine.update(dinnerEvents(engine), revisions)
+        assertEquals(preferences, replay)
         assertEquals(PreferenceStatus.WEAK, convenience.status)
     }
 
@@ -174,7 +181,7 @@ class AlgorithmBaselineTest {
     // G06 — C01 解析为「工作日且加班」的省事偏好
     @Test fun correctionC01ScopeIsWeekdayAndOvertime() {
         val text = correction("C01")["text"].asString
-        val scope = DietVocabulary.parseCorrectionScope(text)
+        val scope = requireNotNull(DietVocabulary.parseCorrectionScope(text))
         assertEquals(setOf("mon", "tue", "wed", "thu", "fri"), scope.weekdays)
         assertEquals(true, scope.overtime)
         assertEquals("convenience", DietVocabulary.correctionDirection(text))
@@ -184,9 +191,9 @@ class AlgorithmBaselineTest {
         val text = correction("C01")["text"].asString
         val setting = ExplicitPreference(
             preferenceKey = "weekday_overtime_convenience",
-            direction = DietVocabulary.correctionDirection(text),
-            scope = DietVocabulary.parseCorrectionScope(text),
-            evidence = null,
+            direction = requireNotNull(DietVocabulary.correctionDirection(text)),
+            scope = requireNotNull(DietVocabulary.parseCorrectionScope(text)),
+            evidence = EvidenceRef(EvidenceSource("C01", 1, "C01"), CodePointSpan(0, text.codePointCount(0, text.length)), "explicit_rule"),
         )
         return ManualRevisions(explicit = listOf(setting))
     }
@@ -219,10 +226,18 @@ class AlgorithmBaselineTest {
     // G12 — O01 反馈回到原事项，抽取实际菜名，不新增偏好计数
     @Test fun outcomeRecordsActualMealWithoutChangingPreferenceCount() {
         val engine = AlgorithmEngine()
-        val outcomeText = fixtures.getAsJsonArray("outcomes")
-            .map { it.asJsonObject }.single { it["id"].asString == "O01" }["text"].asString
-        val outcome = engine.extract(EvidenceSource("O01", 1, "O01"), outcomeText)
-        assertEquals("热汤面", outcome.facts.meal)
+        val feedback = fixtures.getAsJsonArray("outcomes").single().asJsonObject
+        val contract = expected.getAsJsonObject("conditions").getAsJsonObject("O01")
+        val targetId = feedback["target"].asString
+        assertEquals(contract["target"].asString, targetId)
+        val eventsBefore = dinnerEvents(engine)
+        val original = engine.dinnerQuery(constraintOf(query(targetId)), eventsBefore, ManualRevisions())
+        val recommended = engine.scene.menu.single { it.id == original.result.items.first().candidateId }.name
+        val outcome = engine.extract(EvidenceSource("O01", 1, targetId), feedback["text"].asString)
+        assertEquals("盖饭", recommended)
+        assertEquals(contract["actualMeal"].asString, outcome.facts.meal)
+        assertTrue(outcome.evidence.isNotEmpty())
+        assertTrue(outcome.evidence.all { it.source.recordId == targetId })
 
         val events = dinnerEvents(engine) + outcome
         val preferences = engine.update(events, ManualRevisions())
@@ -230,17 +245,121 @@ class AlgorithmBaselineTest {
         assertEquals(2, convenience.supportEventKeys.size)
     }
 
-    // 稳定性：同一输入跑三次，候选顺序不变
     @Test fun rankingIsStableAcrossThreeRuns() {
-        val engine = AlgorithmEngine()
-        val events = dinnerEvents(engine)
-        val orders = (1..3).map {
-            engine.dinnerQuery(constraintOf(query("Q01")), events, ManualRevisions()).result
-                .items.map { it.candidateId }
+        val contract = expected.getAsJsonObject("ranking")
+        assertEquals("frozen", baseline["status"].asString)
+        assertEquals(baseline["baselineVersion"], contract["baselineVersion"])
+        assertEquals(fixtures["datasetId"], baseline["datasetId"])
+        assertEquals(fixtures["datasetVersion"], baseline["datasetVersion"])
+        val cases = baseline.getAsJsonObject("cases")
+        assertEquals(cases.keySet(), contract.strings("cases").toSet())
+        val runs = contract["runs"].asInt
+        assertEquals(3, runs)
+        assertEquals(runs, baseline["runs"].asInt)
+        assertMenuMatchesBaseline()
+        println("DINNER_ENV ${System.getProperty("os.name")} ${System.getProperty("os.arch")} | ${System.getProperty("java.vm.name")} ${System.getProperty("java.version")}")
+        for ((id, value) in cases.entrySet()) {
+            val q = query(id)
+            val constraint = constraintOf(q)
+            val revisions = if (q["afterCorrection"].isJsonNull) ManualRevisions() else explicitC01()
+            val condition = expected.getAsJsonObject("conditions").getAsJsonObject(id)
+            val target = value.asJsonObject
+            assertEquals(condition["scopeMatch"], target["scopeMatch"])
+            repeat(runs) { run ->
+                val engine = AlgorithmEngine()
+                val begin = System.nanoTime()
+                val events = dinnerEvents(engine)
+                val extracted = System.nanoTime()
+                val preferences = engine.update(events, revisions)
+                val updated = System.nanoTime()
+                val ranked = engine.rank(constraint, preferences, history = events)
+                val finished = System.nanoTime()
+                val stages = listOf(extracted - begin, updated - extracted, finished - updated)
+                val millis = stages.joinToString(" ") { String.format(Locale.ROOT, "%.6f", it / 1_000_000.0) }
+                println("DINNER_REPLAY $id ${run + 1} $millis ${engine.inferenceCalls}")
+                val queryRun = engine.dinnerQuery(constraint, events, revisions)
+                assertEquals("公开查询和分段回放的结果", ranked, queryRun.result)
+                assertEquals(0, engine.inferenceCalls)
+                assertEquals(baseline["inferenceCallsPerQuery"].asInt, queryRun.inferenceCalls)
+                assertManifest(engine, queryRun.manifest)
+                assertRanking(id, engine, constraint, target, condition, ranked)
+            }
         }
-        assertEquals(orders[0], orders[1])
-        assertEquals(orders[2], orders[0])
     }
+
+    private fun assertMenuMatchesBaseline() {
+        val menu = AlgorithmEngine().scene.menu
+        val expectedMenu = baseline.getAsJsonArray("menu").associate { row ->
+            row.asJsonObject.let { it["id"].asString to it }
+        }
+        assertEquals(expectedMenu.keys, menu.map { it.id }.toSet())
+        for (item in menu) {
+            val row = expectedMenu.getValue(item.id)
+            assertEquals(row["name"].asString, item.name)
+            assertEquals(row["priceCny"].asInt, item.priceCny)
+            assertEquals(row["prepMinutes"].asInt, item.prepMinutes)
+            assertEquals(row["cleanupNeeded"].asBoolean, item.cleanupNeeded)
+            assertEquals(row["convenienceScore"].asInt, item.convenienceScore)
+            assertEquals(row["matchedMeal"]?.asString, item.matchedMeal)
+        }
+    }
+
+    private fun assertRanking(
+        id: String, engine: AlgorithmEngine, constraint: QueryConstraint,
+        target: JsonObject, condition: JsonObject, ranked: RankResult,
+    ) {
+        assertEquals(target.strings("order"), ranked.items.map { it.candidateId })
+        assertEquals(target.strings("filteredOut").toSet(), ranked.filteredOut.toSet())
+        assertEquals(target.strings("appliedPreferences").toSet(), ranked.appliedPreferences.toSet())
+        val explicitMatched = ranked.appliedPreferences.any { it.startsWith("pref-explicit") }
+        if (!condition["scopeMatch"].isJsonNull) assertEquals(condition["scopeMatch"].asBoolean, explicitMatched)
+        val allowed = engine.scene.menu.filter { item ->
+            item.priceCny <= condition["budgetMaxCny"].asInt &&
+                (constraint.cookMinutes?.let { item.prepMinutes <= it } ?: true)
+        }
+        assertEquals(allowed.map { it.id }.toSet(), ranked.items.map { it.candidateId }.toSet())
+        val refs = ranked.items.flatMap { it.evidence }.distinct()
+        val cited = refs.map { it.source.sourceId }.toSet()
+        assertEquals("[$id] 引用来源", target.strings("cited").toSet(), cited)
+        assertTrue(cited.containsAll(condition.strings("mustCite")))
+        assertTrue((cited intersect condition.strings("excludedFromPreferenceEvidence").toSet()).isEmpty())
+        for (ref in refs) checkSourceRef(ref)
+    }
+
+    private fun assertManifest(engine: AlgorithmEngine, actual: AlgorithmManifest) {
+        val target = baseline.getAsJsonObject("manifest")
+        val contract = expected.getAsJsonObject("ranking")
+        assertEquals("${fixtures["datasetId"].asString}@${fixtures["datasetVersion"].asString}", actual.datasetVersion)
+        assertEquals(contract["algorithmVersion"], target["algorithmVersion"])
+        assertEquals(contract["scenePackVersion"], target["scenePackVersion"])
+        assertEquals(target["algorithmVersion"].asString, actual.algorithmVersion)
+        assertEquals(target["scenePackVersion"].asString, actual.scenePackVersion)
+        assertEquals(target["extractor"].asString, actual.extractor)
+        assertEquals(target["updater"].asString, actual.updater)
+        assertEquals(target["ranker"].asString, actual.ranker)
+        assertEquals(target["inferenceModel"].asString, actual.inferenceModel)
+        assertEquals(target["minIndependentSupports"].asInt, engine.scene.minIndependentSupports)
+        assertEquals(engine.scene.minIndependentSupports, actual.minIndependentSupports)
+    }
+
+    private fun checkSourceRef(ref: EvidenceRef) {
+        val id = ref.source.sourceId
+        assertEquals(id, ref.source.recordId)
+        assertEquals(1L, ref.source.sourceVersion)
+        if (id == "C01") {
+            val text = correction(id)["text"].asString
+            assertEquals(text, ref.span.quoteIn(text))
+            return
+        }
+        val row = record(id)
+        val span = row.getAsJsonArray("spans").map { it.asJsonObject }.single { it["role"].asString == ref.role }
+        assertEquals(span["start"].asInt, ref.span.start)
+        assertEquals(span["end"].asInt, ref.span.end)
+        assertEquals(span["text"].asString, ref.span.quoteIn(row["text"].asString))
+    }
+
+    private fun JsonObject.strings(key: String): List<String> =
+        getAsJsonArray(key)?.map { it.asString }.orEmpty()
 
     private fun assertSpansMatchFixtures(recordId: String, event: ExtractedEvent) {
         val spans = record(recordId).getAsJsonArray("spans").map { it.asJsonObject }
