@@ -1,0 +1,220 @@
+{
+  "datasetId": "issue10-dinner-v1",
+  "datasetVersion": "0.1.1",
+  "frozenAt": "2026-11-20",
+  "status": "frozen",
+  "source": "docs/issue2-research.md",
+  "owner": "林叶鑫（Mukyng）",
+  "conventions": {
+    "offsetUnit": "unicode-code-point",
+    "offsetBase": 0,
+    "spanEnd": "exclusive",
+    "timezone": "Asia/Shanghai",
+    "currency": "CNY"
+  },
+  "offsetExample": {
+    "text": "🍜热汤面",
+    "start": 1,
+    "end": 4,
+    "quote": "热汤面"
+  },
+  "records": [
+    {
+      "id": "E01",
+      "occurredAt": "2026-11-16T20:30:00+08:00",
+      "weekday": "mon",
+      "text": "今天周一加班到八点半，晚饭预算二十元。我吃了十八元的热汤面，十分钟就吃上了，不用洗锅。",
+      "length": 43,
+      "spans": [
+        { "text": "加班到八点半", "start": 4, "end": 10, "role": "overtime" },
+        { "text": "二十元", "start": 15, "end": 18, "role": "budget" },
+        { "text": "十八元的热汤面", "start": 22, "end": 29, "role": "meal" },
+        { "text": "十分钟就吃上了", "start": 30, "end": 37, "role": "time_cost" },
+        { "text": "不用洗锅", "start": 38, "end": 42, "role": "cleanup_effort" }
+      ],
+      "expectedFacts": {
+        "scenario": "diet",
+        "overtime": true,
+        "weekend": false,
+        "budgetCny": 20,
+        "priceCny": 18,
+        "meal": "热汤面",
+        "durationMinutes": 10,
+        "prepNeeded": null,
+        "cleanupNeeded": false,
+        "convenienceMentioned": true
+      }
+    },
+    {
+      "id": "E02",
+      "occurredAt": "2026-11-18T21:00:00+08:00",
+      "weekday": "wed",
+      "text": "今天周三又加班了，晚饭还是想控制在二十元以内。我吃了十六元的盖饭，不用准备食材，也不用洗锅，省事让我很满意。",
+      "length": 54,
+      "spans": [
+        { "text": "又加班了", "start": 4, "end": 8, "role": "overtime" },
+        { "text": "二十元以内", "start": 17, "end": 22, "role": "budget" },
+        { "text": "十六元的盖饭", "start": 26, "end": 32, "role": "meal" },
+        { "text": "不用准备食材", "start": 33, "end": 39, "role": "prep_effort" },
+        { "text": "也不用洗锅", "start": 40, "end": 45, "role": "cleanup_effort" },
+        { "text": "省事", "start": 46, "end": 48, "role": "self_evaluation" }
+      ],
+      "expectedFacts": {
+        "scenario": "diet",
+        "overtime": true,
+        "weekend": false,
+        "budgetCny": 20,
+        "priceCny": 16,
+        "meal": "盖饭",
+        "prepNeeded": false,
+        "cleanupNeeded": false,
+        "convenienceMentioned": true,
+        "satisfaction": "省事让我很满意"
+      }
+    },
+    {
+      "id": "E03",
+      "occurredAt": "2026-11-15T18:00:00+08:00",
+      "weekday": "sun",
+      "text": "今天周日没有加班，我愿意花四十分钟做番茄鸡蛋面，也愿意洗锅。周末慢慢做饭让我放松。",
+      "length": 41,
+      "spans": [
+        { "text": "没有加班", "start": 4, "end": 8, "role": "overtime" },
+        { "text": "四十分钟", "start": 13, "end": 17, "role": "time_cost" },
+        { "text": "番茄鸡蛋面", "start": 18, "end": 23, "role": "meal" },
+        { "text": "愿意洗锅", "start": 25, "end": 29, "role": "cleanup_effort" },
+        { "text": "放松", "start": 38, "end": 40, "role": "self_evaluation" }
+      ],
+      "expectedFacts": {
+        "scenario": "diet",
+        "overtime": false,
+        "weekend": true,
+        "budgetCny": null,
+        "meal": "番茄鸡蛋面",
+        "willingCookMinutes": 40,
+        "willingToCleanUp": true,
+        "exceptionFor": "weekday_overtime_convenience",
+        "selfEvaluation": "放松"
+      }
+    }
+  ],
+  "queries": [
+    {
+      "id": "Q01",
+      "weekday": "thu",
+      "overtime": true,
+      "budgetCny": 20,
+      "cookMinutes": null,
+      "afterCorrection": null,
+      "text": "今天周四加班，预算二十元，晚饭吃什么？请说明依据，并指出来自哪两次经历的原话。",
+      "expect": {
+        "budgetFilter": "price <= 20",
+        "mustCite": ["E01", "E02"],
+        "excludedFromPreferenceEvidence": ["E03"],
+        "ranking": "baseline_pending"
+      }
+    },
+    {
+      "id": "Q02",
+      "weekday": "sun",
+      "overtime": false,
+      "budgetCny": 20,
+      "cookMinutes": 40,
+      "afterCorrection": null,
+      "text": "今天周日不加班，预算二十元，可以花四十分钟做饭，晚饭吃什么？为什么和加班时可能不同？",
+      "expect": {
+        "budgetFilter": "price <= 20",
+        "mustCite": ["E03"],
+        "mustExplainContrastWithOvertime": true,
+        "ranking": "baseline_pending"
+      }
+    },
+    {
+      "id": "Q03",
+      "weekday": "sat",
+      "overtime": true,
+      "budgetCny": 20,
+      "cookMinutes": null,
+      "afterCorrection": "C01",
+      "text": "今天周六也要加班，晚饭预算二十元，吃什么好？",
+      "expect": {
+        "budgetFilter": "price <= 20",
+        "ruleScopeMatch": false,
+        "mustNotApplyConvenienceRule": true,
+        "ranking": "baseline_pending"
+      }
+    },
+    {
+      "id": "Q01b",
+      "weekday": "thu",
+      "overtime": true,
+      "budgetCny": 20,
+      "cookMinutes": null,
+      "afterCorrection": "C01",
+      "text": "今天周四加班，预算二十元，晚饭吃什么？请说明依据，并指出来自哪两次经历的原话。",
+      "expect": {
+        "budgetFilter": "price <= 20",
+        "ruleScopeMatch": true,
+        "prefer": "convenience",
+        "mustCite": ["E01", "E02"],
+        "ranking": "baseline_pending"
+      }
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C01",
+      "text": "以后只在工作日加班时，优先给我推荐省事的晚饭。",
+      "expect": {
+        "scope": { "weekdays": ["mon", "tue", "wed", "thu", "fri"], "overtime": true },
+        "preference": "convenience",
+        "revisionIncrements": true,
+        "appliesTo": ["Q01b"],
+        "doesNotApplyTo": ["Q03"]
+      }
+    }
+  ],
+  "outcomes": [
+    {
+      "id": "O01",
+      "target": "Q01",
+      "text": "最后吃了热汤面，省时也省事。",
+      "expect": {
+        "linksToDecision": true,
+        "showsSuggestionAndActual": true,
+        "actualMeal": "热汤面"
+      }
+    }
+  ],
+  "regressions": [
+    {
+      "id": "D01",
+      "ref": "E01",
+      "action": "share_same_experience",
+      "expect": {
+        "independentOvertimeDinners": 2,
+        "supportCountUnchanged": true,
+        "newSourceAllowed": true,
+        "newEventAllowed": false
+      }
+    },
+    {
+      "id": "R01",
+      "text": "室友说：他加班后只想吃面，不想做饭。",
+      "expect": {
+        "observationType": "reported",
+        "countedForSelf": false,
+        "preferenceUnchanged": true
+      }
+    },
+    {
+      "id": "T01",
+      "action": "exclude_tag_then_filter",
+      "expect": {
+        "excluded": true,
+        "filterReturnsRecord": false,
+        "survivesReprocess": true
+      }
+    }
+  ]
+}
