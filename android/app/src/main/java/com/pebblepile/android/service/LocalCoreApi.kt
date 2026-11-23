@@ -113,7 +113,7 @@ class LocalCoreApi(
         val old = request.recordId?.let { tx.record(it) }
         if (request.recordId != null) {
             if (old == null) return@write invalid("记录不存在")
-            checkRevision(old, request.baseRevision)?.let { return@write it }
+            checkRevision(tx, old, request.baseRevision)?.let { return@write it }
         }
         val recordId = old?.id ?: newId()
         val capturedAt = request.capturedAt ?: clock()
@@ -135,17 +135,19 @@ class LocalCoreApi(
         val sources = tx.sources(recordId).filter { sourceRef == null || it.ref == sourceRef }
         if (sourceRef != null && sources.isEmpty()) return@read null
         val tasks = tx.tasks(recordId).filter { canReadTask(tx, it) }
-        RecordDetail(record.withPublishedSuggestions(), sources, tasks.map { it.id }, tx.revision, tx.futureCondition)
+        val preference = tx.futureCondition
+        RecordDetail(record.withPublishedSuggestions(preference), sources, tasks.map { it.id }, tx.revision, preference)
     }
 
     override suspend fun recentRecords(): List<PebbleRecord> = queryRecords().records
 
     override fun queryRecords(tags: Set<String>): RecordQueryResult = repository.read { tx ->
+        val preference = tx.futureCondition
         val records = tx.records().asReversed().filter { record ->
             tags.all { name -> record.tags.any { it.name == name && !it.excluded } }
         }.map { record -> record to captureInstant(record.capturedAt) }
             .sortedByDescending { it.second }
-            .map { it.first.withPublishedSuggestions() }
+            .map { it.first.withPublishedSuggestions(preference) }
         RecordQueryResult(records, tx.revision)
     }
 
@@ -334,8 +336,14 @@ class LocalCoreApi(
         )
     }
 
-    private fun PebbleRecord.withPublishedSuggestions(): PebbleRecord =
-        if (dinnerDecisions == null) this else copy(suggestions = currentDinnerDecision?.suggestions.orEmpty())
+    private fun PebbleRecord.withPublishedSuggestions(preference: ConditionSetting?): PebbleRecord {
+        val decisions = dinnerDecisions ?: return this
+        val latest = decisions.lastOrNull()
+        if (latest != null && latest.preferenceRevision != (preference?.revision ?: 0L)) {
+            return copy(supersededDinnerDecisionId = latest.id, suggestions = emptyList())
+        }
+        return copy(suggestions = currentDinnerDecision?.suggestions.orEmpty())
+    }
 
     override suspend fun reviseMemory(
         recordId: String, baseRevision: Long, condition: String, scope: CorrectionScope, operationId: String,
@@ -345,7 +353,7 @@ class LocalCoreApi(
         if (condition.isBlank()) return@changeRecord invalid("适用条件不能为空")
         if (scope == CorrectionScope.FUTURE && (basePreferenceRevision ?: 0L) != (tx.futureCondition?.revision ?: 0L)) {
             return@changeRecord conflict(recordId, record.revision).copy(
-                currentRecord = record, currentPreference = tx.futureCondition,
+                currentRecord = record.withPublishedSuggestions(tx.futureCondition), currentPreference = tx.futureCondition,
                 message = "长期条件已更新，请核对当前条件后再提交。"
             )
         }
@@ -354,6 +362,8 @@ class LocalCoreApi(
             conditionScope = scope,
             revision = record.revision + 1,
             currentGoalCondition = if (scope == CorrectionScope.THIS_TIME) condition else record.currentGoalCondition,
+            supersededDinnerDecisionId = if (scope == CorrectionScope.THIS_TIME && condition != record.currentGoalCondition)
+                record.dinnerDecisions?.lastOrNull()?.id else record.supersededDinnerDecisionId,
         )
         tx.putRecord(updated)
         if (scope == CorrectionScope.THIS_TIME) {
@@ -392,7 +402,7 @@ class LocalCoreApi(
         change: (CoreWriter, PebbleRecord) -> ApiReceipt
     ): ApiReceipt = write(operationId, method, recordId, baseRevision.toString(), *params) { tx ->
         val record = tx.record(recordId) ?: return@write invalid("记录不存在")
-        val conflict = checkRevision(record, baseRevision)
+        val conflict = checkRevision(tx, record, baseRevision)
         conflict ?: change(tx, record)
     }
 
@@ -505,9 +515,10 @@ class LocalCoreApi(
         return task.id
     }
 
-    private fun checkRevision(record: PebbleRecord, baseRevision: Long?): ApiReceipt? = when {
+    private fun checkRevision(tx: CoreReader, record: PebbleRecord, baseRevision: Long?): ApiReceipt? = when {
         baseRevision == null -> invalid("修改记录需要基准修订")
-        record.revision != baseRevision -> conflict(record.id, record.revision).copy(currentRecord = record)
+        record.revision != baseRevision -> conflict(record.id, record.revision)
+            .copy(currentRecord = record.withPublishedSuggestions(tx.futureCondition))
         else -> null
     }
 

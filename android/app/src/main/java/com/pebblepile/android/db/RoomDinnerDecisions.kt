@@ -5,6 +5,7 @@ import com.pebblepile.android.algorithm.DietTaskContext
 import com.pebblepile.android.algorithm.DietTaskOutcome
 import com.pebblepile.android.algorithm.dietRankCheckpoint
 import com.pebblepile.android.model.DinnerDecision
+import com.pebblepile.android.model.DinnerRankingBasis
 import com.pebblepile.android.model.EvidenceItem
 import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.SourceRef
@@ -22,7 +23,8 @@ internal fun prepareDinnerDecision(
     context: DietTaskContext,
 ): DinnerDecision? {
     val checkpoint = rank.dietRankCheckpoint()
-    val ranked = checkpoint.result?.items.orEmpty()
+    val result = checkpoint.result ?: return null
+    val ranked = result.items
     if (checkpoint.outcome != DietTaskOutcome.RANKED || ranked.isEmpty() || checkpoint.constraint == null ||
         decisionId != "diet-" + taskKey(job.input()) ||
         checkpoint.manifest.algorithmVersion != job.algorithmVersion ||
@@ -47,13 +49,15 @@ internal fun prepareDinnerDecision(
                 ref.span.start < 0 || ref.span.end <= ref.span.start ||
                 ref.span.end > source.text.codePointCount(0, source.text.length)
             ) return null
-            EvidenceItem("$suggestionId:$index", "饮食经历", ref.span.quoteIn(source.text), source.capturedAt.take(10),
-                source.recordId, source.ref, ref.span.start, ref.span.end)
+            val title = if (ref.role == "explicit_rule") "本人明确设置" else "饮食经历"
+            EvidenceItem("$suggestionId:$index", title, ref.span.quoteIn(source.text), source.capturedAt.take(10),
+                source.recordId, source.ref, ref.span.start, ref.span.end, role = ref.role)
         }
         SuggestionItem(suggestionId, title, candidate.reason, evidence)
     }
     return DinnerDecision(decisionId, job.jobId, job.inputRevision, job.preferenceRevision, context.contextKey,
-        checkpoint.manifest, checkpoint.constraint, suggestions)
+        checkpoint.manifest, checkpoint.constraint, suggestions,
+        DinnerRankingBasis(result.appliedPreferences, result.unmatchedPreferences, result.filteredOut))
 }
 
 internal fun RecordDao.publishDinnerDecision(recordId: String, decision: DinnerDecision) {
@@ -63,4 +67,5 @@ internal fun RecordDao.publishDinnerDecision(recordId: String, decision: DinnerD
     if (decisions.any { it.id == decision.id }) return
     val updated = record.copy(revision = record.revision + 1, dinnerDecisions = decisions + decision)
     put(row.copy(recordJson = DbJson.encode(updated), revision = updated.revision))
+    countDinnerPublication(recordId)
 }

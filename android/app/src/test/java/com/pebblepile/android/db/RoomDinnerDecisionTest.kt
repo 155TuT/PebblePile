@@ -77,18 +77,26 @@ class RoomDinnerDecisionTest {
         assertEquals(job.decisionId, decision.id)
         assertEquals(rank.contextKey, decision.snapshotId)
         assertEquals(rank.dietRankCheckpoint().manifest, decision.manifest)
+        val engineResult = requireNotNull(rank.dietRankCheckpoint().result)
+        val basis = requireNotNull(decision.rankingBasis)
+        assertEquals(engineResult.appliedPreferences, basis.appliedPreferences)
+        assertEquals(engineResult.filteredOut, basis.filteredOut)
+        assertTrue(basis.appliedPreferences.isNotEmpty())
+        assertTrue(basis.filteredOut.isNotEmpty())
         assertEquals(decision.suggestions, firstRecord.suggestions)
         assertEquals("盖饭", firstRecord.suggestions.first().title)
         val evidence = firstRecord.suggestions.flatMap { it.evidence }.first {
             it.sourceRef == history.source && it.quote == "加班到八点半"
         }
         val original = requireNotNull(api.getRecordDetail(evidence.sourceRecordId, evidence.sourceRef)).sources.single()
+        assertEquals("overtime", evidence.role)
         assertEquals(evidence.quote, CodePointSpan(evidence.start, evidence.end).quoteIn(original.text))
 
         val second = save("今天周六加班，预算二十元，晚饭吃什么？", "query-again", firstRecord.id, firstRecord.revision)
         assertEquals(TaskRunOutcome.COMPLETED, run(second))
         val latest = detail(first).record
         val latestDecision = requireNotNull(latest.currentDinnerDecision)
+        assertTrue(requireNotNull(latestDecision.rankingBasis).unmatchedPreferences.containsAll(basis.appliedPreferences))
         assertEquals("轻食便当", latest.suggestions.first().title)
         val feedback = api.recordOutcome(latest.id, latest.revision, "盖饭", "取餐快", "feedback", decision.id)
         assertTrue(feedback.success)
@@ -103,6 +111,24 @@ class RoomDinnerDecisionTest {
         assertEquals(latestDecision, detail(first).record.currentDinnerDecision)
         assertEquals(decision.id, detail(first).record.outcomes.single().decisionId)
         assertEquals(first, save(query, "query"))
+    }
+
+    @Test fun independentDinnerQueriesCanPublishFromTheSameInputSnapshot() {
+        save(monday, "monday")
+        save(wednesday, "wednesday")
+        val first = save(query, "first-query")
+        val second = save("今天周六加班，预算二十元，晚饭吃什么？", "second-query")
+        val pipeline = DietTaskPipeline(store::loadDietContext)
+        val pending = listOf(first, second).map { advanceToCommit(it, pipeline) }
+        for (job in pending) {
+            val result = pipeline.prepareCommit(job.input(), job.checkpoints)
+            assertEquals(TaskStatus.COMPLETED, store.finishIfCurrent(job.jobId, job.leaseToken, result, store, 12).status)
+        }
+        val firstDecision = requireNotNull(detail(first).record.currentDinnerDecision)
+        val secondDecision = requireNotNull(detail(second).record.currentDinnerDecision)
+        assertEquals("盖饭", firstDecision.suggestions.first().title)
+        assertEquals("轻食便当", secondDecision.suggestions.first().title)
+        assertEquals(first.revision!! + 1, detail(first).record.revision)
     }
 
     @Test fun changedPreferenceRejectsLateCommitAndNewQueryUsesCurrentRevision() = runBlocking {
@@ -160,10 +186,72 @@ class RoomDinnerDecisionTest {
         assertTrue(api.deleteMemory(DeleteRequest(target, preview.previewId, preview.baseRevision, "delete")).success)
         val redacted = requireNotNull(api.getDinnerDecision(record.id, decision.id))
         assertTrue(redacted.redacted)
+        assertNull(redacted.rankingBasis)
         assertTrue(redacted.suggestions.isEmpty())
         assertTrue(detail(receipt).record.suggestions.isEmpty())
         assertEquals(decision.id, detail(receipt).record.outcomes.single().decisionId)
         assertEquals(TaskState.STALE, api.getTask(requireNotNull(receipt.jobId))?.state)
+    }
+
+    @Test fun correctionsRetireCurrentSuggestionsAndKeepHistoricalDecisionsForFeedback() = runBlocking {
+        val owner = save(monday, "monday")
+        save(wednesday, "wednesday")
+        val receipt = save(query, "query")
+        assertEquals(TaskRunOutcome.COMPLETED, run(receipt))
+        val initial = detail(receipt).record
+        val original = requireNotNull(initial.currentDinnerDecision)
+        val conflict = api.updateRecordTitle(initial.id, initial.revision - 1, "改标题", "before-correction")
+        assertEquals(original.suggestions, conflict.currentRecord?.suggestions)
+
+        assertTrue(api.reviseMemory(initial.id, initial.revision, "本次晚饭预算二十元",
+            CorrectionScope.THIS_TIME, "this-time").success)
+        val afterCorrection = detail(receipt).record
+        assertNull(afterCorrection.currentDinnerDecision)
+        assertTrue(afterCorrection.suggestions.isEmpty())
+        assertEquals(original, api.getDinnerDecision(initial.id, original.id))
+        assertEquals(original.id, api.recordOutcome(initial.id, afterCorrection.revision,
+            "盖饭", "取餐快", "past-feedback", original.id).decisionId)
+
+        val rerun = save(query, "recalculate", initial.id, detail(receipt).record.revision)
+        assertEquals(TaskRunOutcome.COMPLETED, run(rerun))
+        val refreshed = requireNotNull(detail(rerun).record.currentDinnerDecision)
+        assertFalse(refreshed.id == original.id)
+
+        assertTrue(api.reviseMemory(requireNotNull(owner.recordId), detail(owner).record.revision,
+            "以后只在工作日加班时，优先给我推荐省事的晚饭。", CorrectionScope.FUTURE, "future").success)
+        database.close()
+        database = openDatabase()
+        api = LocalCoreApi(RoomCoreRepository(database))
+        val fromDetail = detail(rerun).record
+        val fromList = api.queryRecords().records.single { it.id == initial.id }
+        assertNull(fromDetail.currentDinnerDecision)
+        assertTrue(fromDetail.suggestions.isEmpty())
+        assertEquals(fromDetail, fromList)
+        assertEquals(refreshed, api.getDinnerDecision(initial.id, refreshed.id))
+        assertEquals(fromDetail, api.updateRecordTitle(initial.id, initial.revision, "改标题", "after-correction").currentRecord)
+        val feedback = api.recordOutcome(initial.id, fromDetail.revision, "面", "省事", "new-feedback", refreshed.id)
+        assertEquals(refreshed.id, feedback.decisionId)
+    }
+
+    @Test fun unlinkRetractsOnlyTheConsumerAndKeepsTheOwnersExactSource() {
+        val history = save(monday, "monday")
+        save(wednesday, "wednesday")
+        val first = save(query, "one")
+        assertEquals(TaskRunOutcome.COMPLETED, run(first))
+        val second = save(query, "two")
+        assertEquals(TaskRunOutcome.COMPLETED, run(second))
+        val consumer = detail(first).record
+        val decision = requireNotNull(consumer.currentDinnerDecision)
+        val unaffected = requireNotNull(detail(second).record.currentDinnerDecision)
+        val source = requireNotNull(history.source)
+        assertTrue(api.getRecordDetail(consumer.id, source)?.sources?.single()?.text == monday)
+        assertTrue(api.removeSourceReference(consumer.id, consumer.revision, source, "unlink").success)
+
+        assertNull(api.getRecordDetail(consumer.id, source))
+        assertNull(detail(first).record.currentDinnerDecision)
+        assertTrue(requireNotNull(api.getDinnerDecision(consumer.id, decision.id)).redacted)
+        assertEquals(unaffected, detail(second).record.currentDinnerDecision)
+        assertEquals(monday, requireNotNull(api.getRecordDetail(requireNotNull(history.recordId), source)).sources.single().text)
     }
 
     private fun advanceToCommit(

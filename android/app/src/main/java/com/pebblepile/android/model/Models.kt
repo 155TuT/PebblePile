@@ -31,9 +31,16 @@ data class EvidenceItem(
     val start: Int = 0,
     val end: Int = quote.codePointCount(0, quote.length),
     val unavailableReason: String? = null,
+    val role: String? = null,
 )
 
 data class SuggestionItem(val id: String, val title: String, val reason: String, val evidence: List<EvidenceItem>)
+data class DinnerRankingBasis(
+    val appliedPreferences: List<String>,
+    val unmatchedPreferences: List<String>,
+    val filteredOut: List<String>,
+)
+
 data class DinnerDecision(
     val id: String,
     val jobId: String,
@@ -43,6 +50,7 @@ data class DinnerDecision(
     val manifest: AlgorithmManifest?,
     val constraint: QueryConstraint?,
     val suggestions: List<SuggestionItem>,
+    val rankingBasis: DinnerRankingBasis? = null,
 ) {
     val redacted: Boolean get() = snapshotId == null
 }
@@ -84,8 +92,11 @@ data class PebbleRecord(
     val itemStatus: ItemStatus = ItemStatus.OPEN,
     // Nullable for records already stored as JSON before dinner decisions were published.
     val dinnerDecisions: List<DinnerDecision>? = null,
+    val supersededDinnerDecisionId: String? = null,
 ) {
-    val currentDinnerDecision: DinnerDecision? get() = dinnerDecisions?.lastOrNull()?.takeUnless { it.redacted }
+    val currentDinnerDecision: DinnerDecision? get() = dinnerDecisions?.lastOrNull()?.takeUnless {
+        it.redacted || it.id == supersededDinnerDecisionId
+    }
 }
 
 enum class CorrectionScope(val label: String) {

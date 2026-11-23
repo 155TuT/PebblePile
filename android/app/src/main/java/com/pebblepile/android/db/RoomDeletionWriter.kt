@@ -189,7 +189,7 @@ internal class RoomDeletionWriter(
         val decisions = old.dinnerDecisions?.map { decision ->
             if (decision.jobId in invalidatedJobs || decision.suggestions.any { suggestion ->
                     suggestion.evidence.any { loses(it.sourceRef) }
-                }) decision.copy(snapshotId = null, manifest = null, constraint = null, suggestions = emptyList())
+                }) decision.copy(snapshotId = null, manifest = null, constraint = null, suggestions = emptyList(), rankingBasis = null)
             else decision
         }
         if (!invalidateRecord && decisions == old.dinnerDecisions) return

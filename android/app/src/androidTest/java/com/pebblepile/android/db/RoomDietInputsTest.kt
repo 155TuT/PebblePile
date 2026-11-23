@@ -72,6 +72,7 @@ class RoomDietInputsTest {
         assertNotNull(store.claim(id, 1, 10))
         db.close()
         SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READWRITE).use { v3 ->
+            v3.execSQL("DROP TABLE dinner_publication_counts")
             v3.execSQL("DROP TABLE organized_sources")
             v3.version = 3
         }
