@@ -1,6 +1,7 @@
 package com.pebblepile.android.db
 
 import androidx.room.ColumnInfo
+import androidx.room.ForeignKey
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -27,6 +28,14 @@ data class RecordEntity(
     val status: String,
     val title: String,
     val revision: Long,
+)
+
+/** Publishing a decision changes its record for readers, while the algorithm inputs stay the same. */
+@Entity(tableName = "dinner_publication_counts", foreignKeys = [ForeignKey(entity = RecordEntity::class,
+    parentColumns = ["id"], childColumns = ["record_id"], onDelete = ForeignKey.CASCADE)])
+internal data class DinnerPublicationCount(
+    @PrimaryKey @ColumnInfo(name = "record_id") val recordId: String,
+    val publications: Long,
 )
 
 /** Exact source version. Composite key keeps every historical version of a source. */
@@ -103,4 +112,14 @@ data class ScheduledJobEntity(
     @PrimaryKey @ColumnInfo(name = "job_id") val jobId: String,
     @ColumnInfo(name = "input_key") val inputKey: String,
     @ColumnInfo(name = "snapshot_json") val snapshotJson: String,
+)
+
+
+/** Exact source versions whose save receipt created an organizing task. */
+@Entity(tableName = "organized_sources", primaryKeys = ["source_id", "source_version"],
+    foreignKeys = [ForeignKey(entity = SourceVersionEntity::class, parentColumns = ["source_id", "source_version"],
+        childColumns = ["source_id", "source_version"], onDelete = ForeignKey.CASCADE)])
+internal data class OrganizedSourceEntity(
+    @ColumnInfo(name = "source_id") val sourceId: String,
+    @ColumnInfo(name = "source_version") val sourceVersion: Long,
 )

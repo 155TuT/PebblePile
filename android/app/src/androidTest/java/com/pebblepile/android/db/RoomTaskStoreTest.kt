@@ -4,7 +4,9 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.pebblepile.android.algorithm.DietTaskPipeline
 import com.pebblepile.android.model.CorrectionScope
+import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.TaskAction
 import com.pebblepile.android.model.TaskState
 import com.pebblepile.android.service.CaptureRequest
@@ -116,6 +118,76 @@ class RoomTaskStoreTest {
         assertEquals(TaskState.STALE, api.getTask(id)?.state)
     }
 
+    @Test fun v4RankCheckpointPublishesAfterDatabaseUpgrade() {
+        val question = capture.copy(text = "今天周四加班，预算二十元，晚饭吃什么？")
+        val saved = api.recordExperience(question)
+        var job = requireNotNull(store.claim(requireNotNull(saved.jobId), 10, 100))
+        val pipeline = DietTaskPipeline(store::loadDietContext)
+        for (stage in TaskStage.entries.takeWhile { it != TaskStage.COMMIT }) {
+            val output = pipeline.runStage(stage, job.input(), job.checkpoints)
+            job = store.recordCheckpoint(job.jobId, job.leaseToken, stage, output, 11, 100)
+        }
+        upgradeFromV4()
+        val restored = requireNotNull(store.get(job.jobId))
+        assertEquals(job, restored)
+        val result = DietTaskPipeline(store::loadDietContext).prepareCommit(restored.input(), restored.checkpoints)
+        assertEquals(TaskStatus.COMPLETED, store.finishIfCurrent(job.jobId, job.leaseToken, result, store, 12).status)
+        val record = requireNotNull(api.getRecordDetail(job.recordId)).record
+        assertEquals(result.decisionId, requireNotNull(record.currentDinnerDecision).id)
+        assertEquals(saved, api.recordExperience(question))
+    }
+
+    @Test fun completedV4DinnerResumesOnlyPublicationAndRetainsItsOriginalReceipt() {
+        val question = capture.copy(text = "今天周六加班，预算二十元，晚饭吃什么？")
+        val saved = api.recordExperience(question)
+        val id = requireNotNull(saved.jobId)
+        val coordinator = PersistentTaskCoordinator(store, store, DietTaskPipeline(store::loadDietContext))
+        assertEquals(TaskRunOutcome.COMPLETED, coordinator.runJob(id))
+        val ranked = requireNotNull(store.get(id))
+        val recordId = requireNotNull(saved.recordId)
+        val row = requireNotNull(database.recordDao().visible(recordId))
+        val published = requireNotNull(DbJson.decode<PebbleRecord>(row.recordJson))
+        val v4Record = published.copy(revision = ranked.inputRevision, dinnerDecisions = null)
+        database.recordDao().put(row.copy(recordJson = DbJson.encode(v4Record), revision = v4Record.revision))
+        upgradeFromV4()
+        assertEquals(listOf(id), store.recoverableJobIds())
+        val pending = requireNotNull(store.get(id))
+        assertEquals(ranked.checkpoints, pending.checkpoints)
+        assertNull(pending.decisionId)
+        val upgraded = PersistentTaskCoordinator(store, store, DietTaskPipeline(store::loadDietContext))
+        assertEquals(TaskRunOutcome.COMPLETED, upgraded.runJob(id))
+        val decision = requireNotNull(api.getRecordDetail(recordId)?.record?.currentDinnerDecision)
+        assertEquals(ranked.decisionId, decision.id)
+        assertEquals(saved, api.recordExperience(question))
+    }
+
+    @Test fun aDinnerAlreadyPublishedByV4KeepsItsDecisionAndCompletedJob() {
+        val question = capture.copy(text = "今天周四加班，预算二十元，晚饭吃什么？")
+        val saved = api.recordExperience(question)
+        val id = requireNotNull(saved.jobId)
+        assertEquals(TaskRunOutcome.COMPLETED, PersistentTaskCoordinator(store, store,
+            DietTaskPipeline(store::loadDietContext)).runJob(id))
+        val ranked = requireNotNull(store.get(id))
+        val recordId = requireNotNull(saved.recordId)
+        val record = requireNotNull(api.getRecordDetail(recordId)).record
+        assertNotNull(record.currentDinnerDecision)
+        upgradeFromV4()
+        assertTrue(store.recoverableJobIds().isEmpty())
+        assertEquals(ranked, store.get(id))
+        assertEquals(record, requireNotNull(api.getRecordDetail(recordId)).record)
+    }
+
+    private fun upgradeFromV4() {
+        database.close()
+        SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READWRITE).use { v4 ->
+            v4.execSQL("DROP TABLE dinner_publication_counts")
+            v4.version = 4
+        }
+        database = PebbleDatabase.build(context, name)
+        store = RoomTaskStore(database)
+        api = LocalCoreApi(RoomCoreRepository(database))
+    }
+
     @Test fun appendKeepsItsOwnSourceAndV2JobsRecoverByBusinessId() = runBlocking {
         val first = api.recordExperience(capture)
         val appended = api.recordExperience("另一份原话", "android_share", "append",
@@ -124,6 +196,8 @@ class RoomTaskStoreTest {
         assertEquals("另一份原话", store.get(id)?.sourceText)
         database.close()
         SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READWRITE).use { old ->
+            old.execSQL("DROP TABLE dinner_publication_counts")
+            old.execSQL("DROP TABLE organized_sources")
             old.execSQL("DROP TABLE scheduler_jobs")
             old.version = 2
         }

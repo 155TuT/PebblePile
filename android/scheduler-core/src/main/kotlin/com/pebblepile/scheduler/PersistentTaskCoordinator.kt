@@ -41,6 +41,8 @@ class PersistentTaskCoordinator(
             inputDigest = digest,
             algorithmVersion = input.algorithmVersion,
             sourceText = input.text,
+            captureSourceId = input.captureSourceId,
+            captureSourceVersion = input.captureSourceVersion,
             createdAt = at,
             updatedAt = at,
         )

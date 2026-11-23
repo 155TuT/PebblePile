@@ -7,20 +7,14 @@ import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ListenableWorker.Result
 import androidx.work.WorkerParameters
+import com.pebblepile.android.algorithm.DietTaskPipeline
 import com.pebblepile.android.db.RoomCleanupRunner
 import com.pebblepile.android.db.RoomStore
 import com.pebblepile.android.db.RoomTaskStore
-import com.pebblepile.android.db.recoverableJobIds
 import com.pebblepile.android.model.CoreTask
 import com.pebblepile.android.model.TaskKind
 import com.pebblepile.android.repository.RepositoryWriteException
-import com.pebblepile.scheduler.AgentTaskPipeline
-import com.pebblepile.scheduler.AlgorithmUnavailableException
-import com.pebblepile.scheduler.CommitOutput
 import com.pebblepile.scheduler.PersistentTaskCoordinator
-import com.pebblepile.scheduler.StageOutput
-import com.pebblepile.scheduler.TaskInput
-import com.pebblepile.scheduler.TaskStage
 import com.pebblepile.scheduler.work.PersistentJobRunner
 import com.pebblepile.scheduler.work.PersistentTaskWorker
 import com.pebblepile.scheduler.work.coordinatorRunner
@@ -30,22 +24,13 @@ import kotlinx.coroutines.withContext
 import java.util.concurrent.ExecutionException
 import kotlin.coroutines.coroutineContext
 
-/** The production algorithm will replace this pipeline when #9 delivers its implementation. */
-private object PendingAlgorithm : AgentTaskPipeline {
-    override fun runStage(stage: TaskStage, input: TaskInput, completed: Map<TaskStage, StageOutput>): StageOutput =
-        throw AlgorithmUnavailableException()
-
-    override fun prepareCommit(input: TaskInput, completed: Map<TaskStage, StageOutput>): CommitOutput =
-        throw AlgorithmUnavailableException()
-}
-
 internal class AndroidTaskRuntime(private val context: Context) : PersistentJobRunner {
     private val database by lazy { RoomStore.database(context) }
     private val repository by lazy { RoomStore.repository(context) }
     private val cleanup by lazy { RoomCleanupRunner(database) }
+    private val store by lazy { RoomTaskStore(database) }
     private val organize by lazy {
-        val store = RoomTaskStore(database)
-        coordinatorRunner(PersistentTaskCoordinator(store, store, PendingAlgorithm))
+        coordinatorRunner(PersistentTaskCoordinator(store, store, DietTaskPipeline(store::loadDietContext)))
     }
 
     fun enqueue(task: CoreTask, replace: Boolean) {
@@ -61,7 +46,7 @@ internal class AndroidTaskRuntime(private val context: Context) : PersistentJobR
 
     fun recover() {
         // Complete any legacy import before enumerating work from the authoritative database.
-        val pending = repository.read { database.taskDao().recoverableJobIds() }
+        val pending = repository.write { store.recoverableJobIds() }
         for (id in pending) PersistentTaskWorker.enqueue(context, id).result.get()
     }
 

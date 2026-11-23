@@ -55,15 +55,28 @@ data class TaskInput(
     val preferenceRevision: Long,
     val text: String,
     val algorithmVersion: String,
-)
+    val captureSourceId: String? = null,
+    val captureSourceVersion: Long? = null,
+) {
+    init {
+        require((captureSourceId == null) == (captureSourceVersion == null))
+        require(captureSourceVersion == null || captureSourceVersion >= 1)
+    }
+}
+
+/** An exact source used by a persisted stage. Redaction follows these references. */
+data class StageSource(val recordId: String, val sourceId: String, val sourceVersion: Long)
 
 data class StageOutput(
     val payload: String,
     val evidenceRefs: List<String> = emptyList(),
+    val contextKey: String? = null,
+    val inputSources: List<StageSource>? = null,
+    val conditionRecordId: String? = null,
 )
 
 data class CommitOutput(
-    val decisionId: String,
+    val decisionId: String?,
     val evidenceRefs: List<String> = emptyList(),
     val needsReview: Boolean = false,
 )
@@ -89,6 +102,8 @@ data class TaskJob(
     val leaseUntil: Long = 0,
     val createdAt: Long,
     val updatedAt: Long,
+    val captureSourceId: String? = null,
+    val captureSourceVersion: Long? = null,
 ) {
     fun input(): TaskInput = TaskInput(
         recordId = recordId,
@@ -96,6 +111,8 @@ data class TaskJob(
         preferenceRevision = preferenceRevision,
         text = sourceText,
         algorithmVersion = algorithmVersion,
+        captureSourceId = captureSourceId,
+        captureSourceVersion = captureSourceVersion,
     )
 
     fun toView(): TaskView = TaskView(
@@ -164,6 +181,13 @@ fun taskKey(input: TaskInput): String = digest(
     listOf(input.recordId, input.revision.toString(), input.preferenceRevision.toString(), input.algorithmVersion),
 )
 
-fun inputDigest(input: TaskInput): String = digest(listOf(taskKey(input), input.text))
+fun inputDigest(input: TaskInput): String = digest(buildList {
+    add(taskKey(input))
+    add(input.text)
+    if (input.captureSourceId != null) {
+        add(input.captureSourceId)
+        add(requireNotNull(input.captureSourceVersion).toString())
+    }
+})
 
 fun stableJobId(input: TaskInput): String = "job-${taskKey(input)}"

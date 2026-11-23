@@ -55,7 +55,8 @@ class RoomCoreRepository(
                 checkNotNull(DbJson.decode<CapturedSource>(row.sourceJson))
             }
             val references = record.tags.mapNotNull { it.sourceRef } +
-                record.suggestions.flatMap { suggestion -> suggestion.evidence.map { it.sourceRef } }
+                (record.suggestions + record.dinnerDecisions.orEmpty().flatMap { it.suggestions })
+                    .flatMap { suggestion -> suggestion.evidence.map { it.sourceRef } }
             val external = (references.toSet() - owned.map { it.ref }.toSet()).mapNotNull { ref ->
                 val link = DeletionObject("record_source", ref.sourceId, ref.sourceVersion, recordId)
                 val version = DeletionObject("source_version", ref.sourceId, ref.sourceVersion)
@@ -144,6 +145,10 @@ class RoomCoreRepository(
                     committedRevision = receipt.receipt.libraryRevision ?: revision,
                 )
             )
+            val saved = receipt.receipt
+            if (saved.success && saved.recordId != null && saved.jobId != null && saved.source != null) {
+                database.sourceDao().enableOrganizing(saved.recordId, saved.source.sourceId, saved.source.sourceVersion)
+            }
         }
 
         override fun setFutureCondition(condition: ConditionSetting) {

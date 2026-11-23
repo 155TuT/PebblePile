@@ -11,6 +11,7 @@ import com.pebblepile.android.model.TaskState
 import com.pebblepile.android.repository.RepositoryWriteException
 import com.pebblepile.android.service.CaptureRequest
 import com.pebblepile.scheduler.LeaseLostException
+import com.pebblepile.scheduler.StageSource
 import com.pebblepile.scheduler.StageOutput
 import com.pebblepile.scheduler.TaskStage
 import java.util.UUID
@@ -83,6 +84,34 @@ class RoomCleanupRunnerTest {
         assertEquals(requireNotNull(receipt.libraryRevision) + 3, core.queryRecords().libraryRevision)
         assertEquals("TARGET_DELETED", core.previewDeleteMemory(target).reason)
         assertEquals(receipt, core.deleteMemory(request))
+    }
+
+    @Test fun deletingHistoryRevokesDerivedCheckpointsInAnotherRecord() {
+        val api = core
+        val meal = api.recordExperience(CaptureRequest("周四加班吃盖饭", "android_share", "meal"))
+        val question = api.recordExperience(CaptureRequest("周四晚饭吃什么", "app_home_record", "query"))
+        val other = api.recordExperience(CaptureRequest("周末想吃面", "app_home_record", "other"))
+        val version = requireNotNull(meal.source)
+        val evidence = StageSource(requireNotNull(meal.recordId), version.sourceId, version.sourceVersion)
+        val id = requireNotNull(question.jobId)
+        val store = RoomTaskStore(database)
+        val lease = requireNotNull(store.claim(id, 10, 100)).leaseToken
+        val own = StageOutput("question")
+        store.recordCheckpoint(id, lease, TaskStage.EXTRACT, own, 11, 100)
+        store.recordCheckpoint(id, lease, TaskStage.UPDATE,
+            StageOutput("derived-from-meal", inputSources = listOf(evidence)), 12, 100)
+        val untouched = store.get(requireNotNull(other.jobId))
+        val target = DeleteTarget(DeleteTargetType.SOURCE, version.sourceId)
+        val preview = requireNotNull(api.previewDeleteMemory(target).deletePreview)
+        assertTrue(api.deleteMemory(DeleteRequest(target, preview.previewId, preview.baseRevision, "delete-meal")).success)
+        reopen()
+        val revoked = requireNotNull(RoomTaskStore(database).get(id))
+        assertEquals(TaskState.STALE, core.getTask(id)?.state)
+        assertEquals(mapOf(TaskStage.EXTRACT to own), revoked.checkpoints)
+        assertEquals("extract", database.checkpointDao().get(id)?.stage)
+        assertFalse(requireNotNull(database.schedulerDao().get(id)).snapshotJson.contains("derived-from-meal"))
+        assertEquals(untouched, RoomTaskStore(database).get(requireNotNull(other.jobId)))
+        assertEquals("周四晚饭吃什么", core.getRecordDetail(requireNotNull(question.recordId))?.record?.rawText)
     }
 
     @Test fun failedCheckpointRollsBackPurgedRowsAndResumesAfterRepair() {

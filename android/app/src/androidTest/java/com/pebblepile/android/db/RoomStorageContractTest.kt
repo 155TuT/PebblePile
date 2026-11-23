@@ -102,6 +102,8 @@ class RoomStorageContractTest : CoreApiContractSuite() {
                 old.execSQL("""INSERT INTO deletion_markers
                     (key, type, id, version, related_id, deleted_revision)
                     VALUES ('source_version|source|1|', 'source_version', 'source', 1, NULL, 2)""")
+                old.execSQL("DROP TABLE dinner_publication_counts")
+                old.execSQL("DROP TABLE organized_sources")
                 old.execSQL("DROP TABLE IF EXISTS scheduler_jobs")
                 old.version = 1
                 old.setTransactionSuccessful()
