@@ -135,7 +135,7 @@ class LocalCoreApi(
         val sources = tx.sources(recordId).filter { sourceRef == null || it.ref == sourceRef }
         if (sourceRef != null && sources.isEmpty()) return@read null
         val tasks = tx.tasks(recordId).filter { canReadTask(tx, it) }
-        RecordDetail(record, sources, tasks.map { it.id }, tx.revision, tx.futureCondition)
+        RecordDetail(record.withPublishedSuggestions(), sources, tasks.map { it.id }, tx.revision, tx.futureCondition)
     }
 
     override suspend fun recentRecords(): List<PebbleRecord> = queryRecords().records
@@ -145,7 +145,7 @@ class LocalCoreApi(
             tags.all { name -> record.tags.any { it.name == name && !it.excluded } }
         }.map { record -> record to captureInstant(record.capturedAt) }
             .sortedByDescending { it.second }
-            .map { it.first }
+            .map { it.first.withPublishedSuggestions() }
         RecordQueryResult(records, tx.revision)
     }
 
@@ -313,17 +313,29 @@ class LocalCoreApi(
     }
 
     override suspend fun recordOutcome(
-        recordId: String, baseRevision: Long, choice: String, experience: String, operationId: String
-    ): ApiReceipt = changeRecord(recordId, baseRevision, operationId, "record_outcome", choice, experience) { tx, record ->
+        recordId: String, baseRevision: Long, choice: String, experience: String, operationId: String,
+        decisionId: String?,
+    ): ApiReceipt = changeRecord(recordId, baseRevision, operationId, "record_outcome", choice, experience,
+        *listOfNotNull(decisionId).toTypedArray()) { tx, record ->
         if (choice.isBlank() && experience.isBlank()) return@changeRecord invalid("请补充实际选择或体验")
-        val outcome = OutcomeItem(newId(), choice, experience, clock())
+        if (decisionId != null && record.dinnerDecisions.orEmpty().none { it.id == decisionId && !it.redacted }) {
+            return@changeRecord invalid("建议已失效或不属于这条记录，请核对后再提交。")
+        }
+        val outcome = OutcomeItem(newId(), choice, experience, clock(), decisionId)
         val updated = record.copy(
             revision = record.revision + 1,
             outcomes = record.outcomes + outcome,
         )
         tx.putRecord(updated)
-        saved(updated, "实际反馈已保存").copy(outcomeId = outcome.id, jobId = enqueue(tx, updated, TaskKind.APPLY_FEEDBACK))
+        saved(updated, "实际反馈已保存").copy(
+            outcomeId = outcome.id,
+            jobId = enqueue(tx, updated, TaskKind.APPLY_FEEDBACK),
+            decisionId = outcome.decisionId,
+        )
     }
+
+    private fun PebbleRecord.withPublishedSuggestions(): PebbleRecord =
+        if (dinnerDecisions == null) this else copy(suggestions = currentDinnerDecision?.suggestions.orEmpty())
 
     override suspend fun reviseMemory(
         recordId: String, baseRevision: Long, condition: String, scope: CorrectionScope, operationId: String,

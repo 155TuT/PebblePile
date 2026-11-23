@@ -162,6 +162,7 @@ internal class DietTaskPipeline(
         val scope = DietVocabulary.parseCorrectionScope(text) ?: return null
         val direction = DietVocabulary.correctionDirection(text) ?: return null
         val source = context.sources.singleOrNull { it.recordId == owner && it.text == text }
+            ?.takeUnless { "饮食" in context.excludedTagsByRecord[owner].orEmpty() }
         val evidence = source?.let {
             EvidenceRef(EvidenceSource(it.ref.sourceId, it.ref.sourceVersion, owner),
                 CodePointSpan(0, text.codePointCount(0, text.length)), "explicit_rule")

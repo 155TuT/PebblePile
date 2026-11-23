@@ -4,6 +4,7 @@ import com.pebblepile.android.algorithm.AlgorithmEngine
 import com.pebblepile.android.algorithm.DietTaskContext
 import com.pebblepile.android.model.ConditionSetting
 import com.pebblepile.android.model.CoreTask
+import com.pebblepile.android.model.DinnerDecision
 import com.pebblepile.android.model.TaskKind
 import com.pebblepile.android.model.TaskState
 import com.pebblepile.scheduler.CommitOutput
@@ -154,15 +155,37 @@ internal class RoomTaskStore(private val database: PebbleDatabase) : Transaction
         // Always reread the authoritative record and preference inside the commit transaction.
         return transaction {
             val job = find(jobId) ?: throw IllegalArgumentException("任务不存在：$jobId")
-            val key = job.checkpoints[TaskStage.RANK]?.contextKey
+            val rank = job.checkpoints[TaskStage.RANK]
+            var decision: DinnerDecision? = null
             val guard = RevisionProvider { recordId ->
                 val revision = currentRevision(recordId)
-                val currentKey = if (key == null) null else try {
-                    dietInputs.key(job.input())
-                } catch (_: StaleInputException) { null }
-                revision?.takeIf { key == currentKey && (revisions === this || revisions.currentRevision(recordId) == it) }
+                if (revision != RevisionSnapshot(job.inputRevision, job.preferenceRevision) ||
+                    (revisions !== this && revisions.currentRevision(recordId) != revision)
+                ) return@RevisionProvider null
+                if (rank?.contextKey != null) {
+                    try {
+                        val decisionId = result.decisionId
+                        if (decisionId != null && !result.needsReview) {
+                            val context = dietInputs.read(job.input())
+                            if (rank.contextKey != context.contextKey ||
+                                !database.sourceDao().isOrganized(context.target.ref.sourceId, context.target.ref.sourceVersion)
+                            ) return@RevisionProvider null
+                            decision = prepareDinnerDecision(job, decisionId, rank, context)
+                                ?: return@RevisionProvider null
+                        } else if (rank.contextKey != dietInputs.key(job.input())) {
+                            return@RevisionProvider null
+                        }
+                    } catch (_: StaleInputException) {
+                        return@RevisionProvider null
+                    }
+                }
+                revision
             }
-            super.finishIfCurrent(jobId, leaseToken, result, guard, now)
+            val finished = super.finishIfCurrent(jobId, leaseToken, result, guard, now)
+            if (finished.status == TaskStatus.COMPLETED) {
+                decision?.let { database.recordDao().publishDinnerDecision(job.recordId, it) }
+            }
+            finished
         }
     }
 

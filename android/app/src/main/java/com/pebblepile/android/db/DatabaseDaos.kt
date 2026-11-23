@@ -87,6 +87,9 @@ interface SourceDao {
         WHERE record_id = :recordId AND source_id = :sourceId AND source_version = :version""")
     fun enableOrganizing(recordId: String, sourceId: String, version: Long)
 
+    @Query("SELECT EXISTS (SELECT 1 FROM organized_sources WHERE source_id = :sourceId AND source_version = :version)")
+    fun isOrganized(sourceId: String, version: Long): Boolean
+
     @Query(VISIBLE_SOURCES + " ORDER BY s.rowid DESC LIMIT 1")
     fun latestVisibleCapture(recordId: String): SourceVersionEntity?
 
