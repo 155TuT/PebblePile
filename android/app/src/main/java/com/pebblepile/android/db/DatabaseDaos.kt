@@ -49,6 +49,10 @@ interface RecordDao {
     @Upsert
     fun put(record: RecordEntity)
 
+    @Query("""INSERT OR REPLACE INTO dinner_publication_counts(record_id, publications)
+        VALUES (:recordId, 1 + COALESCE((SELECT publications FROM dinner_publication_counts WHERE record_id = :recordId), 0))""")
+    fun countDinnerPublication(recordId: String)
+
     @Query("DELETE FROM records WHERE id = :id")
     fun delete(id: String)
 }
@@ -72,8 +76,9 @@ private const val DIET_INPUT_ROWS = """ FROM source_versions s JOIN records r ON
 
 @Dao
 interface SourceDao {
-    @Query("SELECT r.id AS recordId, r.revision AS recordRevision, s.source_id AS sourceId, s.source_version AS sourceVersion" +
-        DIET_INPUT_ROWS + "ORDER BY r.id, s.source_id")
+    @Query("""SELECT r.id AS recordId, CASE WHEN r.id = :recordId THEN r.revision ELSE r.revision -
+        COALESCE((SELECT c.publications FROM dinner_publication_counts c WHERE c.record_id = r.id), 0) END AS recordRevision,
+        s.source_id AS sourceId, s.source_version AS sourceVersion""" + DIET_INPUT_ROWS + "ORDER BY r.id, s.source_id")
     fun dietVersions(recordId: String, sourceId: String, version: Long): List<DietInputVersion>
 
     @Query("SELECT s.source_json" + DIET_INPUT_ROWS + "ORDER BY r.id, s.source_id")
@@ -86,6 +91,9 @@ interface SourceDao {
         SELECT source_id, source_version FROM source_versions
         WHERE record_id = :recordId AND source_id = :sourceId AND source_version = :version""")
     fun enableOrganizing(recordId: String, sourceId: String, version: Long)
+
+    @Query("SELECT EXISTS (SELECT 1 FROM organized_sources WHERE source_id = :sourceId AND source_version = :version)")
+    fun isOrganized(sourceId: String, version: Long): Boolean
 
     @Query(VISIBLE_SOURCES + " ORDER BY s.rowid DESC LIMIT 1")
     fun latestVisibleCapture(recordId: String): SourceVersionEntity?

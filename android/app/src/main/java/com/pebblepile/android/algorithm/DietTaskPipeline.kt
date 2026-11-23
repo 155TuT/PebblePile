@@ -76,7 +76,7 @@ internal class DietTaskPipeline(
                 val correction = setting?.let { explicitPreference(it.text, context, it.recordId) }
                 val appliesToDiet = setting != null && (
                     dietWords.containsMatchIn(setting.text) ||
-                        history.any { it.source?.recordId == setting.recordId }
+                        history.any { it.source?.recordId == setting.recordId && "饮食" !in context.excludedTagsByRecord[setting.recordId].orEmpty() }
                 )
                 val temporary = context.currentGoalCondition
                 val temporaryPreference = temporary?.let { explicitPreference(it, context, target.recordId) }
@@ -113,7 +113,10 @@ internal class DietTaskPipeline(
                 val result = if (query.outcome == DietTaskOutcome.RANKED) {
                     val extracted = checkpoint<DietExtractCheckpoint>(completed, TaskStage.EXTRACT)
                     val updated = checkpoint<DietUpdateCheckpoint>(completed, TaskStage.UPDATE)
-                    engine.rank(requireNotNull(query.constraint), updated.preferences, history(context, extracted))
+                    val eligibleHistory = history(context, extracted).filter { event ->
+                        "饮食" !in context.excludedTagsByRecord[event.source?.recordId].orEmpty()
+                    }
+                    engine.rank(requireNotNull(query.constraint), updated.preferences, eligibleHistory)
                 } else null
                 val outcome = if (result != null && result.items.isEmpty()) DietTaskOutcome.NO_CANDIDATES else query.outcome
                 val refs = result?.items.orEmpty().flatMap { it.evidence }.distinct().map(checkpointJson::toJson)
@@ -162,6 +165,7 @@ internal class DietTaskPipeline(
         val scope = DietVocabulary.parseCorrectionScope(text) ?: return null
         val direction = DietVocabulary.correctionDirection(text) ?: return null
         val source = context.sources.singleOrNull { it.recordId == owner && it.text == text }
+            ?.takeUnless { "饮食" in context.excludedTagsByRecord[owner].orEmpty() }
         val evidence = source?.let {
             EvidenceRef(EvidenceSource(it.ref.sourceId, it.ref.sourceVersion, owner),
                 CodePointSpan(0, text.codePointCount(0, text.length)), "explicit_rule")

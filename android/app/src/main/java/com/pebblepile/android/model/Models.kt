@@ -1,5 +1,8 @@
 package com.pebblepile.android.model
 
+import com.pebblepile.android.algorithm.AlgorithmManifest
+import com.pebblepile.android.algorithm.QueryConstraint
+
 enum class TagReviewState(val label: String) {
     AUTO("自动整理"),
     NEEDS_REVIEW("待核对"),
@@ -28,10 +31,37 @@ data class EvidenceItem(
     val start: Int = 0,
     val end: Int = quote.codePointCount(0, quote.length),
     val unavailableReason: String? = null,
+    val role: String? = null,
 )
 
 data class SuggestionItem(val id: String, val title: String, val reason: String, val evidence: List<EvidenceItem>)
-data class OutcomeItem(val id: String, val choice: String, val experience: String, val createdAt: String)
+data class DinnerRankingBasis(
+    val appliedPreferences: List<String>,
+    val unmatchedPreferences: List<String>,
+    val filteredOut: List<String>,
+)
+
+data class DinnerDecision(
+    val id: String,
+    val jobId: String,
+    val inputRevision: Long,
+    val preferenceRevision: Long,
+    val snapshotId: String?,
+    val manifest: AlgorithmManifest?,
+    val constraint: QueryConstraint?,
+    val suggestions: List<SuggestionItem>,
+    val rankingBasis: DinnerRankingBasis? = null,
+) {
+    val redacted: Boolean get() = snapshotId == null
+}
+
+data class OutcomeItem(
+    val id: String,
+    val choice: String,
+    val experience: String,
+    val createdAt: String,
+    val decisionId: String? = null,
+)
 
 enum class ItemStatus(val label: String) {
     OPEN("待开始"),
@@ -60,7 +90,14 @@ data class PebbleRecord(
     },
     val people: List<String> = emptyList(),
     val itemStatus: ItemStatus = ItemStatus.OPEN,
-)
+    // Nullable for records already stored as JSON before dinner decisions were published.
+    val dinnerDecisions: List<DinnerDecision>? = null,
+    val supersededDinnerDecisionId: String? = null,
+) {
+    val currentDinnerDecision: DinnerDecision? get() = dinnerDecisions?.lastOrNull()?.takeUnless {
+        it.redacted || it.id == supersededDinnerDecisionId
+    }
+}
 
 enum class CorrectionScope(val label: String) {
     THIS_TIME("仅本次"), FUTURE("以后按此条件")
@@ -86,7 +123,8 @@ data class ApiReceipt(
     val title: String? = null,
     val currentPreference: ConditionSetting? = null,
     val deletePreview: DeletePreview? = null,
-    val deletion: DeletionResult? = null
+    val deletion: DeletionResult? = null,
+    val decisionId: String? = null,
 )
 
 data class SourceRef(val sourceId: String, val sourceVersion: Long)

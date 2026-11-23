@@ -58,7 +58,9 @@ internal class RoomDeletionWriter(
         get() = DeletionObject("source_version", sourceId, sourceVersion)
 
     private fun PebbleRecord.references(source: SourceRef) =
-        tags.any { it.sourceRef == source } || suggestions.any { entry -> entry.evidence.any { it.sourceRef == source } }
+        tags.any { it.sourceRef == source } ||
+            (suggestions + dinnerDecisions.orEmpty().flatMap { it.suggestions })
+                .any { entry -> entry.evidence.any { it.sourceRef == source } }
 
     override fun dependents(ref: DeletionObject, traversal: DeletionTraversal): List<DeletionLink> = buildList {
         fun link(target: DeletionObject, revision: Long, kind: DeletionLinkKind) {
@@ -134,7 +136,6 @@ internal class RoomDeletionWriter(
             ))
         }
         val changedRecords = plan.invalidate.filter { it.ref.type == "record" }.map { it.ref.id }.toSet()
-        for (id in changedRecords) redactRecord(id, removed)
         val cancelledJobs = plan.cancel.map { it.ref.id }.toSet()
         for (item in plan.cancel) {
             val row = checkNotNull(database.taskDao().get(item.ref.id))
@@ -144,6 +145,9 @@ internal class RoomDeletionWriter(
                 revision = cancelled.revision))
         }
         val invalidatedJobs = invalidateDietCheckpoints(database, removed)
+        val decisionRecords = invalidatedJobs.mapNotNull { database.taskDao().get(it)?.recordId }
+        val affectedRecords = changedRecords + decisionRecords
+        for (id in affectedRecords) redactRecord(id, removed, invalidatedJobs, id in changedRecords)
         val deletedRecords = removed.filter { it.type == "record" }.map { it.id }.toSet()
         database.libraryDao().get()?.let { library ->
             val setting = DbJson.decode<ConditionSetting>(library.futureConditionJson)
@@ -153,7 +157,7 @@ internal class RoomDeletionWriter(
             val old = checkNotNull(DbJson.decode<ApiReceipt>(row.receiptJson))
             val updated = old.copy(
                 title = old.title.takeUnless { old.recordId in deletedRecords },
-                currentRecord = old.currentRecord?.takeUnless { it.id in deletedRecords || it.id in changedRecords },
+                currentRecord = old.currentRecord?.takeUnless { it.id in deletedRecords || it.id in affectedRecords },
                 currentPreference = old.currentPreference?.takeUnless { it.recordId in deletedRecords },
                 source = old.source?.takeUnless { DeletionObject("source_version", it.sourceId, it.sourceVersion) in removed },
                 task = old.task?.let { task ->
@@ -166,8 +170,8 @@ internal class RoomDeletionWriter(
         return true
     }
 
-    private fun redactRecord(id: String, removed: Set<DeletionObject>) {
-        val row = checkNotNull(database.recordDao().get(id))
+    private fun redactRecord(id: String, removed: Set<DeletionObject>, invalidatedJobs: Set<String>, invalidateRecord: Boolean) {
+        val row = database.recordDao().get(id) ?: return
         val old = checkNotNull(DbJson.decode<PebbleRecord>(row.recordJson))
         fun loses(source: SourceRef?) = source != null && (
             DeletionObject("source_version", source.sourceId, source.sourceVersion) in removed ||
@@ -182,6 +186,13 @@ internal class RoomDeletionWriter(
         // Android's capture decorator derives the initial title and @people from the primary text.
         fun captureTitle(text: String): String = text.substring(0,
             text.offsetByCodePoints(0, minOf(18, text.codePointCount(0, text.length))))
+        val decisions = old.dinnerDecisions?.map { decision ->
+            if (decision.jobId in invalidatedJobs || decision.suggestions.any { suggestion ->
+                    suggestion.evidence.any { loses(it.sourceRef) }
+                }) decision.copy(snapshotId = null, manifest = null, constraint = null, suggestions = emptyList(), rankingBasis = null)
+            else decision
+        }
+        if (!invalidateRecord && decisions == old.dinnerDecisions) return
         val updated = old.copy(
             revision = old.revision + 1,
             title = if (losesPrimary && old.title == captureTitle(old.rawText)) captureTitle(replacement) else old.title,
@@ -195,6 +206,7 @@ internal class RoomDeletionWriter(
             suggestions = old.suggestions.filterNot { suggestion ->
                 suggestion.evidence.any { loses(it.sourceRef) } || (losesPrimary && suggestion.evidence.isEmpty())
             },
+            dinnerDecisions = decisions,
         )
         database.recordDao().put(row.copy(recordJson = DbJson.encode(updated), revision = updated.revision, title = updated.title))
     }

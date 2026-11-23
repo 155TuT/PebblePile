@@ -123,6 +123,19 @@ class DietTaskPipelineTest {
         assertTrue(requireNotNull(rank.result).filteredOut.contains("tomato-egg-noodle"))
     }
 
+    @Test fun anExcludedDietRecordDoesNotTurnUnrelatedSettingsIntoDinnerConstraints() {
+        val owner = records.first().recordId
+        val query = source("Q01", fixtureText("queries", "Q01"))
+        val revised = context(query).copy(excludedTagsByRecord = mapOf(owner to setOf("饮食")),
+            futureCondition = ConditionSetting("下次先按车程安排路线", owner, 9))
+        val rank = run(revised).getValue(TaskStage.RANK)
+        assertEquals(DietTaskOutcome.RANKED, rank.dietRankCheckpoint().outcome)
+        assertNull(rank.conditionRecordId)
+        val candidates = requireNotNull(rank.dietRankCheckpoint().result).items
+        assertTrue(candidates.isNotEmpty())
+        assertTrue(candidates.flatMap { it.evidence }.none { it.source.recordId == owner })
+    }
+
     @Test fun explicitTimeLimitFiltersTheMenuAndUnrepresentableTimeNeedsClarification() {
         val halfHour = context(source("query", "今天周日不加班，最多半小时做饭，晚饭吃什么？"))
         val ranked = run(halfHour).getValue(TaskStage.RANK).dietRankCheckpoint()

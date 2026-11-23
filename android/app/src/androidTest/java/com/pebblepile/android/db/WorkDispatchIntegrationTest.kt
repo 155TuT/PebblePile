@@ -104,6 +104,19 @@ class WorkDispatchIntegrationTest {
         assertEquals(before, readJob())
         assertEquals(listOf(id), api.getRecordDetail(requireNotNull(saved.recordId))?.jobIds)
         assertEquals(saved, api.recordExperience(query))
+
+        val detailAfterPublish = requireNotNull(api.getRecordDetail(requireNotNull(saved.recordId)))
+        val decision = requireNotNull(detailAfterPublish.record.currentDinnerDecision)
+        assertEquals(before.decisionId, decision.id)
+        assertEquals("盖饭", detailAfterPublish.record.suggestions.first().title)
+        assertTrue(detailAfterPublish.record.suggestions.flatMap { it.evidence }.any { it.quote == "加班到八点半" })
+        val feedback = runBlocking {
+            api.recordOutcome(detailAfterPublish.record.id, detailAfterPublish.record.revision,
+                "热汤面", "省时也省事", "$token-feedback", decision.id)
+        }
+        assertTrue(feedback.success)
+        assertEquals(decision.id, feedback.decisionId)
+        assertEquals(decision.id, api.getRecordDetail(detailAfterPublish.record.id)?.record?.outcomes?.single()?.decisionId)
     }
 
     @Test fun originalReceiptsAddressTheWorkersThatOrganizeAndCleanTheRecord() {

@@ -5,6 +5,7 @@ import com.pebblepile.android.model.CorrectionScope
 import com.pebblepile.android.model.CoreTask
 import com.pebblepile.android.model.DeleteRequest
 import com.pebblepile.android.model.DeleteTarget
+import com.pebblepile.android.model.DinnerDecision
 import com.pebblepile.android.model.ItemStatus
 import com.pebblepile.android.model.SourceRef
 import com.pebblepile.android.model.TagAction
@@ -26,6 +27,8 @@ interface CoreApi {
     fun setAutoOrganize(enabled: Boolean)
     fun recordExperience(request: CaptureRequest): ApiReceipt
     fun getRecordDetail(recordId: String, sourceRef: SourceRef? = null): RecordDetail?
+    fun getDinnerDecision(recordId: String, decisionId: String): DinnerDecision? =
+        getRecordDetail(recordId)?.record?.dinnerDecisions?.firstOrNull { it.id == decisionId }
     fun queryRecords(tags: Set<String> = emptySet()): RecordQueryResult
     fun queryContext(recordId: String): LocalContext?
     fun updateRecordTitle(recordId: String, baseRevision: Long, title: String, operationId: String): ApiReceipt
@@ -58,7 +61,10 @@ interface CoreApi {
         status: ItemStatus,
         operationId: String,
     ): ApiReceipt
-    suspend fun recordOutcome(recordId: String, baseRevision: Long, choice: String, experience: String, operationId: String): ApiReceipt
+    suspend fun recordOutcome(
+        recordId: String, baseRevision: Long, choice: String, experience: String, operationId: String,
+        decisionId: String? = null,
+    ): ApiReceipt
     suspend fun reviseMemory(
         recordId: String, baseRevision: Long, condition: String, scope: CorrectionScope, operationId: String,
         basePreferenceRevision: Long? = null

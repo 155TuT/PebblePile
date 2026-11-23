@@ -30,6 +30,14 @@ data class RecordEntity(
     val revision: Long,
 )
 
+/** Publishing a decision changes its record for readers, while the algorithm inputs stay the same. */
+@Entity(tableName = "dinner_publication_counts", foreignKeys = [ForeignKey(entity = RecordEntity::class,
+    parentColumns = ["id"], childColumns = ["record_id"], onDelete = ForeignKey.CASCADE)])
+internal data class DinnerPublicationCount(
+    @PrimaryKey @ColumnInfo(name = "record_id") val recordId: String,
+    val publications: Long,
+)
+
 /** Exact source version. Composite key keeps every historical version of a source. */
 @Entity(
     tableName = "source_versions",
