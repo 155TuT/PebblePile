@@ -8,9 +8,15 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.pebblepile.android.model.ApiReceipt
 import com.pebblepile.android.model.CorrectionScope
+import com.pebblepile.android.model.DinnerDecision
+import com.pebblepile.android.model.EvidenceItem
+import com.pebblepile.android.model.OutcomeItem
 import com.pebblepile.android.model.SourceRef
+import com.pebblepile.android.model.SuggestionItem
 import com.pebblepile.android.service.CoreApi
+import com.pebblepile.android.service.RecordDetail
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -56,6 +62,82 @@ class DetailIntegrityTest {
             ui.waitUntil(10_000) {
                 ui.onAllNodes(hasSetTextAction() and hasText("工作日")).fetchSemanticsNodes().isNotEmpty()
             }
+        }
+    }
+
+    @Test fun feedbackKeepsTheDecisionIdOfTheVisibleSuggestion() {
+        val api = app.coreApi
+        val raw = "周四加班，预算二十元 ${UUID.randomUUID()}"
+        val recordId = requireNotNull(runBlocking {
+            api.recordExperience(raw, "app", UUID.randomUUID().toString())
+        }.recordId)
+        val decisionId = "diet-test-$recordId"
+        val suggestion = SuggestionItem(
+            "$decisionId:gaifan",
+            "盖饭",
+            "工作日加班时优先省事，预算二十元内。",
+            listOf(
+                EvidenceItem(
+                    "$decisionId:evidence",
+                    "饮食经历",
+                    "周四",
+                    "2026-11-19",
+                    recordId,
+                    SourceRef(recordId, 1),
+                    0,
+                    2,
+                )
+            ),
+        )
+        val decision = DinnerDecision(
+            decisionId, "job-test", 1, 0, "snapshot-test", null, null, listOf(suggestion),
+        )
+        var capturedDecisionId: String? = null
+        var capturedChoice: String? = null
+        val controlled = object : CoreApi by api {
+            override fun getRecordDetail(recordId: String, sourceRef: SourceRef?): RecordDetail? {
+                val detail = api.getRecordDetail(recordId, sourceRef) ?: return null
+                if (sourceRef != null) return detail
+                val created = capturedDecisionId?.let {
+                    OutcomeItem("outcome-test", capturedChoice.orEmpty(), "最后吃了热汤面", "2026-11-23T20:00", it)
+                }
+                return detail.copy(
+                    record = detail.record.copy(
+                        suggestions = listOf(suggestion),
+                        dinnerDecisions = listOf(decision),
+                        outcomes = detail.record.outcomes + listOfNotNull(created),
+                    ),
+                )
+            }
+
+            override suspend fun recordOutcome(
+                recordId: String, baseRevision: Long, choice: String, experience: String,
+                operationId: String, decisionId: String?,
+            ): ApiReceipt {
+                capturedDecisionId = decisionId
+                capturedChoice = choice
+                return ApiReceipt(
+                    success = true,
+                    message = "实际反馈已保存",
+                    outcomeId = "outcome-test",
+                    decisionId = decisionId,
+                )
+            }
+        }
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity {
+                it.setContent {
+                    PebbleComponentTheme { RecordDetailScreen(controlled, recordId, true, {}, { _, _ -> }) }
+                }
+            }
+            waitForText("本次建议")
+            ui.onNodeWithTag("decision_choice_0").performScrollTo().performClick()
+            ui.onAllNodes(hasSetTextAction())[1].performScrollTo().performTextReplacement("最后吃了热汤面")
+            ui.onNodeWithText("保存实际反馈").performScrollTo().performClick()
+            ui.waitUntil(10_000) { capturedDecisionId != null }
+            assertEquals(decisionId, capturedDecisionId)
+            assertEquals("盖饭", capturedChoice)
+            waitForText("当时建议：盖饭")
         }
     }
 
