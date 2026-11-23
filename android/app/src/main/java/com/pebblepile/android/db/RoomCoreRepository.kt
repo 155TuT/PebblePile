@@ -144,6 +144,10 @@ class RoomCoreRepository(
                     committedRevision = receipt.receipt.libraryRevision ?: revision,
                 )
             )
+            val saved = receipt.receipt
+            if (saved.success && saved.recordId != null && saved.jobId != null && saved.source != null) {
+                database.sourceDao().enableOrganizing(saved.recordId, saved.source.sourceId, saved.source.sourceVersion)
+            }
         }
 
         override fun setFutureCondition(condition: ConditionSetting) {

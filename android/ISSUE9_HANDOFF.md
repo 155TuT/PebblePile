@@ -16,6 +16,16 @@
 
 来源按 `sourceId + sourceVersion` 定位，`CodePointSpan.quoteIn(text)` 用 Unicode 码点区间 `[start,end)` 取回原话。`DietVocabulary.parseCorrectionScope` 和 `correctionDirection` 返回已识别的条件与方向，无法识别时返回 `null`，交给用户确认。#6/#8 提交前复核记录与偏好修订，连同算法清单、决定及证据一起写入。O01 所属决定的持久关联由应用验收 A08 核对。
 
+## 嘉文怎样接本次候选
+
+首页和分享保存后，Worker 用回执中的 `jobId` 领取任务。抽取读取本次来源及版本，更新使用已开启整理的经历和人工排除，排序使用本次提问的条件。四步分别保存 `EXTRACT`、`UPDATE`、`CONTEXT`、`RANK` 检查点。普通记录完成整理；晚餐提问缺条件、纠正需要确认或筛选后没有候选时，任务进入待核对。
+
+#6 在 `RoomTaskStore.finishIfCurrent` 的提交事务里接收候选。用 `job.checkpoints.getValue(TaskStage.RANK).dietRankCheckpoint()` 读排序检查点，其中 `manifest` 记录算法与场景版本，`constraint` 记录提问条件，`result.items` 按顺序给出候选及证据。目标记录、输入修订和偏好修订在 `TaskJob` 中，快照标识在该步的 `StageOutput.contextKey` 中。这次提交的决定编号从 `CommitOutput.decisionId` 取。
+
+用户在设置里修改偏好时，检查点保留条件所属记录及其修订。只有该记录中存在唯一匹配的来源原文，显式纠正才附带 `explicit_rule` 引文。
+
+郑嘉文在同一事务内按来源版本回查码点区间，核对授权、人工排除和输入修订，再把有效建议及其依据写入 CoreAPI 的正式读模型。林叶鑫用同一条记录核对正常提交、纠正后的迟到结果，以及实际反馈关联的决定编号。
+
 ## 林叶鑫接回放，林金晶接条件复测
 
 在 `android/` 执行以下命令，使用 JDK 17、Android SDK 35 和本机已有的 Gradle 依赖。

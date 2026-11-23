@@ -1,6 +1,7 @@
 package com.pebblepile.android.db
 
 import androidx.room.ColumnInfo
+import androidx.room.ForeignKey
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -103,4 +104,14 @@ data class ScheduledJobEntity(
     @PrimaryKey @ColumnInfo(name = "job_id") val jobId: String,
     @ColumnInfo(name = "input_key") val inputKey: String,
     @ColumnInfo(name = "snapshot_json") val snapshotJson: String,
+)
+
+
+/** Exact source versions whose save receipt created an organizing task. */
+@Entity(tableName = "organized_sources", primaryKeys = ["source_id", "source_version"],
+    foreignKeys = [ForeignKey(entity = SourceVersionEntity::class, parentColumns = ["source_id", "source_version"],
+        childColumns = ["source_id", "source_version"], onDelete = ForeignKey.CASCADE)])
+internal data class OrganizedSourceEntity(
+    @ColumnInfo(name = "source_id") val sourceId: String,
+    @ColumnInfo(name = "source_version") val sourceVersion: Long,
 )

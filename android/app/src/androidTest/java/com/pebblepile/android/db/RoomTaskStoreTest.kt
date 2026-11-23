@@ -124,6 +124,7 @@ class RoomTaskStoreTest {
         assertEquals("另一份原话", store.get(id)?.sourceText)
         database.close()
         SQLiteDatabase.openDatabase(context.getDatabasePath(name).path, null, SQLiteDatabase.OPEN_READWRITE).use { old ->
+            old.execSQL("DROP TABLE organized_sources")
             old.execSQL("DROP TABLE scheduler_jobs")
             old.version = 2
         }

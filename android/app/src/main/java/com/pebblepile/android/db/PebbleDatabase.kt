@@ -1,6 +1,7 @@
 package com.pebblepile.android.db
 
 import android.content.Context
+import com.pebblepile.android.model.ApiReceipt
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
@@ -18,6 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         LibraryEntity::class,
         RecordEntity::class,
         SourceVersionEntity::class,
+        OrganizedSourceEntity::class,
         TaskEntity::class,
         OperationReceiptEntity::class,
         DeletionMarkerEntity::class,
@@ -25,7 +27,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TaskCheckpointEntity::class,
         ScheduledJobEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class PebbleDatabase : RoomDatabase() {
@@ -69,6 +71,29 @@ abstract class PebbleDatabase : RoomDatabase() {
             }
         }
 
+        private val indexOrganizedSources = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""CREATE TABLE organized_sources (
+                    source_id TEXT NOT NULL, source_version INTEGER NOT NULL, PRIMARY KEY(source_id, source_version),
+                    FOREIGN KEY(source_id, source_version) REFERENCES source_versions(source_id, source_version) ON DELETE CASCADE)""")
+                db.compileStatement("""INSERT OR IGNORE INTO organized_sources
+                    SELECT source_id, source_version FROM source_versions
+                    WHERE record_id = ? AND source_id = ? AND source_version = ?""").use { insert ->
+                    db.query("SELECT receipt_json FROM operation_receipts").use { receipts ->
+                        while (receipts.moveToNext()) {
+                            val saved = checkNotNull(DbJson.decode<ApiReceipt>(receipts.getString(0)))
+                            val source = saved.source ?: continue
+                            if (!saved.success || saved.jobId == null || saved.recordId == null) continue
+                            insert.bindString(1, saved.recordId)
+                            insert.bindString(2, source.sourceId)
+                            insert.bindLong(3, source.sourceVersion)
+                            insert.executeInsert()
+                        }
+                    }
+                }
+            }
+        }
+
         private val pragmaCallback = object : Callback() {
             override fun onOpen(db: SupportSQLiteDatabase) {
                 db.execSQL("PRAGMA synchronous=FULL")
@@ -78,7 +103,7 @@ abstract class PebbleDatabase : RoomDatabase() {
 
         fun build(context: Context, name: String): PebbleDatabase =
             Room.databaseBuilder(context, PebbleDatabase::class.java, name)
-                .addMigrations(migrateKeys, addScheduler)
+                .addMigrations(migrateKeys, addScheduler, indexOrganizedSources)
                 .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
                 .addCallback(pragmaCallback)
                 .build()

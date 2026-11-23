@@ -1,5 +1,7 @@
 package com.pebblepile.android.db
 
+import com.pebblepile.android.model.CapturedSource
+import com.pebblepile.android.repository.RepositoryWriteException
 import com.pebblepile.android.model.CoreTask
 import com.pebblepile.android.model.TaskKind
 import com.pebblepile.android.model.TaskState
@@ -8,6 +10,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import androidx.room.Upsert
 
 @Dao
@@ -27,6 +30,10 @@ private const val VISIBLE_RECORDS = "SELECT r.* FROM records r WHERE NOT EXISTS 
 
 @Dao
 interface RecordDao {
+    @Query("SELECT r.revision FROM records r WHERE r.id = :id AND NOT EXISTS " +
+        "(SELECT 1 FROM deletion_markers m WHERE m.type = 'record' AND m.id = r.id)")
+    fun visibleRevision(id: String): Long?
+
     @Query(VISIBLE_RECORDS + " AND r.id = :id")
     fun visible(id: String): RecordEntity?
 
@@ -52,8 +59,34 @@ private const val VISIBLE_SOURCES = """SELECT s.* FROM source_versions s WHERE s
         (m.type = 'source' AND m.id = s.source_id) OR
         (m.type = 'source_version' AND m.id = s.source_id AND m.version = s.source_version))"""
 
+data class DietInputVersion(val recordId: String, val recordRevision: Long, val sourceId: String, val sourceVersion: Long)
+
+private const val DIET_INPUT_ROWS = """ FROM source_versions s JOIN records r ON r.id = s.record_id
+    LEFT JOIN organized_sources o ON o.source_id = s.source_id AND o.source_version = s.source_version
+    WHERE (o.source_id IS NOT NULL OR (s.record_id = :recordId AND s.source_id = :sourceId AND s.source_version = :version))
+    AND NOT EXISTS (SELECT 1 FROM source_versions newer WHERE newer.source_id = s.source_id AND newer.source_version > s.source_version)
+    AND NOT EXISTS (SELECT 1 FROM deletion_markers m WHERE
+        (m.type = 'record' AND m.id = s.record_id) OR (m.type = 'source' AND m.id = s.source_id) OR
+        (m.type = 'source_version' AND m.id = s.source_id AND m.version = s.source_version) OR
+        (m.type = 'record_source' AND m.related_id = :recordId AND m.id = s.source_id AND m.version = s.source_version)) """
+
 @Dao
 interface SourceDao {
+    @Query("SELECT r.id AS recordId, r.revision AS recordRevision, s.source_id AS sourceId, s.source_version AS sourceVersion" +
+        DIET_INPUT_ROWS + "ORDER BY r.id, s.source_id")
+    fun dietVersions(recordId: String, sourceId: String, version: Long): List<DietInputVersion>
+
+    @Query("SELECT s.source_json" + DIET_INPUT_ROWS + "ORDER BY r.id, s.source_id")
+    fun dietSources(recordId: String, sourceId: String, version: Long): List<String>
+
+    @Query("SELECT DISTINCT r.record_json" + DIET_INPUT_ROWS)
+    fun dietRecords(recordId: String, sourceId: String, version: Long): List<String>
+
+    @Query("""INSERT OR IGNORE INTO organized_sources(source_id, source_version)
+        SELECT source_id, source_version FROM source_versions
+        WHERE record_id = :recordId AND source_id = :sourceId AND source_version = :version""")
+    fun enableOrganizing(recordId: String, sourceId: String, version: Long)
+
     @Query(VISIBLE_SOURCES + " ORDER BY s.rowid DESC LIMIT 1")
     fun latestVisibleCapture(recordId: String): SourceVersionEntity?
 
@@ -69,8 +102,17 @@ interface SourceDao {
     @Query("SELECT * FROM source_versions WHERE source_id = :sourceId AND source_version = :version")
     fun get(sourceId: String, version: Long): SourceVersionEntity?
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    fun put(source: SourceVersionEntity)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insertVersion(source: SourceVersionEntity): Long
+
+    @Transaction
+    fun put(source: SourceVersionEntity) {
+        if (insertVersion(source) != -1L) return
+        val stored = get(source.sourceId, source.sourceVersion)
+        if (stored != null && stored.copy(sourceJson = source.sourceJson) == source &&
+            DbJson.decode<CapturedSource>(stored.sourceJson) == DbJson.decode<CapturedSource>(source.sourceJson)) return
+        throw RepositoryWriteException().apply { initCause(IllegalStateException("相同来源版本对应不同内容")) }
+    }
 
     @Query("DELETE FROM source_versions WHERE source_id = :sourceId AND source_version = :version")
     fun delete(sourceId: String, version: Long)
@@ -153,6 +195,10 @@ interface CheckpointDao {
 
 @Dao
 interface SchedulerDao {
+    @Query("""SELECT * FROM scheduler_jobs WHERE (:after IS NULL OR job_id > :after)
+        ORDER BY job_id LIMIT 32""")
+    fun nextSnapshots(after: String?): List<ScheduledJobEntity>
+
     @Query("SELECT * FROM scheduler_jobs WHERE job_id = :id")
     fun get(id: String): ScheduledJobEntity?
 

@@ -122,9 +122,9 @@ class FrontendFlowTest {
             ui.onNodeWithContentDescription("保存").activate()
             waitForText("当前事项")
             ui.onNodeWithContentDescription("返回").activate()
-            waitForText("等待整理算法就绪。")
+            waitForText("本次处理已完成。")
             ui.onAllNodes(hasText("已保存 ·", substring = true))[0].assertExists()
-            ui.onNodeWithText("等待条件").assertExists()
+            ui.onNodeWithText("已完成").assertExists()
         }
     }
 

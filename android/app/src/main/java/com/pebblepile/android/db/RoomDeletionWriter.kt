@@ -143,6 +143,7 @@ internal class RoomDeletionWriter(
             database.taskDao().put(row.copy(taskJson = DbJson.encode(cancelled), state = cancelled.state.name,
                 revision = cancelled.revision))
         }
+        val invalidatedJobs = invalidateDietCheckpoints(database, removed)
         val deletedRecords = removed.filter { it.type == "record" }.map { it.id }.toSet()
         database.libraryDao().get()?.let { library ->
             val setting = DbJson.decode<ConditionSetting>(library.futureConditionJson)
@@ -156,7 +157,7 @@ internal class RoomDeletionWriter(
                 currentPreference = old.currentPreference?.takeUnless { it.recordId in deletedRecords },
                 source = old.source?.takeUnless { DeletionObject("source_version", it.sourceId, it.sourceVersion) in removed },
                 task = old.task?.let { task ->
-                    if (task.id in cancelledJobs) database.taskDao().get(task.id)?.let { DbJson.decode<CoreTask>(it.taskJson) }
+                    if (task.id in cancelledJobs || task.id in invalidatedJobs) database.taskDao().get(task.id)?.let { DbJson.decode<CoreTask>(it.taskJson) }
                     else task
                 },
             )

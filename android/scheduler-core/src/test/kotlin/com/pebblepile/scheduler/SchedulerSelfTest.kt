@@ -72,6 +72,16 @@ class SchedulerSelfTest {
     }
 
     @Test
+    fun replayBindsTheOriginalSourceVersionEvenWhenTheTextMatches() {
+        val (coordinator, _, _) = fixture()
+        val first = baseInput.copy(captureSourceId = "source-1", captureSourceVersion = 1)
+        val saved = coordinator.submit(first)
+        expect(saved.jobId == coordinator.submit(first).jobId, "原始来源版本重发应复用任务")
+        assertThrows(IllegalArgumentException::class.java) { coordinator.submit(first.copy(captureSourceVersion = 2)) }
+        assertThrows(IllegalArgumentException::class.java) { coordinator.submit(first.copy(captureSourceId = "another")) }
+    }
+
+    @Test
     fun runsAllStages() {
         val (coordinator, _, pipeline) = fixture()
         val submitted = coordinator.submit(baseInput)

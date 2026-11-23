@@ -57,7 +57,7 @@ class RecordFlowTest {
             activity.recreate()
             ui.onNodeWithText("确认保存").performClick()
             waitForText("原始记录")
-            waitForText("等待整理算法就绪。")
+            waitForText("本次处理已完成。")
             activity.recreate()
             waitForText("原始记录")
             ui.onNodeWithText("保存分享内容").assertDoesNotExist()
