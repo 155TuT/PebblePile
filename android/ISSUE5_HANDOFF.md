@@ -8,6 +8,7 @@
 | 分享后保存并返回 recordId | `CoreApi.recordExperience`；分享确认弹窗 |
 | 详情按 recordId 加载 | `RecordDetailScreen(recordId)` 调用 `CoreApi.getRecordDetail` |
 | 原话、标签、建议依据 | `RecordDetailScreen`；证据按 `SourceRef`、版本和码点区间回查 |
+| 候选顺序、排序依据与反馈关联 | `DinnerDecisionCard` 展示候选、条件与每条依据；保存反馈时把 `decisionId` 传给 `CoreApi.recordOutcome`；详情标出“当时建议”，并可按编号回查历史候选 |
 | 补记实际选择和体验 | `CoreApi.recordOutcome`；实际反馈区域 |
 | 标签确认／修改／排除／待核对 | 点 `PebbleTag` 打开依据面板，核对来源版本后调用 `CoreApi.reviseTag` |
 | 事项信息与状态 | `CoreApi.updateRecordGoal`；详情“当前事项”区域 |
@@ -27,7 +28,16 @@
 - [ ] #8 接入处理进度，#9 提供饮食建议和证据。详情按 `sourceId`、`sourceVersion` 和原话区间回查依据。
 - [ ] 与 Issue #10 按两次加班经历、一次周末例外和一次纠正的样例完成回归。
 - [ ] 在真机验证系统分享、退出重开、360dp 小屏、触点和进程恢复。
+- [ ] 在真机按 A08 复验：从候选回填反馈，重开后仍显示“当时建议／实际选择”；纠正条件后旧建议收起，仍可按编号回查。
 
 ## 反馈与纠正
 
-当前页面使用 Issue #3 共享组件，可保存反馈、编辑事项、管理任务，分别修改本条记录和长期条件。建议区域仍由本地演示规则生成。接入 #8、#9 后，按 `decisionId` 把反馈交回当时的建议，再用纠正后的周四和周六各问一次，对照条件、候选和依据。[晚餐验收材料](../docs/issue10-testing.md)
+详情按 `DinnerDecision` 展示本次候选、适用条件、排序依据和每条原话。用户点候选可把菜名带进“实际选择”，也可以点“其他”自行填写；保存时把当前建议编号一并提交，回执和反馈都保留这个编号。已保存的反馈会标出“当时建议”，用户修改条件后旧建议从详情收起，仍可从反馈按编号回查当时的候选、条件、算法版本和原话。[晚餐验收材料](../docs/issue10-testing.md)
+
+## 2026-11-23 建议与反馈关联
+
+- `RecordDetailScreen` 读取 `PebbleRecord.currentDinnerDecision`，按发布顺序展示候选；首选单独标记，其余标为候选 2、3……
+- 反馈区新增候选选项和“其他”。未点“其他”时，`CoreApi.recordOutcome` 会收到当前 `decisionId`；点“其他”则按独立体验保存。
+- 每条已保存反馈用 `decisionForOutcome` 找回原建议，同屏显示“当时建议”和实际选择；被纠正或脱敏的建议仍保留编号。
+- “查看当时的候选与依据”调用 `CoreApi.getDinnerDecision(recordId, decisionId)`，展示历史候选、条件、算法版本和依据原话。
+- 对应验收项：G12、O01、A08。JVM 侧新增 `DinnerDecisionReviewTest`，设备侧在 `DetailIntegrityTest` 增加反馈携带 `decisionId` 的用例；真机结果仍待补。
