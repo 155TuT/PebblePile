@@ -55,7 +55,13 @@ class DinnerDetailIntegrationTest {
         }
     }
 
-    @Test fun publishedDinnerKeepsItsEvidenceAndFeedbackAcrossCorrectionAndReopen() {
+    @Test fun publishedDinnerKeepsItsEvidenceAndFeedbackAcrossCorrectionAndReopen() =
+        runDinnerScenario(feedbackAfterCorrection = false)
+
+    @Test fun correctedDinnerAcceptsFirstOutcomeOnOriginalDecision() =
+        runDinnerScenario(feedbackAfterCorrection = true)
+
+    private fun runDinnerScenario(feedbackAfterCorrection: Boolean) {
         val monday = "今天周一加班到八点半，晚饭预算二十元。我吃了十八元的热汤面，十分钟就吃上了，不用洗锅。"
         val wednesday = "今天周三又加班了，晚饭还是想控制在二十元以内。我吃了十六元的盖饭，不用准备食材，也不用洗锅，省事让我很满意。"
         val query = "今天周四加班，预算二十元，晚饭吃什么？请说明依据，并指出来自哪两次经历的原话。"
@@ -114,16 +120,20 @@ class DinnerDetailIntegrationTest {
 
                 ui.onNodeWithText("收起盖饭的依据").performScrollTo().activate()
                 ui.onNodeWithText(expand, substring = true).assertExists()
-                val soup = decision.suggestions.indexOfFirst { it.title == "热汤面" }
-                assertTrue(soup >= 0)
-                ui.onNodeWithTag("decision_choice_$soup").performScrollTo().activate()
-                ui.onAllNodes(hasSetTextAction())[1].performScrollTo().performTextReplacement("省时也省事")
-                Espresso.closeSoftKeyboard()
-                ui.onNodeWithText("保存实际反馈").performScrollTo().activate()
-                waitFor("当时建议：盖饭")
-                val feedback = requireNotNull(api.getRecordDetail(id)).record.outcomes.single()
-                assertEquals("热汤面", feedback.choice)
-                assertEquals(decision.id, feedback.decisionId)
+                fun submitOutcome() {
+                    val soup = decision.suggestions.indexOfFirst { it.title == "热汤面" }
+                    assertTrue(soup >= 0)
+                    ui.onNodeWithTag("decision_choice_$soup").performScrollTo().activate()
+                    ui.onAllNodes(hasSetTextAction())[1].performScrollTo().performTextReplacement("省时也省事")
+                    Espresso.closeSoftKeyboard()
+                    ui.onNodeWithText("保存实际反馈").performScrollTo().activate()
+                    waitFor("当时建议：盖饭")
+                    val feedback = requireNotNull(api.getRecordDetail(id)).record.outcomes.single()
+                    assertEquals("热汤面", feedback.choice)
+                    assertEquals("省时也省事", feedback.experience)
+                    assertEquals(decision.id, feedback.decisionId)
+                }
+                if (!feedbackAfterCorrection) submitOutcome()
 
                 ui.onNodeWithText("修改条件").performScrollTo().activate()
                 ui.onNode(hasSetTextAction() and hasAnyAncestor(isDialog())).performTextReplacement(correction)
@@ -133,6 +143,12 @@ class DinnerDetailIntegrationTest {
                 waitFor("适用范围：以后按此条件")
                 ui.onNodeWithTag("dinner_decision_id").assertDoesNotExist()
                 assertEquals(correction, api.getRecordDetail(id)?.futureCondition?.text)
+                if (feedbackAfterCorrection) {
+                    ui.onNodeWithText("选择此前的建议").performScrollTo().activate()
+                    ui.onNodeWithTag("feedback_history_${decision.id}").performScrollTo().activate()
+                    waitFor("当时的建议")
+                    submitOutcome()
+                }
                 id to decision.id
             }
 
