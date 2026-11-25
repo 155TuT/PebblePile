@@ -166,3 +166,19 @@ data class CoreTask(
 }
 
 data class ConditionSetting(val text: String, val recordId: String, val revision: Long)
+
+/** The suggestion a record's feedback belongs to, including decisions hidden after a correction. */
+fun PebbleRecord.decisionForOutcome(outcome: OutcomeItem): DinnerDecision? =
+    outcome.decisionId?.let { id -> dinnerDecisions.orEmpty().firstOrNull { it.id == id } }
+
+/** The first candidate is the published recommendation; the rest keep their ranked order. */
+fun DinnerDecision.primarySuggestion(): SuggestionItem? = suggestions.firstOrNull()
+
+/** A short, human-readable rendering of the conditions used for one decision. */
+fun QueryConstraint.displaySummary(): String = buildList {
+    weekday.takeIf { it.isNotBlank() }?.let(::add)
+    if (overtime) add("加班")
+    if (weekend) add("周末")
+    budgetCny?.let { add("预算 $it 元") }
+    cookMinutes?.let { add("可花 $it 分钟") }
+}.joinToString(" · ")

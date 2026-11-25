@@ -34,9 +34,11 @@ import androidx.compose.ui.unit.dp
 import com.pebblepile.android.model.ApiReceipt
 import com.pebblepile.android.model.CapturedSource
 import com.pebblepile.android.model.ConditionSetting
-import com.pebblepile.android.model.CorrectionScope
-import com.pebblepile.android.model.EvidenceItem
 import com.pebblepile.android.model.CoreTask
+import com.pebblepile.android.model.CorrectionScope
+import com.pebblepile.android.model.DinnerDecision
+import com.pebblepile.android.model.DinnerRankingBasis
+import com.pebblepile.android.model.EvidenceItem
 import com.pebblepile.android.model.ItemStatus
 import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.RecordTag
@@ -44,6 +46,9 @@ import com.pebblepile.android.model.TagAction
 import com.pebblepile.android.model.TagReviewState
 import com.pebblepile.android.model.TaskAction
 import com.pebblepile.android.model.TaskState
+import com.pebblepile.android.model.decisionForOutcome
+import com.pebblepile.android.model.displaySummary
+import com.pebblepile.android.model.primarySuggestion
 import com.pebblepile.android.service.CoreApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -111,6 +116,8 @@ internal fun RecordDetailScreen(
     var busyTagKey by remember(recordId) { mutableStateOf<String?>(null) }
     var busyTaskId by remember(recordId) { mutableStateOf<String?>(null) }
     var feedbackOperation by rememberSaveable(recordId) { mutableStateOf<String?>(null) }
+    var feedbackUnlinked by rememberSaveable(recordId) { mutableStateOf(false) }
+    var historicalDecisionId by rememberSaveable(recordId) { mutableStateOf<String?>(null) }
     var correctionOperation by rememberSaveable(recordId) { mutableStateOf<String?>(null) }
     var goalOperation by rememberSaveable(recordId) { mutableStateOf<String?>(null) }
     val tagOperations = remember(recordId) { mutableMapOf<String, String>() }
@@ -128,7 +135,10 @@ internal fun RecordDetailScreen(
         val loaded = withContext(Dispatchers.IO) {
             val detail = api.getRecordDetail(recordId)
             val loadedTasks = detail?.jobIds.orEmpty().mapNotNull(api::getTask)
-            val evidence = detail?.record?.suggestions.orEmpty().flatMap { it.evidence }
+            val evidence = (
+                detail?.record?.suggestions.orEmpty() +
+                    detail?.record?.dinnerDecisions.orEmpty().flatMap { it.suggestions }
+                ).flatMap { it.evidence }.distinctBy { it.id }
             val availability = evidence.associate { item ->
                 item.id to api.resolveEvidence(item).reason
             }
@@ -219,14 +229,20 @@ internal fun RecordDetailScreen(
         if (feedbackSaving) return
         feedbackSaving = true
         val operationId = feedbackOperation ?: UUID.randomUUID().toString().also { feedbackOperation = it }
+        val decisionId = if (inferenceAssistEnabled && !feedbackUnlinked) {
+            item.currentDinnerDecision?.id
+        } else {
+            null
+        }
         scope.launch {
             val receipt = withContext(Dispatchers.IO) {
-                api.recordOutcome(item.id, item.revision, choice, experience, operationId)
+                api.recordOutcome(item.id, item.revision, choice, experience, operationId, decisionId)
             }
             feedbackSaving = false
             when {
                 receipt.success -> {
                     feedbackOperation = null
+                    feedbackUnlinked = false
                     choice = ""
                     experience = ""
                     notice = DetailNotice(receipt.message, PebbleFeedbackState.SAVED)
@@ -334,13 +350,30 @@ internal fun RecordDetailScreen(
 
         Spacer(Modifier.height(20.dp))
         SectionTitle("建议与来源")
+        val currentDecision = item.currentDinnerDecision.takeIf { inferenceAssistEnabled }
         if (!inferenceAssistEnabled) {
             PebbleFeedback(
                 PebbleFeedbackState.PAUSED,
                 detail = "推断辅助已在设置中关闭。已有建议仍保留在资料库中，但当前详情不展示推断内容。",
             )
+        } else if (currentDecision != null) {
+            DinnerDecisionCard(
+                decision = currentDecision,
+                evidenceAvailability = evidenceAvailability,
+                onOpenEvidence = { evidenceId = it },
+                onCorrect = ::openCorrection,
+            )
         } else if (item.suggestions.isEmpty()) {
-            PebbleCard { PebbleText("暂时没有建议", color = PebbleVisuals.Muted) }
+            PebbleCard {
+                PebbleText("暂时没有建议", color = PebbleVisuals.Muted)
+                if (item.outcomes.any { it.decisionId != null }) {
+                    PebbleText(
+                        "条件修改后旧建议已收起；下面的实际反馈仍按原建议编号保留，可随时回查。",
+                        color = PebbleVisuals.Muted,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
         } else {
             item.suggestions.forEach { suggestion ->
                 PebbleEvidenceCard(
@@ -369,10 +402,74 @@ internal fun RecordDetailScreen(
                 PebbleText("还没有补记实际选择与体验。", color = PebbleVisuals.Muted)
             }
             item.outcomes.forEach { outcome ->
-                PebbleText("用户选择", color = PebbleVisuals.Moss, style = MaterialTheme.typography.labelLarge)
-                PebbleQuote(outcome.choice.ifBlank { "未记录选择" })
-                PebbleText("实际体验／结果", color = PebbleVisuals.Moss, style = MaterialTheme.typography.labelLarge)
-                PebbleQuote(outcome.experience.ifBlank { "未记录体验" }, source = outcome.createdAt)
+                val linkedDecision = item.decisionForOutcome(outcome)
+                val suggestedTitle = linkedDecision?.primarySuggestion()?.title
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PebbleText("用户选择", color = PebbleVisuals.Moss, style = MaterialTheme.typography.labelLarge)
+                    PebbleQuote(outcome.choice.ifBlank { "未记录选择" })
+                    PebbleText("实际体验／结果", color = PebbleVisuals.Moss, style = MaterialTheme.typography.labelLarge)
+                    PebbleQuote(outcome.experience.ifBlank { "未记录体验" }, source = outcome.createdAt)
+                    outcome.decisionId?.let { decisionId ->
+                        PebbleText(
+                            suggestedTitle?.let { "当时建议：$it" }
+                                ?: "当时的建议已收起，反馈仍按原编号保留",
+                            color = PebbleVisuals.Moss,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.testTag("outcome_decision_${outcome.id}"),
+                        )
+                        PebbleLink("查看当时的候选与依据", { historicalDecisionId = decisionId })
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+            currentDecision?.let { decision ->
+                PebbleText("这次建议", color = PebbleVisuals.Moss, style = MaterialTheme.typography.labelLarge)
+                PebbleText(
+                    "首选：${decision.primarySuggestion()?.title ?: "本次建议"}",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                if (decision.suggestions.size > 1) {
+                    PebbleText(
+                        "可以改用其他候选，或点“其他”自己填写。",
+                        color = PebbleVisuals.Muted,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                PebbleTagGroup {
+                    decision.suggestions.forEachIndexed { index, suggestion ->
+                        PebbleTag(
+                            label = suggestion.title,
+                            selected = !feedbackUnlinked && choice == suggestion.title,
+                            onSelectedChange = { selected ->
+                                if (selected) {
+                                    choice = suggestion.title
+                                    feedbackUnlinked = false
+                                    feedbackOperation = null
+                                }
+                            },
+                            modifier = Modifier.testTag("decision_choice_$index"),
+                        )
+                    }
+                    PebbleTag(
+                        label = "其他",
+                        selected = feedbackUnlinked,
+                        onSelectedChange = { selected ->
+                            if (selected) {
+                                feedbackUnlinked = true
+                                if (decision.suggestions.any { it.title == choice }) choice = ""
+                                feedbackOperation = null
+                            }
+                        },
+                        modifier = Modifier.testTag("decision_choice_other"),
+                    )
+                }
+                if (!feedbackUnlinked) {
+                    PebbleText(
+                        "保存反馈时会带上本次建议编号，之后仍能回查当时的候选与依据。",
+                        color = PebbleVisuals.Muted,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
             PebbleInput(
                 value = choice,
@@ -448,7 +545,9 @@ internal fun RecordDetailScreen(
         Spacer(Modifier.height(28.dp))
     }
 
-    val evidence = item.suggestions.flatMap { it.evidence }.firstOrNull { it.id == evidenceId }
+    val allEvidence = (item.suggestions + item.dinnerDecisions.orEmpty().flatMap { it.suggestions })
+        .flatMap { it.evidence }.distinctBy { it.id }
+    val evidence = allEvidence.firstOrNull { it.id == evidenceId }
     if (evidence != null) {
         var resolved by remember(evidence) { mutableStateOf<EvidenceAvailability?>(null) }
         LaunchedEffect(api, evidence) {
@@ -483,6 +582,61 @@ internal fun RecordDetailScreen(
                         highlightedSource(source.text, range),
                         source = "${source.capturedAt} · ${source.captureMethod}",
                     )
+                }
+            }
+        }
+    }
+
+    historicalDecisionId?.let { decisionId ->
+        var historical by remember(recordId, decisionId) { mutableStateOf<DinnerDecision?>(null) }
+        var historicalLoading by remember(recordId, decisionId) { mutableStateOf(true) }
+        LaunchedEffect(api, recordId, decisionId) {
+            historical = withContext(Dispatchers.IO) { api.getDinnerDecision(recordId, decisionId) }
+            historicalLoading = false
+        }
+        PebbleDialog(
+            title = "当时的建议",
+            onDismiss = { historicalDecisionId = null },
+            confirmLabel = "关闭",
+            cancelLabel = null,
+            confirmEnabled = true,
+            onConfirm = { historicalDecisionId = null },
+        ) {
+            if (historicalLoading) {
+                PebbleText("正在读取当时的候选与依据。", color = PebbleVisuals.Muted)
+            } else {
+                val decision = historical
+                if (decision == null) {
+                    PebbleFeedback(
+                        PebbleFeedbackState.PROCESSING_FAILED,
+                        detail = "这条建议已不可用，反馈仍保留在原事项。",
+                    )
+                } else {
+                    PebbleText("建议编号 $decisionId", color = PebbleVisuals.Muted, style = MaterialTheme.typography.bodySmall)
+                    decision.constraint?.let {
+                        PebbleText("当时条件：${it.displaySummary()}", color = PebbleVisuals.Muted, style = MaterialTheme.typography.bodyMedium)
+                    }
+                    decision.suggestions.forEachIndexed { index, suggestion ->
+                        PebbleText(
+                            "${if (index == 0) "首选" else "候选 ${index + 1}"} · ${suggestion.title}",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        PebbleText(suggestion.reason, color = PebbleVisuals.Muted, style = MaterialTheme.typography.bodyMedium)
+                        suggestion.evidence.forEach { item ->
+                            PebbleQuote(
+                                "“${item.quote}”",
+                                source = "${item.title} · ${item.recordDate} · ${item.sourceRef.sourceId} v${item.sourceRef.sourceVersion}",
+                            )
+                        }
+                    }
+                    decision.rankingBasis?.let { DecisionRankingBasis(it) }
+                    decision.manifest?.let {
+                        PebbleText(
+                            "算法 ${it.algorithmVersion} · 场景包 ${it.scenePackVersion}",
+                            color = PebbleVisuals.Muted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                 }
             }
         }
@@ -737,6 +891,95 @@ private fun TaskProgressCard(task: CoreTask, busy: Boolean, onAction: (TaskActio
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DinnerDecisionCard(
+    decision: DinnerDecision,
+    evidenceAvailability: Map<String, String?>,
+    onOpenEvidence: (String) -> Unit,
+    onCorrect: () -> Unit,
+) {
+    PebbleCard {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            PebbleText("本次建议", color = PebbleVisuals.Moss, style = MaterialTheme.typography.labelLarge)
+            PebbleText(
+                "${decision.suggestions.size} 个候选",
+                color = PebbleVisuals.Muted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        decision.constraint?.let {
+            PebbleText(
+                "本次条件：${it.displaySummary()}",
+                color = PebbleVisuals.Muted,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        decision.suggestions.forEachIndexed { index, suggestion ->
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PebbleText(
+                    "${if (index == 0) "首选" else "候选 ${index + 1}"} · ${suggestion.title}",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                PebbleText(suggestion.reason, color = PebbleVisuals.Muted, style = MaterialTheme.typography.bodyMedium)
+                suggestion.evidence.forEach { evidence ->
+                    val reason = evidenceAvailability[evidence.id]
+                    PebbleEvidenceSource(
+                        quote = if (reason == null) "“${evidence.quote}”" else "引文已失效",
+                        sourceLabel = "${evidence.title} · ${evidence.recordDate} · ${evidence.sourceRef.sourceId} v${evidence.sourceRef.sourceVersion} · [${evidence.start},${evidence.end})",
+                        onOpenSource = { onOpenEvidence(evidence.id) },
+                        sourceAvailable = reason == null,
+                        unavailableReason = reason ?: "来源暂不可用",
+                    )
+                }
+            }
+        }
+        decision.rankingBasis?.let { DecisionRankingBasis(it) }
+        decision.manifest?.let {
+            PebbleText(
+                "算法 ${it.algorithmVersion} · 场景包 ${it.scenePackVersion}",
+                color = PebbleVisuals.Muted,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        PebbleText(
+            "建议编号 ${decision.id}",
+            color = PebbleVisuals.Muted,
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.testTag("dinner_decision_id"),
+        )
+        PebbleButton("纠正条件", onCorrect)
+    }
+}
+
+@Composable
+private fun DecisionRankingBasis(basis: DinnerRankingBasis) {
+    PebbleText("排序依据", color = PebbleVisuals.Moss, style = MaterialTheme.typography.labelLarge)
+    if (basis.appliedPreferences.isNotEmpty()) {
+        PebbleText(
+            "采用的条件：${basis.appliedPreferences.joinToString("；")}",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+    if (basis.unmatchedPreferences.isNotEmpty()) {
+        PebbleText(
+            "未命中的条件：${basis.unmatchedPreferences.joinToString("；")}",
+            color = PebbleVisuals.Muted,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+    if (basis.filteredOut.isNotEmpty()) {
+        PebbleText(
+            "已筛掉的候选：${basis.filteredOut.joinToString("、")}",
+            color = PebbleVisuals.Muted,
+            style = MaterialTheme.typography.bodyMedium,
+        )
     }
 }
 

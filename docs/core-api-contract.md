@@ -174,4 +174,4 @@ Android 的 [DemoCoreApi](../android/app/src/main/java/com/pebblepile/android/De
 
 在 `android/` 运行 `.\gradlew.bat connectedDebugAndroidTest`，可回放晚餐保存、改标题、重发、冲突和任务控制，核对重开后的原回执，也可复验跨记录修订和写入失败回滚。
 
-#7 接仓储接口，在 SQLite 上重跑事务用例。#8、#9 接候选发布和证据校验，保存每次建议的 `decisionId`；#6 随建议接入把反馈关联到当时的决策。#10 据此验证同一事项收到多次建议、反馈仍属于原建议，以及纠正后迟到的候选如何处理。
+#7 接仓储接口，在 SQLite 上重跑事务用例。#8、#9 接候选发布和证据校验，保存每次建议的 `decisionId`；#6 已让详情在回填反馈时携带当时的决定编号。`#10` 据此验证同一事项收到多次建议、反馈仍属于原建议，以及纠正后迟到的候选如何处理。

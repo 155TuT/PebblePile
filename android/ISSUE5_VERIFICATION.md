@@ -115,3 +115,29 @@ adb shell am start -n com.pebblepile.android/.MainActivity
 ## 后续复验
 
 分享和详情已接入 #6 的业务接口与 #3 的共享组件。#7 交付 SQLite 后，从首页和系统分享各保存一条原话，重开后按各自的 `recordId` 回查。#8、#9 接通真实任务和建议后，再核对原话依据、反馈归属和长期纠正后的推荐结果。[详情交接清单](ISSUE5_HANDOFF.md)
+
+## 2026-11-23 建议与反馈关联
+
+本轮补齐详情页的候选展示、反馈关联和历史建议回查。
+
+已执行（2026-11-24，JDK 21 + Gradle 8.9 + AGP 8.7.3）：
+
+| 命令 | 结果 |
+| --- | --- |
+| `:app:compileDebugKotlin` | BUILD SUCCESSFUL |
+| `:app:testDebugUnitTest --tests "com.pebblepile.android.model.DinnerDecisionReviewTest"` | 5 项通过，0 失败（0.045s），报告见 `app/build/reports/tests/testDebugUnitTest/index.html` |
+
+待执行：`:app:lintDebug`、`:app:assembleDebug`、`:app:connectedDebugAndroidTest`（本机未接设备），以及真机 A08。执行以下命令，并在真机按 A08 记录结果：
+
+```powershell
+.\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+.\gradlew.bat :app:connectedDebugAndroidTest
+```
+
+| 检查项 | 预期 |
+| --- | --- |
+| 候选展示 | 详情出现“本次建议”，首选与后续候选按发布顺序排列，每条依据可打开来源原话。 |
+| 反馈关联 | 点候选后“实际选择”带入菜名；保存后详情显示“当时建议”和实际选择，建议编号一致。 |
+| 其他选择 | 点“其他”后自行填写，反馈不绑定当前建议编号。 |
+| 纠正后回查 | 修改条件后旧建议从“建议与来源”收起；已保存反馈仍显示“当时建议”，点“查看当时的候选与依据”能打开历史候选、条件和原话。 |
+| 进程恢复 | 结束进程重开，反馈、建议编号和历史建议仍可回查。 |
