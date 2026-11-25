@@ -3,6 +3,7 @@ package com.pebblepile.android.service
 import com.pebblepile.android.db.DemoLibrary
 import com.pebblepile.android.db.SnapshotCoreRepository
 import com.pebblepile.android.model.PebbleRecord
+import com.pebblepile.android.model.SuggestionItem
 import com.pebblepile.android.repository.OperationKey
 import com.pebblepile.android.repository.RepositoryWriteException
 import java.util.concurrent.atomic.AtomicInteger
@@ -21,6 +22,18 @@ import org.junit.Test
 class LocalCoreApiContractTest : CoreApiContractSuite() {
 
     override fun createRepository() = SnapshotCoreRepository()
+
+    @Test fun upgradedDetailHidesTheDemoSuggestionAndPreservesOtherHistoricalSuggestions() {
+        val repository = SnapshotCoreRepository()
+        val api = LocalCoreApi(repository)
+        val record = PebbleRecord("old", "加班晚饭", "2026-11-16 20:30", "android_share")
+        val demo = SuggestionItem("old:suggestion", "优先选择准备简单的晚餐",
+            "示例依据：记录中提到了时间紧张或希望省事。正式建议由团队任务模块提供。", emptyList())
+        val historical = demo.copy(id = "archived", reason = "上次加班的记录")
+        repository.write { it.putRecord(record.copy(suggestions = listOf(demo, historical))) }
+        assertEquals(listOf(historical), api.getRecordDetail(record.id)?.record?.suggestions)
+        assertEquals(listOf(historical), api.queryRecords().records.single().suggestions)
+    }
 
     @Test
     fun snapshotRepositoryRollsBackWhenWriteThrows() {

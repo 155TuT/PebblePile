@@ -11,8 +11,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pebblepile.android.model.ApiReceipt
 import com.pebblepile.android.model.CorrectionScope
 import com.pebblepile.android.model.DinnerDecision
-import com.pebblepile.android.model.EvidenceItem
 import com.pebblepile.android.model.OutcomeItem
+import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.SourceRef
 import com.pebblepile.android.model.SuggestionItem
 import com.pebblepile.android.service.CoreApi
@@ -65,79 +65,99 @@ class DetailIntegrityTest {
         }
     }
 
-    @Test fun feedbackKeepsTheDecisionIdOfTheVisibleSuggestion() {
-        val api = app.coreApi
-        val raw = "周四加班，预算二十元 ${UUID.randomUUID()}"
-        val recordId = requireNotNull(runBlocking {
-            api.recordExperience(raw, "app", UUID.randomUUID().toString())
-        }.recordId)
-        val decisionId = "diet-test-$recordId"
-        val suggestion = SuggestionItem(
-            "$decisionId:gaifan",
-            "盖饭",
-            "工作日加班时优先省事，预算二十元内。",
-            listOf(
-                EvidenceItem(
-                    "$decisionId:evidence",
-                    "饮食经历",
-                    "周四",
-                    "2026-11-19",
-                    recordId,
-                    SourceRef(recordId, 1),
-                    0,
-                    2,
-                )
-            ),
-        )
-        val decision = DinnerDecision(
-            decisionId, "job-test", 1, 0, "snapshot-test", null, null, listOf(suggestion),
-        )
-        var capturedDecisionId: String? = null
-        var capturedChoice: String? = null
-        val controlled = object : CoreApi by api {
-            override fun getRecordDetail(recordId: String, sourceRef: SourceRef?): RecordDetail? {
-                val detail = api.getRecordDetail(recordId, sourceRef) ?: return null
-                if (sourceRef != null) return detail
-                val created = capturedDecisionId?.let {
-                    OutcomeItem("outcome-test", capturedChoice.orEmpty(), "最后吃了热汤面", "2026-11-23T20:00", it)
-                }
-                return detail.copy(
-                    record = detail.record.copy(
-                        suggestions = listOf(suggestion),
-                        dinnerDecisions = listOf(decision),
-                        outcomes = detail.record.outcomes + listOfNotNull(created),
-                    ),
-                )
-            }
+    private class FeedbackApi(delegate: CoreApi) : CoreApi by delegate {
+        val first = decision("diet-first", "盖饭")
+        val second = decision("diet-second", "轻食便当")
+        @Volatile var record = PebbleRecord("test-record", "晚饭吃什么？", "2026-11-23T20:00", "app",
+            dinnerDecisions = listOf(first), suggestions = first.suggestions)
+        val submittedOperations = java.util.concurrent.CopyOnWriteArrayList<String>()
 
-            override suspend fun recordOutcome(
-                recordId: String, baseRevision: Long, choice: String, experience: String,
-                operationId: String, decisionId: String?,
-            ): ApiReceipt {
-                capturedDecisionId = decisionId
-                capturedChoice = choice
-                return ApiReceipt(
-                    success = true,
-                    message = "实际反馈已保存",
-                    outcomeId = "outcome-test",
-                    decisionId = decisionId,
-                )
-            }
+        private fun decision(id: String, dish: String): DinnerDecision =
+            DinnerDecision(id, "job-$id", 1, 0, "snapshot-$id", null, null,
+                listOf(SuggestionItem("$id-item", dish, "预算二十元内。", emptyList())))
+
+        override fun getRecordDetail(recordId: String, sourceRef: SourceRef?): RecordDetail? {
+            if (recordId != record.id || sourceRef != null) return null
+            val current = record
+            return RecordDetail(current, emptyList(), emptyList(), current.revision, null)
         }
+
+        override suspend fun recordOutcome(
+            recordId: String, baseRevision: Long, choice: String, experience: String,
+            operationId: String, decisionId: String?,
+        ): ApiReceipt {
+            submittedOperations.add(operationId)
+            val current = record
+            if (baseRevision != current.revision) return ApiReceipt(false, conflict = true,
+                currentRecord = current, currentRevision = current.revision)
+            val result = OutcomeItem("outcome-" + current.revision, choice, experience, "2026-11-23T21:00", decisionId)
+            record = current.copy(outcomes = current.outcomes + result, revision = current.revision + 1)
+            return ApiReceipt(true, message = "实际反馈已保存", outcomeId = result.id, decisionId = decisionId)
+        }
+    }
+
+    private fun withFeedbackScreen(api: FeedbackApi, block: () -> Unit) {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            scenario.onActivity {
-                it.setContent {
-                    PebbleComponentTheme { RecordDetailScreen(controlled, recordId, true, {}, { _, _ -> }) }
+            scenario.onActivity { activity ->
+                activity.setContent {
+                    PebbleComponentTheme { RecordDetailScreen(api, api.record.id, true, {}, { _, _ -> }) }
                 }
             }
-            waitForText("本次建议")
+            waitForText("实际选择与结果")
+            block()
+        }
+    }
+
+    @Test fun feedbackKeepsTheDecisionIdOfTheVisibleSuggestion() {
+        val api = FeedbackApi(app.coreApi)
+        withFeedbackScreen(api) {
             ui.onNodeWithTag("decision_choice_0").performScrollTo().performClick()
-            ui.onAllNodes(hasSetTextAction())[1].performScrollTo().performTextReplacement("最后吃了热汤面")
+            ui.onNodeWithContentDescription("实际体验／结果").performScrollTo().performTextReplacement("取餐快")
             ui.onNodeWithText("保存实际反馈").performScrollTo().performClick()
-            ui.waitUntil(10_000) { capturedDecisionId != null }
-            assertEquals(decisionId, capturedDecisionId)
-            assertEquals("盖饭", capturedChoice)
             waitForText("当时建议：盖饭")
+            assertEquals("盖饭", api.record.outcomes.single().choice)
+            assertEquals(api.first.id, api.record.outcomes.single().decisionId)
+        }
+    }
+
+    @Test fun otherDishStaysWithTheOriginalDecisionThroughRevisionConflict() {
+        val api = FeedbackApi(app.coreApi)
+        withFeedbackScreen(api) {
+            ui.onNodeWithTag("decision_choice_other").performScrollTo().performClick()
+            ui.onNodeWithContentDescription("实际选择").performScrollTo().performTextReplacement("热汤面")
+            api.record = api.record.copy(revision = 2, dinnerDecisions = listOf(api.first, api.second),
+                suggestions = api.second.suggestions)
+            ui.onNodeWithText("保存实际反馈").performScrollTo().performClick()
+            waitForText("查看最新版本")
+            ui.onNodeWithText("查看最新版本").performClick()
+            waitForText("当时的建议")
+            ui.onNodeWithContentDescription("实际选择").assertTextContains("热汤面")
+            ui.onNodeWithText("保存实际反馈").performScrollTo().performClick()
+            waitForText("当时建议：盖饭")
+            assertEquals("热汤面", api.record.outcomes.single().choice)
+            assertEquals(api.first.id, api.record.outcomes.single().decisionId)
+            assertEquals(2, api.submittedOperations.distinct().size)
+        }
+    }
+
+    @Test fun correctedDecisionCanReceiveItsFirstFeedbackAndIndependentFeedbackStaysSeparate() {
+        val api = FeedbackApi(app.coreApi)
+        api.record = api.record.copy(supersededDinnerDecisionId = api.first.id, suggestions = emptyList())
+        withFeedbackScreen(api) {
+            ui.onNodeWithText("选择此前的建议").performScrollTo().performClick()
+            ui.onNodeWithTag("feedback_history_${api.first.id}").performScrollTo().performClick()
+            ui.onNodeWithContentDescription("实际选择").performScrollTo().performTextReplacement("热汤面")
+            ui.onNodeWithText("保存实际反馈").performScrollTo().performClick()
+            waitForText("当时建议：盖饭")
+            assertEquals(api.first.id, api.record.outcomes.single().decisionId)
+            ui.onNodeWithText("选择此前的建议").performScrollTo().performClick()
+            ui.onNodeWithTag("feedback_history_${api.first.id}").performScrollTo().performClick()
+            ui.onNodeWithText("改为独立体验").performScrollTo().performClick()
+            ui.onNodeWithContentDescription("实际选择").performScrollTo().performTextReplacement("吐司")
+            ui.onNodeWithText("保存实际反馈").performScrollTo().performClick()
+            ui.waitUntil(10_000) { api.record.outcomes.size == 2 }
+            assertEquals(null, api.record.outcomes.last().decisionId)
+            assertEquals("吐司", api.record.outcomes.last().choice)
         }
     }
 
@@ -149,7 +169,11 @@ class DetailIntegrityTest {
         val available = AtomicBoolean(true)
         val controlled = object : CoreApi by api {
             override fun getRecordDetail(recordId: String, sourceRef: SourceRef?) =
-                if (sourceRef != null && !available.get()) null else api.getRecordDetail(recordId, sourceRef)
+                if (sourceRef != null && !available.get()) null else api.getRecordDetail(recordId, sourceRef)?.let { detail ->
+                    if (sourceRef == null) detail.copy(record = detail.record.copy(
+                        suggestions = listOf(detail.sources.first().legacySuggestionFixture()),
+                    )) else detail
+                }
         }
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { it.setContent {

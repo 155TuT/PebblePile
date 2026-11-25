@@ -73,26 +73,7 @@ cd android
 adb install -r app\build\outputs\apk\debug\app-debug.apk
 ```
 
-从空库开始：
-
-```powershell
-adb shell pm clear com.pebblepile.android
-adb shell am start -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT "今天加班，晚饭想省事一点，预算二十元。" -n com.pebblepile.android/.MainActivity
-```
-
-预期结果：
-
-1. 出现“保存分享内容”确认弹窗，正文显示发送的原文。
-2. 点击“确认保存”后进入详情页。
-3. 详情显示原文、两个演示标签、建议及本条证据。
-
-检查项目测试数据：
-
-```powershell
-adb shell run-as com.pebblepile.android cat shared_prefs/pebblepile_issue4_demo.xml
-```
-
-预期 `records` JSON 中包含原始文本、稳定 `id`、`captureMethod=android_share` 和 `revision`。
+在测试设备上，从 Android 分享菜单保存 #10 的第二条加班经历。分享确认后会进入同一条记录的详情。回到首页补齐第一条加班经历，再按 Q01 提问“今天周四加班，预算二十元，晚饭吃什么？请说明依据。”详情会随整理完成显示首选及候选，点击依据可核对两条原话的来源版本和码点区间。[完整样例](../docs/issue10-testing.md#21-记录提问纠正与反馈)
 
 结束并重开：
 
@@ -114,7 +95,7 @@ adb shell am start -n com.pebblepile.android/.MainActivity
 
 ## 后续复验
 
-分享和详情已接入 #6 的业务接口与 #3 的共享组件。#7 交付 SQLite 后，从首页和系统分享各保存一条原话，重开后按各自的 `recordId` 回查。#8、#9 接通真实任务和建议后，再核对原话依据、反馈归属和长期纠正后的推荐结果。[详情交接清单](ISSUE5_HANDOFF.md)
+首页与系统分享已接入 SQLite，详情读取 Worker 发布的候选和依据。林叶鑫接签名候选包后，在真机核对晚餐流程、字号、键盘与读屏。[详情交接清单](ISSUE5_HANDOFF.md)
 
 ## 2026-11-23 建议与反馈关联
 
@@ -127,7 +108,7 @@ adb shell am start -n com.pebblepile.android/.MainActivity
 | `:app:compileDebugKotlin` | BUILD SUCCESSFUL |
 | `:app:testDebugUnitTest --tests "com.pebblepile.android.model.DinnerDecisionReviewTest"` | 5 项通过，0 失败（0.045s），报告见 `app/build/reports/tests/testDebugUnitTest/index.html` |
 
-待执行：`:app:lintDebug`、`:app:assembleDebug`、`:app:connectedDebugAndroidTest`（本机未接设备），以及真机 A08。执行以下命令，并在真机按 A08 记录结果：
+在 `android/` 可用以下命令复跑应用检查，设备套件使用已连接的 Android 模拟器或手机。
 
 ```powershell
 .\gradlew.bat :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
@@ -138,6 +119,14 @@ adb shell am start -n com.pebblepile.android/.MainActivity
 | --- | --- |
 | 候选展示 | 详情出现“本次建议”，首选与后续候选按发布顺序排列，每条依据可打开来源原话。 |
 | 反馈关联 | 点候选后“实际选择”带入菜名；保存后详情显示“当时建议”和实际选择，建议编号一致。 |
-| 其他选择 | 点“其他”后自行填写，反馈不绑定当前建议编号。 |
-| 纠正后回查 | 修改条件后旧建议从“建议与来源”收起；已保存反馈仍显示“当时建议”，点“查看当时的候选与依据”能打开历史候选、条件和原话。 |
+| 其他选择 | “其他菜品”保留原建议编号。“改为独立体验”保存独立反馈。 |
+| 纠正后回查 | 修改条件后可选择此前的建议补记反馈。已有反馈可回查当时的候选、条件和原话。 |
 | 进程恢复 | 结束进程重开，反馈、建议编号和历史建议仍可回查。 |
+
+## 2026-11-25 PR #31 合并前复验
+
+在 API 36.1 纵向模拟器上，首页保存周一经历，系统分享保存周三经历，在“对话”里问周四晚餐。停在详情页即可看到 Worker 发布盖饭为首选。两条引文分别回到周一和周三的原话，打开后可核对来源版本与码点区间。
+
+实际选择热汤面后，详情保留原建议编号。把“优先省事”限定到工作日加班，再问周六和周四，周六首选轻食便当，周四首选盖饭。关闭 Activity，从记录库重开首次提问，仍能对照当时的盖饭、实际吃的热汤面和两次经历的原话。[设备回归](app/src/androidTest/java/com/pebblepile/android/DinnerDetailIntegrationTest.kt)
+
+本地通过 127 项 JVM 测试和 95 项模拟器测试，应用与 WorkManager 适配器的 lint 均为 0 个错误。林叶鑫接签名候选包，在实体手机上走完 A01–A09，记录包的提交号与 SHA-256。

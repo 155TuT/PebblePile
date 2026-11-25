@@ -20,6 +20,7 @@ class EvidenceResolutionTest {
     @Test fun absentVersionsAndInvalidOrMismatchedQuotesHaveNoReadableSource() {
         val cases = listOf(
             evidence to null,
+            evidence to source.copy(recordId = "another-owner"),
             evidence to source.copy(ref = ref.copy(sourceVersion = 1)),
             evidence.copy(start = -1) to source,
             evidence.copy(end = 8) to source,

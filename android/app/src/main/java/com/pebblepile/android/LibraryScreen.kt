@@ -260,6 +260,7 @@ private fun TimelineRecord(record: PebbleRecord, onOpen: (String) -> Unit, onTag
     PebbleCard {
         PebbleListRow(
             label = record.rawText,
+            modifier = Modifier.testTag("library_record_${record.id}"),
             detail = "${record.capturedAt.take(16)} · ${record.itemStatus.label}",
             value = record.people.joinToString("、").ifBlank { null },
             icon = PebbleGlyph.Timeline,

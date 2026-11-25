@@ -83,6 +83,8 @@ class RoomDinnerDecisionTest {
         assertEquals(engineResult.filteredOut, basis.filteredOut)
         assertTrue(basis.appliedPreferences.isNotEmpty())
         assertTrue(basis.filteredOut.isNotEmpty())
+        assertEquals("工作日加班时，优先省事", basis.preferenceDescriptions?.get(basis.appliedPreferences.single()))
+        assertEquals("麻辣烫", basis.filteredCandidateNames?.get("hotpot"))
         assertEquals(decision.suggestions, firstRecord.suggestions)
         assertEquals("盖饭", firstRecord.suggestions.first().title)
         val evidence = firstRecord.suggestions.flatMap { it.evidence }.first {

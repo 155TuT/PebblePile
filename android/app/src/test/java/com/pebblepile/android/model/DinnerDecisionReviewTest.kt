@@ -66,7 +66,7 @@ class DinnerDecisionReviewTest {
 
     @Test
     fun constraintSummaryReadsLikeTheQuery() {
-        val constraint = QueryConstraint("周六", overtime = false, weekend = true, budgetCny = 20, cookMinutes = 40)
-        assertEquals("周六 · 周末 · 预算 20 元 · 可花 40 分钟", constraint.displaySummary())
+        val constraint = QueryConstraint("sat", overtime = false, weekend = true, budgetCny = 20, cookMinutes = 40)
+        assertEquals("周六 · 周末 · 不加班 · 预算 20 元 · 可花 40 分钟", constraint.displaySummary())
     }
 }
