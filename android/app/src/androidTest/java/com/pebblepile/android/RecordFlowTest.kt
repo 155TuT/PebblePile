@@ -21,6 +21,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.pebblepile.android.db.RoomStore
 import com.pebblepile.android.model.CorrectionScope
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -75,10 +76,15 @@ class RecordFlowTest {
         openShare(text).use {
             ui.onNodeWithText("确认保存").performScrollTo().assertIsDisplayed().performClick()
             waitForText("原始记录")
-            val api = ApplicationProvider.getApplicationContext<PebblePileApplication>().coreApi
-            val quote = runBlocking {
-                api.recentRecords().single { it.rawText == text }.suggestions.first().evidence.first().quote
+            val app = ApplicationProvider.getApplicationContext<PebblePileApplication>()
+            val quote = RoomStore.repository(app).write { tx ->
+                val record = tx.records().single { it.rawText == text }
+                assertTrue(record.suggestions.isEmpty())
+                val historic = tx.sources(record.id).single().legacySuggestionFixture()
+                tx.putRecord(record.copy(revision = record.revision + 1, suggestions = listOf(historic)))
+                historic.evidence.single().quote
             }
+            waitForText("查看原文")
             ui.onNodeWithText("“$quote”", useUnmergedTree = true).performScrollTo().assertIsDisplayed()
                 .performTouchInput { click() }
             waitForText("来源与原话")

@@ -337,7 +337,10 @@ class LocalCoreApi(
     }
 
     private fun PebbleRecord.withPublishedSuggestions(preference: ConditionSetting?): PebbleRecord {
-        val decisions = dinnerDecisions ?: return this
+        val decisions = dinnerDecisions ?: return copy(suggestions = suggestions.filterNot {
+            it.id == "$id:suggestion" && it.title == "优先选择准备简单的晚餐" &&
+                it.reason == "示例依据：记录中提到了时间紧张或希望省事。正式建议由团队任务模块提供。"
+        })
         val latest = decisions.lastOrNull()
         if (latest != null && latest.preferenceRevision != (preference?.revision ?: 0L)) {
             return copy(supersededDinnerDecisionId = latest.id, suggestions = emptyList())

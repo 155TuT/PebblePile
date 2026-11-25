@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.pebblepile.android.DemoCoreApi
+import com.pebblepile.android.legacySuggestionFixture
 import com.pebblepile.android.model.CorrectionScope
 import com.pebblepile.android.model.DeleteRequest
 import com.pebblepile.android.model.DeleteTarget
@@ -58,9 +59,12 @@ class RoomDeletionReviewTest {
         repository.write { tx ->
             val original = requireNotNull(tx.record(owner))
             val referencing = requireNotNull(tx.record(other))
+            val ownerSuggestion = tx.sources(owner).single().legacySuggestionFixture()
+            val independentSuggestion = tx.sources(other).single().legacySuggestionFixture()
+            tx.putRecord(original.copy(suggestions = listOf(ownerSuggestion)))
             tx.putRecord(referencing.copy(
                 tags = referencing.tags + original.tags.first().copy(id = "borrowed-tag"),
-                suggestions = referencing.suggestions + original.suggestions.single().copy(id = "borrowed-suggestion"),
+                suggestions = listOf(independentSuggestion, ownerSuggestion.copy(id = "borrowed-suggestion")),
             ))
         }
         assertEquals(ownerRequest.text, core.getRecordDetail(other, source)?.sources?.single()?.text)

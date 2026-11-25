@@ -1,6 +1,9 @@
 package com.pebblepile.android.model
 
 import com.pebblepile.android.algorithm.AlgorithmManifest
+import com.pebblepile.android.algorithm.DefaultDietScenePackage
+import com.pebblepile.android.algorithm.DietVocabulary
+import com.pebblepile.android.algorithm.PreferenceCandidate
 import com.pebblepile.android.algorithm.QueryConstraint
 
 enum class TagReviewState(val label: String) {
@@ -39,6 +42,8 @@ data class DinnerRankingBasis(
     val appliedPreferences: List<String>,
     val unmatchedPreferences: List<String>,
     val filteredOut: List<String>,
+    val preferenceDescriptions: Map<String, String>? = null,
+    val filteredCandidateNames: Map<String, String>? = null,
 )
 
 data class DinnerDecision(
@@ -176,9 +181,40 @@ fun DinnerDecision.primarySuggestion(): SuggestionItem? = suggestions.firstOrNul
 
 /** A short, human-readable rendering of the conditions used for one decision. */
 fun QueryConstraint.displaySummary(): String = buildList {
-    weekday.takeIf { it.isNotBlank() }?.let(::add)
-    if (overtime) add("加班")
+    weekday.takeIf { it.isNotBlank() }?.let { add(DietVocabulary.weekdayLabel(it)) }
     if (weekend) add("周末")
+    add(if (overtime) "加班" else "不加班")
     budgetCny?.let { add("预算 $it 元") }
     cookMinutes?.let { add("可花 $it 分钟") }
 }.joinToString(" · ")
+
+/** Labels are saved with the decision so history keeps the meaning of that ranking. */
+internal fun PreferenceCandidate.conditionDescription(): String {
+    val whenApplied = buildList {
+        val days = scope.weekdays
+        when {
+            days == setOf("mon", "tue", "wed", "thu", "fri") || (days.isEmpty() && scope.weekend == false) -> add("工作日")
+            days == setOf("sat", "sun") || (days.isEmpty() && scope.weekend == true) -> add("周末")
+            days.isNotEmpty() -> add(days.joinToString("、", transform = DietVocabulary::weekdayLabel))
+        }
+        scope.overtime?.let { add(if (it) "加班" else "不加班") }
+    }.joinToString("")
+    val priority = when (direction) {
+        "convenience" -> "优先省事"
+        "leisurely" -> "愿意慢慢做饭"
+        else -> note.ifBlank { "饮食偏好" }
+    }
+    return if (whenApplied.isEmpty()) priority else "${whenApplied}时，$priority"
+}
+
+internal fun DinnerRankingBasis.preferenceLabel(id: String): String =
+    preferenceDescriptions?.get(id) ?: when (id) {
+        "pref-weekday-overtime-convenience" -> "工作日加班时，优先省事"
+        "pref-explicit-weekday_overtime_convenience" -> "本人设置的晚餐条件"
+        else -> id
+    }
+
+internal fun DinnerDecision.filteredCandidateLabel(id: String): String =
+    rankingBasis?.filteredCandidateNames?.get(id) ?: if (manifest?.scenePackVersion == DefaultDietScenePackage.VERSION) {
+        DefaultDietScenePackage.menu.firstOrNull { it.id == id }?.name ?: id
+    } else id

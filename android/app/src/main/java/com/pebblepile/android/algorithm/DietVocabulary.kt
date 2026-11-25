@@ -40,6 +40,8 @@ internal object DietVocabulary {
 
     fun weekdayOf(text: String): String? = weekdayWords.entries.firstOrNull { text.contains(it.key) }?.value
 
+    fun weekdayLabel(day: String): String = weekdayWords.entries.firstOrNull { it.value == day }?.key ?: day
+
     /** 转述前缀，如「室友说：」。返回经历者主体；本人陈述返回 null。 */
     fun reportedSubject(text: String): String? {
         val match = Regex("""^\s*(?:我的)?(室友|朋友|同学|同事|家人|他|她)(?=说|讲|告诉我|昨天|今天|周|加班|吃|想)""").find(text) ?: return null

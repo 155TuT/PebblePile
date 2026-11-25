@@ -24,6 +24,9 @@ interface CoreApi {
     fun observeTasks(ids: List<String>): Flow<List<CoreTask>> =
         flow { emit(ids.mapNotNull(::getTask)) }.flowOn(Dispatchers.IO)
 
+    /** Emit once on subscription and again when the visible record or its preference changes. */
+    fun observeRecordChanges(recordId: String): Flow<Unit> = kotlinx.coroutines.flow.flowOf(Unit)
+
     fun setAutoOrganize(enabled: Boolean)
     fun recordExperience(request: CaptureRequest): ApiReceipt
     fun getRecordDetail(recordId: String, sourceRef: SourceRef? = null): RecordDetail?

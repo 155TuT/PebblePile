@@ -28,8 +28,16 @@ interface LibraryDao {
 private const val VISIBLE_RECORDS = "SELECT r.* FROM records r WHERE NOT EXISTS " +
     "(SELECT 1 FROM deletion_markers m WHERE m.type = 'record' AND m.id = r.id)"
 
+data class DetailRevision(val revision: Long, val preference: String?)
+
 @Dao
 interface RecordDao {
+    @Query("""SELECT r.revision, (SELECT future_condition_json FROM libraries WHERE id = :libraryId) AS preference
+        FROM records r WHERE r.id = :recordId AND NOT EXISTS
+        (SELECT 1 FROM deletion_markers m WHERE m.type = 'record' AND m.id = r.id)""")
+    fun observeDetailRevision(recordId: String, libraryId: String = LibraryEntity.DEFAULT_ID):
+        kotlinx.coroutines.flow.Flow<DetailRevision?>
+
     @Query("SELECT r.revision FROM records r WHERE r.id = :id AND NOT EXISTS " +
         "(SELECT 1 FROM deletion_markers m WHERE m.type = 'record' AND m.id = r.id)")
     fun visibleRevision(id: String): Long?

@@ -10,11 +10,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import com.pebblepile.android.repository.CoreRepository
-import com.pebblepile.android.model.EvidenceItem
 import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.RecordTag
 import com.pebblepile.android.model.SourceRef
-import com.pebblepile.android.model.SuggestionItem
 import com.pebblepile.android.model.TagReviewState
 import com.pebblepile.android.service.CoreApi
 import com.pebblepile.android.service.LocalCoreApi
@@ -24,16 +22,20 @@ class DemoCoreApi internal constructor(
     repository: CoreRepository,
     onQueued: (CoreTask, Boolean) -> Unit = { _, _ -> },
     private val revisions: ((List<String>) -> Flow<List<Long>>)? = null,
+    private val detailChanges: ((String) -> Flow<Unit>)? = null,
 ) : CoreApi by LocalCoreApi(
     onTaskQueued = onQueued,
     repository = repository,
-    decorateCreatedRecord = Companion::withDemoContent,
+    decorateCreatedRecord = Companion::withCaptureMetadata,
 ) {
     constructor(context: Context) : this(
         RoomStore.repository(context),
         (context.applicationContext as PebblePileApplication).taskRuntime::enqueue,
         RoomStore.database(context).taskDao()::observedRevisions,
+        { id -> RoomStore.database(context).recordDao().observeDetailRevision(id).distinctUntilChanged().map { Unit } },
     )
+
+    override fun observeRecordChanges(recordId: String): Flow<Unit> = detailChanges?.invoke(recordId) ?: flowOf(Unit)
 
     override fun observeTasks(ids: List<String>): Flow<List<CoreTask>> =
         (revisions?.invoke(ids) ?: flowOf(emptyList())).distinctUntilChanged().map {
@@ -41,7 +43,7 @@ class DemoCoreApi internal constructor(
         }.flowOn(Dispatchers.IO)
 
     private companion object {
-        fun withDemoContent(record: PebbleRecord, sourceRef: SourceRef): PebbleRecord {
+        fun withCaptureMetadata(record: PebbleRecord, sourceRef: SourceRef): PebbleRecord {
             val snippetLength = record.rawText.codePointCount(0, record.rawText.length)
             fun snippet(limit: Int): String = record.rawText.substring(
                 0, record.rawText.offsetByCodePoints(0, minOf(limit, snippetLength))
@@ -56,15 +58,6 @@ class DemoCoreApi internal constructor(
                 if (record.rawText.contains(Regex("加班|工作|忙|省事"))) add("加班")
                 if (isEmpty()) add("待整理")
             }
-            val hint = listOf("省事", "加班", "时间紧").firstOrNull(record.rawText::contains)
-            val charStart = hint?.let(record.rawText::indexOf)?.takeIf { it >= 0 } ?: 0
-            val start = record.rawText.codePointCount(0, charStart)
-            val quoteLength = hint?.codePointCount(0, hint.length) ?: minOf(24, snippetLength)
-            val end = (start + quoteLength).coerceAtMost(snippetLength)
-            val quote = record.rawText.substring(
-                record.rawText.offsetByCodePoints(0, start),
-                record.rawText.offsetByCodePoints(0, end),
-            )
             return record.copy(
                 title = record.title.ifBlank { snippet(18) },
                 people = record.people.ifEmpty { people },
@@ -78,24 +71,6 @@ class DemoCoreApi internal constructor(
                         sourceRef = sourceRef,
                     )
                 },
-                suggestions = if ("饮食" in tagNames && hint != null) listOf(
-                    SuggestionItem(
-                        "${record.id}:suggestion", "优先选择准备简单的晚餐",
-                        "示例依据：记录中提到了时间紧张或希望省事。正式建议由团队任务模块提供。",
-                        listOf(
-                            EvidenceItem(
-                                id = "${record.id}:evidence",
-                                title = "本条记录",
-                                quote = quote,
-                                recordDate = record.capturedAt.take(10),
-                                sourceRecordId = record.id,
-                                sourceRef = sourceRef,
-                                start = start,
-                                end = end,
-                            )
-                        )
-                    )
-                ) else emptyList()
             )
         }
     }
