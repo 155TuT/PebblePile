@@ -3,7 +3,7 @@
   "datasetVersion": "0.1.1",
   "frozenAt": "2026-11-20",
   "status": "frozen",
-  "source": "docs/issue2-research.md",
+  "source": "docs/user-research.md",
   "owner": "林叶鑫（Mukyng）",
   "conventions": {
     "offsetUnit": "unicode-code-point",

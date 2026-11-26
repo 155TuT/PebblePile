@@ -1,20 +1,19 @@
-# WorkManager 接入说明
+# Android 后台任务与进程恢复
 
-`:scheduler-android` 是 Android 库。它通过 `:scheduler-core` 执行任务，使用 AndroidX WorkManager 2.9.1 调度工作。
+`:scheduler-android` 使用 AndroidX WorkManager 2.9.1 唤醒已写入资料库的任务。首页输入和系统分享都在 Room 提交成功后按回执中的 `jobId` 入队，系统工作名为 `pebblepile-task-<jobId>`。同一工作默认使用 `KEEP` 去重，用户继续或重试时使用 `REPLACE`。
 
-## 保存后怎样唤醒任务
+## 冷启动怎样恢复
 
-首页和系统分享共用保存事务。Room 一起写入原话、业务任务和回执，提交后按回执中的 `jobId` 唤醒 WorkManager。现有工作按 `pebblepile-task-<jobId>` 去重。关闭自动整理时只保存原话。
+`PebblePileApplication` 配置 `PersistentTaskWorkerFactory`，并在启动时排入一项恢复工作。恢复程序先完成旧资料导入，再从 Room 查找排队中、执行中和等待重试的整理任务，以及待处理的删除任务。这样即使进程在提交业务事务后、唤醒 Worker 前退出，下次启动仍能找到原任务。旧版因等待算法而挂起的整理任务沿用原编号执行，手动暂停的任务等用户继续。
 
-`PebblePileApplication` 提供 WorkerFactory。应用冷启动时，恢复任务从同一文件库读取已排队、执行中和等待重试的任务并补排，覆盖写库后、唤醒前进程退出的情况。暂停和取消先撤销业务租约，执行者在下一次提交时核对租约。用户继续或重试时，替换同一编号的系统工作。
+Worker 收到任务 ID 后，`AndroidTaskRuntime` 按任务类型分派。整理任务由 `RoomTaskStore` 领取，从已有检查点继续计算。删除任务由 `RoomCleanupRunner` 逐步提交清理结果。[应用调度入口](../app/src/main/java/com/pebblepile/android/AndroidTaskRuntime.kt) · [调度阶段与回归](../scheduler-core/README.md)
 
-整理任务由 `RoomTaskStore` 领取。保存入口和 Worker 共用业务任务编号，Worker 调用随包饮食算法完成抽取、更新和排序。旧版因等待算法而挂起的任务在冷启动时沿用原编号恢复。手动暂停的任务等用户继续，已结束的任务保留原结果。删除清理仍按自己的检查点推进。[算法候选交接](../ISSUE9_HANDOFF.md)
-
-| 任务结果 | Worker 处理 |
+| 业务结果 | WorkManager 的处理 |
 | --- | --- |
-| `BUSY` 或 `WAITING(retry_pending)` | 按指数退避重试。现有租约到期后，下一次唤醒可从检查点继续。 |
-| 用户暂停或其他等待原因 | 结束本次唤醒，等待显式继续或新调度。 |
-| 已完成、待确认、已过期、已取消或任务缺失 | 结束本次唤醒。 |
-| 失败 | 返回失败，页面按业务回执显示可执行操作。 |
+| 任务正由其他执行者持有，或等待原因是 `retry_pending` | 返回重试。退避时间从 30 秒起按指数增长。 |
+| 用户已暂停，或任务因其他原因等待 | 结束本次唤醒，由用户操作或后续调度继续。 |
+| 任务完成、待核对、过期、已取消，或数据库中已找不到该编号 | 结束本次唤醒，业务状态由 Room 保存。 |
+| 整理任务失败 | Worker 返回失败。任务可执行的操作由业务状态决定。 |
+| 仓储写入异常或 SQLite 异常抛回 Android 运行入口 | Worker 返回重试。 |
 
-阶段计算需要在单次租约内完成，保存检查点会续租。更换算法时按设备上单阶段的实测耗时调整租期。
+整理任务的默认租期是 60 秒，每次保存阶段产物时续租。某阶段计算超过租期时，新的执行者可以接管任务，再次从最近一次有效检查点计算。[执行者与重试规则](src/main/kotlin/com/pebblepile/scheduler/work/PersistentTaskWorker.kt)

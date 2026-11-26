@@ -1,42 +1,26 @@
-# issue10 机器可读样例
+# 晚餐回归样例
 
-本目录供前端、存储和算法共用同一份晚餐材料与预期，对应 [`docs/issue10-testing.md`](../../issue10-testing.md)。
+首页记录、系统分享、业务契约和饮食算法共用数据集 `issue10-dinner-v1`。三条虚构经历覆盖工作日加班和周末休息，两次工作日经历共同支持「加班时优先省事」。后续提问、纠正和反馈用于检验这个偏好何时适用、建议依据能否回到原话。[设备回放与故障复验](../README.md)
 
-## 文件
-
-| 文件 | 内容 |
+| 文件 | 用途 |
 | --- | --- |
-| `fixtures.json` | 原文、发生时间、条件、证据区间和每条记录的预期事实 |
-| `expected.json` | 计数、引用、条件匹配、回归样例、契约与故障不变量及排序基线版本 |
-| `algorithm-baseline.json` | 场景包、菜单、四次提问的候选顺序与引用、三轮离线回放耗时 |
+| [fixtures.json](fixtures.json) | 数据集 0.1.1 的原话、发生时间、提问条件、逐条事实与证据区间。 |
+| [expected.json](expected.json) | 对应的预期版本 0.1.2，含经历计数、来源引用、条件命中、回执及故障用例。 |
+| [algorithm-baseline.json](algorithm-baseline.json) | 排序基线 `dinner-ranking-0.1.0` 的菜单、参考价格、各题完整顺序、调用次数和三轮回放耗时。 |
 
-三份文件按 `datasetId` 和 `datasetVersion` 配套使用。样例更新后，用新版本重跑受影响的用例。
+## 按原话取证
 
-## 区间口径
-
-按 Unicode 码点从 0 计数，区间写作 `[start,end)`。先按来源版本取原文，再核对区间和引文。修改输入后重算区间并更新 `datasetVersion`。[证据存储约定](../../database-design.md#433-事件与证据)
-
-例如 `🍜热汤面` 中的 `热汤面` 占码点区间 `[1,4)`。Python 3 可直接切片。Kotlin 先把两个端点换算成 UTF-16 下标，再取出引文。
+按来源版本取原文，再按 Unicode 码点从 0 计数。区间 `[start,end)` 含起点，取到终点之前。例如 `🍜热汤面` 中的「热汤面」占 `[1,4)`。Python 3 可直接切片。Kotlin 需先把两个端点换算为 UTF-16 下标。
 
 ```kotlin
 val quote = text.substring(text.offsetByCodePoints(0, start), text.offsetByCodePoints(0, end))
 ```
 
-在仓库根目录运行 `python docs/testing/issue10/check_fixtures.py`。脚本核对 #2 的逐字材料、两份 JSON 的版本、每处原话的下标与引文，并用带 emoji 的样例检查偏移单位。
+在仓库根目录运行 `python docs/testing/issue10/check_fixtures.py`。脚本将样例与[研究文档中的逐字输入](../../user-research.md)对读，检查数据集版本、三条记录中的 16 处区间，以及 emoji 前缀样例。修改原话时同步更新输入和预期，重算区间并标明新的数据集版本。
 
-## 状态值
+## 怎样读预期
 
-| 值 | 含义 |
-| --- | --- |
-| `frozen` | 材料与语义预期已冻结，可直接执行 |
-| `pending_contract` | 样例冻结时留给 #6 核对的字段和错误码。内存仓储的三种实测回执见[回执记录表](../../issue10-testing.md#33-回执记录表)，接入 SQLite 后按同一预期复验。 |
-| `pending_apk` | 等 #11 的签名 APK 与 SHA-256 |
-
-`scopeMatch` 为 `null` 表示提问发生在 C01 之前。C01 之后，`true` 表示命中本人设置，`false` 表示按本次其他有效条件排序。记录事实中的 `null` 表示原文未交代该信息。
-
-## 使用约定
-
-1. 三端读取 `fixtures.json` 作为唯一输入，不各自复制文本。
-2. 按算法返回的位置读回原话，核对它支持的事实。#9 的基线指定了片段时，再比对端点。契约回执按 `expected.json` 中的不变量和 #6 的字段逐项核对。
-3. 按 `expected.ranking` 指定的版本加载算法基线。每次换规则，复跑四个提问，逐项核对顺序、筛除、引用与调用量。
-4. 结果写回 `docs/issue10-testing.md` 的“实际”和“结论”栏，并登记证据编号。
+- 事实字段为 `null` 表示原话没有交代该事实。`scopeMatch` 为 `null` 表示提问发生在明确纠正之前。纠正后，`true` 表示命中工作日且加班的规则，`false` 表示按当前其余条件排序。
+- `frozen` 标明固定输入或预期。`pending_contract`、`pending_apk` 是样例冻结时留下的状态。复验结论以所测提交的回执、测试报告和 APK 操作记录为准。
+- F04 的预期文件沿用冻结时的错误名 `STALE_INPUT`。当前 Room 仓储通过任务状态 `STALE` 表达旧结果过期，设备测试还会核对该任务的 `decisionId` 为空。[Room 任务用例](../../../android/app/src/androidTest/java/com/pebblepile/android/db/RoomTaskStoreTest.kt)
+- 更新词表、规则、菜单或排序时，按四次提问逐项比较候选顺序、超预算的菜品、所引原话与调用次数。比较耗时还需记录运行环境及轮次。

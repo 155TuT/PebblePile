@@ -5,8 +5,8 @@
 | 版本与日期 | v1.3 · 2026-11-09 |
 | 研究课题 | 从生活材料中持续建构、更新和复用本地个人模型 |
 | 思路来源 | [微信反思草稿及补充审阅](recipe/assets/research/wechat-draft-2026-11-06.md)，以及后续关于通用底层与实现借鉴的澄清 |
-| 配套文件 | [PRD](prd.md) · [课程要求](../task-requirement.md) |
-| 证据状态 | 既有资料核查于 11 月 7 日；参考项目与 Android 识屏接口核查于 11 月 8 日；移动入口与持续事项资料补核于 11 月 9 日。用户、真机和效果验证待开展 |
+| 配套文件 | [PRD](prd.md) · [课程要求](https://github.com/155TuT/2601-fzu-SoftwareEngineering-YuezhongWu/blob/main/homework/team/task5/task-requirement.md) |
+| 证据状态 | 本稿记录 11 月 7—9 日的资料核查和研究假设，后续方法见[用户研究与同题对照](user-research.md)，已发布版本的运行证据见[Android 回归测试](testing/README.md) |
 
 ## 迭代记录
 

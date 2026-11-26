@@ -1,22 +1,32 @@
-# Issue #8 后台任务调度
+# 后台任务调度
 
-记录保存后，页面先显示保存回执。后台整理按 `EXTRACT → UPDATE → CONTEXT → RANK → COMMIT` 执行。`scheduler-core` 管理任务状态、检查点和租约，`scheduler-android` 用 WorkManager 唤醒指定任务。
+首页和系统分享保存原话后，用户先拿到回执。开启自动整理时，回执中的任务 ID 对应一个可恢复的后台任务。`:scheduler-core` 管理任务状态、阶段产物和租约，Android 通过 [WorkManager 适配器](../scheduler-android/README.md)唤醒它。
 
 ## 任务如何推进
 
-1. Android 保存入口复用业务回执中的任务 ID。独立调用 `submit` 时按记录 ID、记录修订、偏好修订和算法版本生成任务 ID。相同输入复用任务。同一修订传入不同文本时，调用方需核对记录版本。
-2. 执行者领取任务后取得租约，每完成一个阶段就保存检查点并续租。再次唤醒时从第一个待处理阶段继续。暂停和取消会立即收回租约。
-3. 算法通过 `runStage` 生成阶段产物，通过 `prepareCommit` 组装决定和证据。两个方法都应支持重复计算，业务写入交给任务仓储。
-4. `finishIfCurrent` 在发布结果时检查租约、材料修订和偏好修订。修订一致时一并保存决定、证据和终态。材料已删除或修订变化时返回 `stale`。
-5. `getTask` 返回状态、当前阶段、最后检查点、等待原因、可执行操作、决定和证据。页面按 `actions` 提供暂停、继续、重试、取消或查看详情。
+1. **领取任务。** 应用复用保存回执中的任务 ID。单独调用 `submit` 时，核心按记录 ID、记录修订、偏好修订和算法版本计算任务键。相同输入复用任务，同一键下的不同原文或来源版本会触发输入冲突。
+2. **计算并保存。** 整理依次经过 `EXTRACT → UPDATE → CONTEXT → RANK`。执行者领取任务时取得租约，每完成一个阶段就提交检查点并续租。恢复时从第一个待处理阶段继续。暂停或取消会收回租约，已开始的计算需凭有效租约才能写入。
+3. **发布结果。** `prepareCommit` 根据检查点组装决定编号及证据，`finishIfCurrent` 在同一事务里核对租约、材料与偏好修订。核对通过后写入结果和终态。材料已删除或修订变化时，旧任务转为过期。
+4. **查询或控制任务。** `getTask` 返回当前阶段、最近检查点、等待原因和可执行操作。执行中可暂停或取消，暂停后可继续。失败时按 `retryable` 提供重试，遇到待核对的结果则打开详情。
 
-## 模块交接
+`InMemoryTaskStore` 用于 JVM 状态机测试。设备使用 `RoomTaskStore` 持久化任务和各阶段的产物，由 `DietTaskPipeline` 计算晚餐候选及依据。删除清理使用独立的检查点，依次清理来源版本、记录正文和旧任务产物。[本地存储](../../docs/android-storage.md) · [晚餐算法与回放](../../docs/algorithm/dinner-ranking.md)
 
-| 负责人或模块 | 接入内容 | 验收产物 |
-| --- | --- | --- |
-| #7 仓储与 #8 调度 | `RoomTaskStore` 与保存回执共用任务 ID。阶段结果按任务和阶段保存。在同一数据库事务内校验租约、读取修订、写入决定与任务终态。 | 重建仓储后，原任务 ID、检查点、终态与证据仍可查询。 |
-| #9 算法与 #8 调度 | `DietTaskPipeline` 通过随包算法抽取经历、更新偏好、筛选和排序候选。嘉文从 `RANK` 检查点读取候选及证据。 | 相同输入重放得到相同候选和证据引用。 |
-| #6 核心与 #8 调度 | 首页和系统分享在保存提交后唤醒整理任务，删除确认后用清理任务编号唤醒 Worker。首页和详情读取该任务的最新状态。 | 保存、刷新、取消和纠正后可通过 CoreApi 查询最新回执。 |
-| #10 验收 | 用文件库和设备复验进程退出后的恢复、迟到提交和重复唤醒。CoreAPI 接入候选发布后，复验页面上的决定及原话依据。 | 按任务 ID 对照恢复前后的检查点、决定和证据。 |
+## 调度回归
 
-当前参考仓储 `InMemoryTaskStore` 用于测试状态机。设备进程退出后的恢复由 Room 任务表和应用内的 WorkerFactory 共同完成。应用接入步骤见 [WorkManager 接入说明](../scheduler-android/README.md)，测试命令见 [调度验证](TEST_RESULTS.md)。
+在 `android/` 运行模块测试与 lint。第二条命令需要已连接的模拟器或真机。
+
+```powershell
+.\gradlew.bat :scheduler-core:test :scheduler-android:testDebugUnitTest :scheduler-android:lintDebug :app:testDebugUnitTest
+.\gradlew.bat :app:connectedDebugAndroidTest
+```
+
+| 场景 | 复核内容 |
+| --- | --- |
+| 重复保存或重复唤醒 | 用同一回执中的任务 ID 查询，两次唤醒只发布一份决定。关闭自动整理后，原话仍可打开。 |
+| 暂停、重启或修改偏好 | 从第二个 Room 连接接管已到期的租约，检查任务沿用原编号和检查点。暂停或偏好变化后，旧执行者交回的结果应保留最新业务状态。 |
+| 旧版晚餐任务升级 | 对只有排序检查点的任务，升级后核对原任务 ID、回执和发布的决定。已发布的决定保留原编号。 |
+| 删除中断与重试 | 每个清理阶段和检查点一起提交。模拟写库失败后重开，从上一个检查点继续。只解绑跨记录引用时，来源所属记录仍能打开原话。 |
+
+[设备调度与数据库升级测试](../app/src/androidTest/java/com/pebblepile/android/db/RoomTaskStoreTest.kt) · [系统唤醒测试](../app/src/androidTest/java/com/pebblepile/android/db/WorkDispatchIntegrationTest.kt) · [清理回归测试](../app/src/test/java/com/pebblepile/android/db/RoomCleanupRunnerTest.kt)
+
+2026 年 11 月 23 日调度模块接入饮食算法时（提交 `4b97083`），回归记录列出 113 项通过的 JVM 测试（调度核心 19 项、WorkManager 适配器 2 项、应用 92 项）和 87 项通过的 API 36.1 设备测试。升级样例从旧版等待算法的任务恢复，完成四个计算阶段后再次强停、冷启动，任务修订保持为 10，领取次数保持为 2。清理样例从 `sources_removed`（修订 2）恢复到 `complete`（修订 4），再启动后仍为同一任务。0.1.0 的晚餐验收材料见[测试说明](../../docs/testing/README.md)。

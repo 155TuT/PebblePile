@@ -30,7 +30,7 @@ def main():
         for item in fixtures[group]:
             identifier = item["id"]
             original = "Q01" if identifier == "Q01b" else identifier
-            check(rows[original] == item["text"], f"{identifier}: differs from #2")
+            check(rows.get(original) == item["text"], f"{identifier}: differs from {fixtures['source']}")
 
     spans_by_record = expected["spans"]["records"]
     record_ids = [record["id"] for record in fixtures["records"]]

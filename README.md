@@ -14,32 +14,30 @@
 
 ## 项目简介
 
-本项目是 2601 福州大学软件工程团队作业，从日常对话与记录出发，由 Agent 结合本地算法整理事件、语义标签与证据，逐步形成习惯和条件偏好。后续事项可以复用这些认识，实际结果和用户纠正会用于更新个人模型。
+叠石是 2601 福州大学软件工程团队作业。用户把日常经历记在手机上，下一次做决定时，可以查看哪些原话支持这次建议，也可以把实际结果和自己的纠正留在原记录里。Android 0.1.0 已完成移动端原型复刻，以晚餐选择为第一个离线可用的场景。
 
 ## 快速开始
 
-- **Android 客户端**：按[本地运行](#本地运行)构建调试包。安装后在首页记一段原话，或从其他应用分享纯文本，再到记录库打开同一条记录。
+- **Android 客户端**：在 Android 8.0 及以上设备安装 [0.1.0 稳定版](https://github.com/155TuT/PebblePile/releases/tag/v0.1.0)，或按[本地运行](#本地运行)构建调试包。安装后在首页记一段原话，或从其他应用分享纯文本，再到记录库打开同一条记录。
 - **在线查看**：[Paper 移动端原型](https://app.paper.design/file/01M41JA45T3KFWNYX3GFW8SB5Q/p-5-0)包含 20 个画板，覆盖输入、整理、记录回查、反馈和记忆纠正。
 - **本地体验**：下载完整仓库，用浏览器打开 [本地点击导览](assets/prototype/index.html)。导览使用虚构资料模拟页面跳转、输入和反馈，无需启动服务器。
 
 ## 主要功能
 
-以下是当前的产品设计，主要流程可在原型中体验。
-
-- **对话与记录**：在首页切换对话或记录方式，补充材料并查看当前记录的整理进度。
-- **记录库**：通过时间线、记录本和语义标签找回同一批内容，按人物、时间和状态缩小范围。
-- **事项跟进**：在原记录中保留目标、建议与进展，并补充实际结果。
-- **标签与记忆纠正**：回查语义标签的来源与算法版本，确认、修改或排除标签。在设置中查看习惯和条件偏好的依据，调整其适用范围。
+- **留下原话**　首页对话和记录共用草稿，可以补充文字或语音转写，也可以从系统分享菜单保存纯文本。
+- **找回记录**　记录库提供时间线和记录本两种查看方式，可以按文字、标签、人物和事项状态筛选。打开详情后，可查看原话、核对标签、跟进事项和整理进度。
+- **询问晚餐建议**　记下两次加班晚餐，再问“今天周四加班，预算二十元，晚饭吃什么？”叠石按随包菜单比较候选，并把建议连回对应经历的原话。
+- **补记实际结果**　实际吃了什么，记在当时的建议下。用户也可以把“优先省事”限定到工作日加班，下次提问时按新条件比较，仍能回看上一次的建议。[完整晚餐示例](android/release-notes.md)
 
 ## 技术栈
 
-Android 客户端使用 Kotlin、Jetpack Compose 和 Navigation Compose。首页和系统分享共用保存接口，记录库和详情按同一个 `recordId` 回查原话。
+Android 客户端使用 Kotlin、Jetpack Compose 和 Navigation Compose，数据存储使用 Room，后台调度使用 WorkManager。
 
 构建链为 Gradle Wrapper 8.9、Android Gradle Plugin 8.7.3、JDK 17、compileSdk 35，最低支持 Android 8.0（API 26）。CI 使用 JDK 17 和 Android SDK 35。
 
 ## 项目架构
 
-Android 页面从 `PebblePileApplication.coreApi` 取得同一个 `CoreApi`。`LocalCoreApi` 处理写入、重试和修订冲突，当前仓储用 SharedPreferences 保存记录、来源、任务和回执。#7 按 `CoreRepository` 接入 SQLite，#8 接任务调度，#9 提供饮食场景的候选与证据。[业务接口与仓储契约](docs/core-api-contract.md)
+首页和系统分享通过同一个 `CoreApi` 写入记录，`LocalCoreApi` 处理操作重放与修订冲突，Room 把原话版本、任务、建议和回执保存在本机 SQLite。开启自动整理后，WorkManager 执行后台任务。晚餐提问使用随包词表、菜单和排序规则，详情可以按来源版本和原文区间查回依据。[Android 工程说明](android/README.md) · [业务接口](docs/core-api-contract.md)
 
 ## 目录结构
 
@@ -90,7 +88,7 @@ cd android
 | 文档 | 内容 |
 | --- | --- |
 | [产品需求](docs/prd.md) | 产品范围、功能与验收 |
-| [产品与技术调研](docs/research.md) | 用户假设、个人模型、移动运行与跨工具复用 |
+| [产品与技术调研](docs/research.md) · [用户研究与同题对照](docs/user-research.md) | 产品假设、固定晚餐材料、访谈与 Beta 回访方法 |
 | [信息架构](docs/information-architecture.md) · [Paper 信息架构](https://app.paper.design/file/01M41JA45T3KFWNYX3GFW8SB5Q/p-4-0) | 对话与记录、记录库、设置，以及语义标签与事项的分工 |
 | [系统设计说明书](docs/system-design.md) | 模块与 UML、算法、接口和恢复机制 |
 | [数据库设计说明书](docs/database-design.md) | 实体关系、关系模型、字段约束、对象映射与数据管理 |
@@ -112,20 +110,17 @@ cd android
 | [设计 token](assets/design-tokens.json) · [CSS 主题](assets/theme.css) · [组件配方](assets/components.css) | 122 项主题值，以及阴影、顶栏、输入区、标签、对话框与提示 |
 | [VI 快照](assets/vi/) | 正式排版、基础组件与系统组件样张 |
 
-### Android 构建与发布
+### Android 实现与测试
 
 | 文档 | 内容 |
 | --- | --- |
-| [构建、签名与发布](docs/android-build-release.md) | 环境基线、版本规则、签名材料、候选包验证与原文件 Release 流程 |
-| [后台任务调度](android/scheduler-core/README.md) | 阶段检查点、任务控制与 WorkManager 接入 |
-| [Android 工程说明](android/README.md) | 当前功能、调试构建和模拟器复验命令 |
-| [业务接口与仓储契约](docs/core-api-contract.md) | 调用入口、请求与回执、仓储事务和来源版本 |
-| [晚餐验收材料](docs/issue10-testing.md) | 固定输入、回执对照、算法回放与真机验收 |
-| [Issue #5 验证](android/ISSUE5_VERIFICATION.md) | 首页输入、系统分享、记录保存和进程恢复的模拟器验证记录 |
-
-## 部署
-
-日常联调用 Android CI 生成的调试 APK。晚餐流程、任务恢复和契约回归通过后，李宗欣用 `candidate` 构建一份 `0.1.0` 签名 APK。林叶鑫和林金晶按同一 SHA-256 做真机回归和用户试用，王智壹确认后用 `promote` 发布原包。[Android release 工作流](.github/workflows/android-release.yml)
+| [Android 工程说明](android/README.md) · [记录与详情](docs/android-record-flow.md) | 客户端入口、记录保存与回查、条件纠正、反馈和重开 |
+| [Compose 共用组件](docs/android-components-compose.md) | 控件、字体、状态反馈与小屏验证 |
+| [业务接口](docs/core-api-contract.md) · [本地存储](docs/android-storage.md) | 请求、回执、Room 事务、版本与迁移 |
+| [调度状态机](android/scheduler-core/README.md) · [WorkManager 接入](android/scheduler-android/README.md) | 任务领取、阶段检查点、暂停与恢复 |
+| [饮食算法](docs/algorithm/dinner-ranking.md) | 经历提取、偏好条件、菜单排序与回放基线 |
+| [测试说明](docs/testing/README.md) | 固定样例、契约、设备流程与故障恢复 |
+| [构建、签名与发布](docs/android-build-release.md) | 调试构建、候选包验证和稳定版来源 |
 
 ## 参与协作
 
