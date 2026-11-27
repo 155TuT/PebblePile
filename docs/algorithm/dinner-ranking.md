@@ -1,6 +1,6 @@
 # 晚餐推荐怎样使用记录和偏好
 
-0.1.0 的晚餐建议来自随包的六道菜。用户提问时，应用从原话和当前事项中读出星期、加班情况、预算与可用时间，先筛掉超出预算或时间的菜，再用符合本次条件的偏好和经历排序。默认引擎使用本地词表和规则，整条计算链在设备上运行。[饮食场景实现](../../android/app/src/main/java/com/pebblepile/android/algorithm/)
+0.1.0 的晚餐建议来自随包的六道菜。用户提问时，应用从原话和当前事项中读出星期、加班情况、预算与可用时间，先筛掉超出预算或时间的菜，再用符合本次条件的偏好和经历排序。默认引擎使用本地词表和规则，整条计算链在设备上运行。[饮食场景实现](../../lib/algorithm/)
 
 ## 从原话到建议
 
@@ -18,7 +18,7 @@
 
 ## 四种提问的回放基线
 
-固定数据集为 `issue10-dinner-v1@0.1.1`，场景包为 `diet-scene-pack-0.1.0`，算法为 `local-rules-0.1.0`，排序基线为 `dinner-ranking-0.1.0`。四次提问的预算都是 20 元，22 元的麻辣烫在评分前筛除。[固定输入](../testing/issue10/fixtures.json) · [菜单、候选顺序与原始计时](../testing/issue10/algorithm-baseline.json)
+固定数据集为 `issue10-dinner-v1@0.1.1`，场景包为 `diet-scene-pack-0.1.0`，算法为 `local-rules-0.1.0`，排序基线为 `dinner-ranking-0.1.0`。四次提问的预算都是 20 元，22 元的麻辣烫在评分前筛除。[固定输入](../../test/fixtures/issue10/fixtures.json) · [菜单、候选顺序与原始计时](../../test/fixtures/issue10/algorithm-baseline.json)
 
 | 提问 | 本次依据 | 候选顺序 |
 | --- | --- | --- |
@@ -31,12 +31,12 @@ D01 重复分享 E01，支持次数仍为两次。R01 属于室友，只保留�
 
 ## 复跑与计时
 
-在 `android/` 下运行以下命令，强制重新执行基线用例。
+在仓库根目录运行以下命令，重新执行基线用例。
 
 ```powershell
-.\gradlew.bat :app:testDebugUnitTest --tests "*AlgorithmBaselineTest.rankingIsStableAcrossThreeRuns" --rerun
+python scripts/gradle.py :app:testDebugUnitTest --tests "*AlgorithmBaselineTest.rankingIsStableAcrossThreeRuns" --rerun
 ```
 
-在 `app/build/test-results/testDebugUnitTest/` 的 JUnit XML 中搜索 `DINNER_REPLAY`。每行依次为提问编号、轮次、抽取毫秒、更新毫秒、排序毫秒和模型调用次数。每组跑三次，每轮新建默认引擎，先抽取 E01 至 E03，再更新偏好并排序。计时用 `System.nanoTime()`，范围为这三个计算阶段。
+在 `build/native/app/test-results/testDebugUnitTest/` 的 JUnit XML 中搜索 `DINNER_REPLAY`。每行依次为提问编号、轮次、抽取毫秒、更新毫秒、排序毫秒和模型调用次数。每组跑三次，每轮新建默认引擎，先抽取 E01 至 E03，再更新偏好并排序。计时用 `System.nanoTime()`，范围为这三个计算阶段。
 
-基线记录的 12 轮回放在 Windows 11、JDK 17.0.15 上完成，各轮模型调用均为 0。首次运行与后续运行的耗时分别保存在基线文件的 `latencyMillis`。单独调用 `dinnerQuery` 时会复用已抽取的经历，其耗时只覆盖更新和排序。`engine.inferenceCalls` 累计该引擎实际请求模型端口的次数。[回放测试](../../android/app/src/test/java/com/pebblepile/android/algorithm/AlgorithmBaselineTest.kt)
+基线记录的 12 轮回放在 Windows 11、JDK 17.0.15 上完成，各轮模型调用均为 0。首次运行与后续运行的耗时分别保存在基线文件的 `latencyMillis`。单独调用 `dinnerQuery` 时会复用已抽取的经历，其耗时只覆盖更新和排序。`engine.inferenceCalls` 累计该引擎实际请求模型端口的次数。[回放测试](../../test/unit/algorithm/AlgorithmBaselineTest.kt)

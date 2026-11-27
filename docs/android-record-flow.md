@@ -10,13 +10,13 @@
 | 首页 · 对话 | 切换到「对话」后继续编辑同一份草稿。开启自动整理时，可以在这里提交晚餐提问，到详情查看处理结果。 | `app_home_dialog` |
 | 系统分享 | 从其他应用分享纯文本，核对弹窗中的原话后点「确认保存」。取消后可以重新发起分享。 | `android_share` |
 
-两个入口都调用 `recordExperience`。同一次保存失败后重试沿用原操作编号。自动整理开关决定新记录是否创建整理任务，保存回执在本地事务提交后就能返回。[首页](../android/app/src/main/java/com/pebblepile/android/HomeScreen.kt) · [分享与导航](../android/app/src/main/java/com/pebblepile/android/MainActivity.kt) · [接口与回执](core-api-contract.md)
+两个入口都调用 `recordExperience`。同一次保存失败后重试沿用原操作编号。自动整理开关决定新记录是否创建整理任务，保存回执在本地事务提交后就能返回。[首页](../src/screens/HomeScreen.kt) · [分享与导航](../src/runtime/MainActivity.kt) · [接口与回执](core-api-contract.md)
 
 ## 在记录库找回原话
 
-时间线按采集日期分组，记录本把同一批记录列成条目。搜索可匹配标题、原话、可见标签和人物。标签支持多选，多项同时命中才会显示。再选人物或事项状态，可以进一步缩小范围。从详情返回后，页面保留视图和仍有效的筛选条件。[记录库](../android/app/src/main/java/com/pebblepile/android/LibraryScreen.kt)
+时间线按采集日期分组，记录本把同一批记录列成条目。搜索可匹配标题、原话、可见标签和人物。标签支持多选，多项同时命中才会显示。再选人物或事项状态，可以进一步缩小范围。从详情返回后，页面保留视图和仍有效的筛选条件。[记录库](../src/screens/LibraryScreen.kt)
 
-详情按记录编号加载原话、来源版本、标签与事项。点标签可以查看依据和算法版本，确认、修改、排除或标为待核对。排除后的标签退出记录库筛选。编辑「当前事项」可以更新名称和进展。整理任务按自身状态提供暂停、继续、取消或重试。[记录详情](../android/app/src/main/java/com/pebblepile/android/RecordDetailScreen.kt)
+详情按记录编号加载原话、来源版本、标签与事项。点标签可以查看依据和算法版本，确认、修改、排除或标为待核对。排除后的标签退出记录库筛选。编辑「当前事项」可以更新名称和进展。整理任务按自身状态提供暂停、继续、取消或重试。[记录详情](../src/screens/RecordDetailScreen.kt)
 
 ## 晚餐建议、反馈与纠正
 
@@ -40,4 +40,4 @@ adb shell am force-stop com.pebblepile.android
 adb shell am start -n com.pebblepile.android/.MainActivity
 ```
 
-页面恢复可分别检查两处草稿。在分享确认前重建 Activity，原话应仍可确认保存。编辑纠正条件时重建 Activity，草稿和适用范围应保留。晚餐历史回查使用固定样例，分别验证「先反馈再纠正」和「先纠正再为此前的建议补记反馈」。[记录与分享用例](../android/app/src/androidTest/java/com/pebblepile/android/RecordFlowTest.kt) · [晚餐详情集成用例](../android/app/src/androidTest/java/com/pebblepile/android/DinnerDetailIntegrationTest.kt) · [验收步骤和历次结果](testing/README.md)
+页面恢复可分别检查两处草稿。在分享确认前重建 Activity，原话应仍可确认保存。编辑纠正条件时重建 Activity，草稿和适用范围应保留。晚餐历史回查使用固定样例，分别验证「先反馈再纠正」和「先纠正再为此前的建议补记反馈」。[记录与分享用例](../test/device/RecordFlowTest.kt) · [晚餐详情集成用例](../test/device/DinnerDetailIntegrationTest.kt) · [验收步骤和历次结果](../test/README.md)

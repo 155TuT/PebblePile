@@ -16,11 +16,11 @@
 | `operation_receipts` | 以客户端 ID 和操作 ID 为主键，保存请求摘要、首次成功的回执和删除范围。 |
 | `deletion_markers`、`deletion_jobs` | 已隔离的对象和后台清理计划。删除确认后，查询即按隔离标记决定可见范围。 |
 
-相同操作重发时返回原回执。沿用操作 ID 更改内容时，错误码为 `INVALID_INPUT`，原因为 `OPERATION_ID_REUSED`，提交依赖的修订已变化时会收到 `REVISION_CONFLICT`。文件库启用 WAL、`synchronous=FULL` 和外键约束。[Room 实体](../android/app/src/main/java/com/pebblepile/android/db/DatabaseEntities.kt) · [仓储读写](../android/app/src/main/java/com/pebblepile/android/db/RoomCoreRepository.kt)
+相同操作重发时返回原回执。沿用操作 ID 更改内容时，错误码为 `INVALID_INPUT`，原因为 `OPERATION_ID_REUSED`，提交依赖的修订已变化时会收到 `REVISION_CONFLICT`。文件库启用 WAL、`synchronous=FULL` 和外键约束。[Room 实体](../src/storage/DatabaseEntities.kt) · [仓储读写](../src/storage/RoomCoreRepository.kt)
 
 ## 已安装版本怎样升级
 
-早期版本把资料保存在 SharedPreferences。首次访问仓储时，应用在一个事务中导入记录、来源版本、任务、回执、偏好和资料库修订，提交后清理旧数据。两处都有数据时，应用先核对原快照。数据冲突或旧资料解析失败时保留原件，供后续重试。[旧资料导入](../android/app/src/main/java/com/pebblepile/android/db/RoomStore.kt)
+早期版本把资料保存在 SharedPreferences。首次访问仓储时，应用在一个事务中导入记录、来源版本、任务、回执、偏好和资料库修订，提交后清理旧数据。两处都有数据时，应用先核对原快照。数据冲突或旧资料解析失败时保留原件，供后续重试。[旧资料导入](../src/storage/RoomStore.kt)
 
 | 数据库版本 | 迁移内容 |
 | --- | --- |
@@ -29,15 +29,15 @@
 | 3 → 4 | 根据成功创建整理任务的历史回执，补登记允许整理的来源版本。 |
 | 4 → 5 | 新增晚餐决定发布计数。对已完成排序、记录修订仍匹配且记录仍可见的旧版晚餐任务，沿用原任务 ID 和检查点，重新排队发布决定。 |
 
-文件库配置与各版 SQL 见[数据库定义](../android/app/src/main/java/com/pebblepile/android/db/PebbleDatabase.kt)。
+文件库配置与各版 SQL 见[数据库定义](../src/storage/PebbleDatabase.kt)。
 
 ## 存储回归
 
-在 `android/` 运行 JVM 测试。在连接模拟器或真机后，运行设备测试。
+在仓库根目录运行 JVM 测试，连接模拟器或真机后运行设备测试。
 
 ```powershell
-.\gradlew.bat :app:testDebugUnitTest --tests "*RoomCoreContractTest"
-.\gradlew.bat :app:connectedDebugAndroidTest
+python scripts/gradle.py :app:testDebugUnitTest --tests "*RoomCoreContractTest"
+python scripts/gradle.py :app:connectedDebugAndroidTest
 ```
 
 `RoomCoreContractTest` 检查并发重发、事务回滚、来源版本、时间线顺序和文件重开。`RoomStorageContractTest` 在设备上检查旧资料导入、迁移失败后的原件，以及文件库的 WAL、同步级别和外键约束。

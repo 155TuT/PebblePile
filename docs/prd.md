@@ -4,7 +4,7 @@
 | --- | --- |
 | 所属团队 | 你所热爱的就是软件工程 |
 | 版本与日期 | v1.3 · 2026-11-09 |
-| 状态 | 产品需求基线。下文的双平台、场景与指标为设计目标。[Android 0.1.0 已发布功能](../android/README.md) |
+| 状态 | 产品需求基线。下文的双平台、场景与指标为设计目标。[Android 0.1.0 已发布功能](android-client.md) |
 | 思路来源 | [微信反思草稿及补充审阅](recipe/assets/research/wechat-draft-2026-11-06.md)，承接后续关于通用个人模型与实现借鉴的澄清 |
 | 配套依据 | [产品与技术调研](research.md) · [课程要求](https://github.com/155TuT/2601-fzu-SoftwareEngineering-YuezhongWu/blob/main/homework/team/task5/task-requirement.md) |
 | 规范参考 | [GB/T 9385—2008《计算机软件需求规格说明规范》](https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=2790825C43AD0B69E3C38C140BFFCFE6) |

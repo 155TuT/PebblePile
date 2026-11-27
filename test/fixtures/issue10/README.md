@@ -1,6 +1,6 @@
 # 晚餐回归样例
 
-首页记录、系统分享、业务契约和饮食算法共用数据集 `issue10-dinner-v1`。三条虚构经历覆盖工作日加班和周末休息，两次工作日经历共同支持「加班时优先省事」。后续提问、纠正和反馈用于检验这个偏好何时适用、建议依据能否回到原话。[设备回放与故障复验](../README.md)
+首页记录、系统分享、业务契约和饮食算法共用数据集 `issue10-dinner-v1`。三条虚构经历覆盖工作日加班和周末休息，两次工作日经历共同支持「加班时优先省事」。后续提问、纠正和反馈用于检验这个偏好何时适用、建议依据能否回到原话。[设备回放与故障复验](../../README.md)
 
 | 文件 | 用途 |
 | --- | --- |
@@ -16,11 +16,11 @@
 val quote = text.substring(text.offsetByCodePoints(0, start), text.offsetByCodePoints(0, end))
 ```
 
-在仓库根目录运行 `python docs/testing/issue10/check_fixtures.py`。脚本将样例与[研究文档中的逐字输入](../../user-research.md)对读，检查数据集版本、三条记录中的 16 处区间，以及 emoji 前缀样例。修改原话时同步更新输入和预期，重算区间并标明新的数据集版本。
+在仓库根目录运行 `python test/fixtures/issue10/check_fixtures.py`。脚本将样例与[研究文档中的逐字输入](../../../docs/user-research.md)对读，检查数据集版本、三条记录中的 16 处区间，以及 emoji 前缀样例。修改原话时同步更新输入和预期，重算区间并标明新的数据集版本。
 
 ## 怎样读预期
 
 - 事实字段为 `null` 表示原话没有交代该事实。`scopeMatch` 为 `null` 表示提问发生在明确纠正之前。纠正后，`true` 表示命中工作日且加班的规则，`false` 表示按当前其余条件排序。
 - `frozen` 标明固定输入或预期。`pending_contract`、`pending_apk` 是样例冻结时留下的状态。复验结论以所测提交的回执、测试报告和 APK 操作记录为准。
-- F04 的预期文件沿用冻结时的错误名 `STALE_INPUT`。当前 Room 仓储通过任务状态 `STALE` 表达旧结果过期，设备测试还会核对该任务的 `decisionId` 为空。[Room 任务用例](../../../android/app/src/androidTest/java/com/pebblepile/android/db/RoomTaskStoreTest.kt)
+- F04 的预期文件沿用冻结时的错误名 `STALE_INPUT`。当前 Room 仓储通过任务状态 `STALE` 表达旧结果过期，设备测试还会核对该任务的 `decisionId` 为空。[Room 任务用例](../../device/db/RoomTaskStoreTest.kt)
 - 更新词表、规则、菜单或排序时，按四次提问逐项比较候选顺序、超预算的菜品、所引原话与调用次数。比较耗时还需记录运行环境及轮次。

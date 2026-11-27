@@ -1,6 +1,6 @@
 # Android 构建、签名与发布
 
-0.1.0 稳定版的安装包为 `PebblePile-0.1.0.apk`，`versionCode` 为 2，最低支持 Android 8.0。正式版沿用候选构建产出的签名 APK。[下载 0.1.0](https://github.com/155TuT/PebblePile/releases/tag/v0.1.0) · [本版功能与晚餐示例](../android/release-notes.md)
+0.1.0 稳定版的安装包为 `PebblePile-0.1.0.apk`，`versionCode` 为 2，最低支持 Android 8.0。正式版沿用候选构建产出的签名 APK。[下载 0.1.0](https://github.com/155TuT/PebblePile/releases/tag/v0.1.0) · [本版功能与晚餐示例](releases/0.1.0.md)
 
 | 发布记录 | 0.1.0 |
 | --- | --- |
@@ -9,17 +9,17 @@
 | 候选验证 | API 35 模拟器通过 96 项调试版设备用例，随后安装签名 APK 并启动首页。[候选构建](https://github.com/155TuT/PebblePile/actions/runs/45604399762) |
 | 正式发布 | 工作流校验同一份候选文件，在来源提交上建标签并上传 Release。[发布运行](https://github.com/155TuT/PebblePile/actions/runs/45618461469) |
 
-日常在模拟器上开发可从 `mobile/` 启动 Expo，安装与调试步骤见 [Expo Android 开发指南](../mobile/README.md)。下文用于 `android/` 原生工程的构建、设备测试和签名发布。
+从仓库根目录运行 [Gradle 启动脚本](../scripts/gradle.py)，可为正式应用构建调试包和签名包。脚本调用独立工程锁定版本的 Gradle Wrapper。日常在模拟器上用 Expo 联调时，按 [Android 开发指南](development.md)启动开发包。
 
 ## 原生工程环境基线
 
 | 项目 | 取值 |
 | --- | --- |
-| 应用工程 | `android/` |
+| 应用工程 | [config/gradle/](../config/gradle/)，应用模块为 `:app` |
 | 包名 | `com.pebblepile.android` |
 | 最低 Android | 8.0 / API 26 |
 | compileSdk / targetSdk | 35 / 35 |
-| JDK | 17；本地 JDK 21 也可用于构建 |
+| JDK | 17，独立 Gradle 构建也可使用本地 JDK 21 |
 | Gradle Wrapper | 8.9 |
 | Android Gradle Plugin | 8.7.3 |
 | Kotlin | 2.0.21 |
@@ -30,40 +30,26 @@ Gradle 按 Android Gradle Plugin 8.7.3 的默认配置使用 Build Tools 34.0.0�
 
 ## 版本规则
 
-`versionName` 和 `versionCode` 保存在[版本文件](../android/version.properties)。调试包用于日常联调。准备新版本时，更新版本名，递增版本号，并在[发布说明](../android/release-notes.md)写明功能、体验步骤和已知限制。同一版本的候选包需要修复时，保留版本名、递增版本号，并记录新文件的 SHA-256。
+`versionName` 和 `versionCode` 保存在[版本文件](../config/version.properties)。准备新版本时，更新版本名，递增版本号，在 `docs/releases/` 写明功能、体验步骤和适用范围。文件名取版本名中第一个连字符之前的部分，例如 `0.2.0-rc1` 使用 `0.2.0.md`。同一版本的候选包需要修复时，保留版本名、递增版本号，并记录新文件的 SHA-256。[0.1.0 示例](releases/0.1.0.md)
 
 ## 调试构建
 
-Windows PowerShell：
+按[开发指南](development.md#配置环境变量)设置 `JAVA_HOME` 和 `ANDROID_HOME`。Windows、macOS 和 Linux 均可在仓库根目录运行以下命令。
 
-```powershell
-$env:JAVA_HOME = "<JDK 17 或 21 目录>"
-$env:ANDROID_HOME = "<Android SDK 目录>"
-
-cd android
-.\gradlew.bat clean testDebugUnitTest lintDebug assembleDebug
+```sh
+python scripts/gradle.py clean testDebugUnitTest lintDebug assembleDebug
 ```
 
-macOS / Linux：
-
-```bash
-export JAVA_HOME="<JDK 17 或 21 目录>"
-export ANDROID_HOME="<Android SDK 目录>"
-
-cd android
-./gradlew clean testDebugUnitTest lintDebug assembleDebug
-```
-
-调试构建清理上次设备测试留下的 APK，只生成下方的应用包。从 Git 检出目录打包时，调试版本名为 `<版本号>+<短提交号>`，可与 `git rev-parse --short=12 HEAD` 对照。`android/` 含本地未提交改动时，版本名再加 `.dirty`。
+调试构建清理上次设备测试留下的 APK，只生成下方的应用包。从 Git 检出目录打包时，调试版本名为 `<版本号>+<短提交号>`，可与 `git rev-parse --short=12 HEAD` 对照。原生构建相关的源码、配置或测试含本地改动时，版本名加 `.dirty`。
 
 ```text
-android/app/build/outputs/apk/debug/app-debug.apk
+build/native/app/outputs/apk/debug/app-debug.apk
 ```
 
 在模拟器或已开启 USB 调试的设备上安装并启动：
 
 ```powershell
-adb install -r app\build\outputs\apk\debug\app-debug.apk
+adb install -r build\native\app\outputs\apk\debug\app-debug.apk
 adb shell am start -W -n com.pebblepile.android/.MainActivity
 ```
 
@@ -113,8 +99,7 @@ $env:PEBBLEPILE_KEY_ALIAS = "pebblepile"
 $env:PEBBLEPILE_KEY_PASSWORD = Read-Host "Key password" -AsSecureString |
   ConvertFrom-SecureString -AsPlainText
 
-cd android
-.\gradlew.bat clean assembleRelease
+python scripts/gradle.py clean assembleRelease
 ```
 
 运行 `assembleRelease` 前，在同一终端设置上面四个签名变量。
@@ -122,15 +107,15 @@ cd android
 产物与校验：
 
 ```powershell
-$version = (ConvertFrom-StringData (Get-Content version.properties -Raw)).versionName
-$source = "app\build\outputs\apk\release\app-release.apk"
-$target = "..\dist\PebblePile-$version.apk"
+$version = (ConvertFrom-StringData (Get-Content config/version.properties -Raw)).versionName
+$source = "build\native\app\outputs\apk\release\app-release.apk"
+$target = ".\dist\PebblePile-$version.apk"
 
-New-Item -ItemType Directory -Force ..\dist | Out-Null
+New-Item -ItemType Directory -Force .\dist | Out-Null
 Copy-Item $source $target
 Get-FileHash $target -Algorithm SHA256 |
   ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
-  Set-Content ..\dist\SHA256SUMS.txt -Encoding ascii
+  Set-Content .\dist\SHA256SUMS.txt -Encoding ascii
 ```
 
 检查签名与包信息：
@@ -146,9 +131,9 @@ Get-FileHash $target -Algorithm SHA256 |
 
 ### 1. 日常检查
 
-Android 工程、晚餐样例 JSON、两条 Android 工作流、发布脚本或晋级测试有改动时，PR 和 `main` 推送都会触发 [Android CI](../.github/workflows/android-ci.yml)。也可以在 Actions 页手动运行。
+应用与调度代码、Expo 配置、Gradle 配置、测试和发布脚本有改动时，PR 和 `main` 推送会触发 [Android CI](../.github/workflows/android-ci.yml)。也可从 Actions 页手动运行。
 
-1. 在 Ubuntu 上运行候选包晋级的 Python 测试，核对来源和 SHA-256。
+1. 在 Node.js 环境安装锁定依赖，检查 TypeScript，生成 Expo Android 宿主。另一项作业运行发布晋级测试并校验晚餐样例。
 2. 设置 JDK 17，安装调试 SDK 包，运行调度核心测试、Android 调度模块和应用的单元测试、Lint 与调试构建。
 3. 核对调试 APK 的包名、版本号和源码提交，再上传应用包，保留 14 天。签名候选工作流单独构建设备测试 APK，运行契约与页面测试。
 
@@ -158,12 +143,12 @@ Android 工程、晚餐样例 JSON、两条 Android 工作流、发布脚本或�
 
 1. `mode` 选 `candidate`。
 2. 保留 `publish=false`，从该次运行的 Actions artifact 下载候选 APK。
-3. 工作流读取提交中的 `version.properties`，用 GitHub Secrets 临时还原密钥。
+3. 工作流读取提交中的 `config/version.properties`，用 GitHub Secrets 临时还原密钥。
 4. CI 构建签名 APK，检查签名证书、`versionCode` 和 `versionName`。
 5. 在 API 35 模拟器上先跑 Debug 仪器测试，再安装签名 APK，启动首页并检查应用进程。
 6. 生成 `PebblePile-<版本>.apk`、`SHA256SUMS.txt`、`build-info.json` 和发布说明，上传 90 天。
 
-运行摘要列出来源提交、Actions run ID、artifact 名称和 APK SHA-256。设备复验时记录这组信息，便于后续定位同一个安装包。[设备复验](testing/README.md)
+运行摘要列出来源提交、Actions run ID、artifact 名称和 APK SHA-256。设备复验时记录这组信息，便于后续定位同一个安装包。[设备复验](../test/README.md)
 
 ### 3. 发布已验收的 APK
 

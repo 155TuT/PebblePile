@@ -18,10 +18,15 @@ PebblePile · 叠石面向移动端个人记忆与偏好建模。当前冲刺交
 
 | 位置 | 内容与维护方式 |
 | --- | --- |
-| `android/` | Android 客户端、业务接口、仓储实现与设备测试 |
-| `mobile/` | Expo Android 开发入口和本地原生模块。环境准备与调试见[开发指南](mobile/README.md) |
+| `src/` | React 入口、Compose 页面、应用装配、Room 存储与 Android 系统适配 |
+| `components/` | 页面共用的 Compose 控件、主题与预览 |
+| `lib/`、`utils/` | Kotlin 业务、算法、调度与跨模块共用工具 |
+| `modules/`、`config/` | Expo 原生桥接、宿主生成插件和版本。独立工程与 Gradle Wrapper 在 `config/gradle/`。Expo 按配置在根目录生成 `android/`。[开发指南](docs/development.md) |
+| `scripts/` | Python 脚本负责检查开发环境、调用独立工程构建和维护设计资产 |
+| `assets/android/` | 打包进应用的字体、图标、Android 资源和许可 |
+| `test/` | JVM 和设备用例、共享契约、固定样例与发布校验。[测试入口](test/README.md) |
 | `.github/workflows/` | 调试构建、候选 APK 签名与验收后的原包发布 |
-| `docs/` | 需求、设计、联调契约与验收材料 |
+| `docs/` | [项目文档](docs/README.md)按开发、产品、设计和实现提供导航 |
 | `docs/diagrams/` | PlantUML／Mermaid 源文件及正式 SVG；修改源文件后更新对应图形 |
 | `assets/design-tokens.json` | 语义 token、扩展样式、组件组合与验证状态 |
 | `assets/theme.css`、`assets/components.css` | 与 JSON 对应的主题变量和组件配方 |
@@ -30,7 +35,6 @@ PebblePile · 叠石面向移动端个人记忆与偏好建模。当前冲刺交
 | `assets/fonts/` | 字体来源、版本、字重和许可说明；字体文件按各自授权管理 |
 | `assets/prototype/` | 当前点击导览、流程清单与 Paper 导出的精确源；用生成脚本更新，保留最少复现资产 |
 | `assets/vi/` | 文档实际引用的正式设计快照；同一用途保留当前版本 |
-| `scripts/` | 可重复使用的生成与维护脚本；信息架构通过 `python scripts/render-information-architecture.py` 从 `.mmd` 与 VI token 生成 |
 | `.build/`、`.local/` | 已忽略的验证输出、缓存及本地字体等环境资源 |
 
 文件名使用有含义的 `kebab-case`。文档采用 UTF-8 与仓库内相对链接。历史探索保留简短决策和 Paper 链接；重复预览、裁切图、浏览器配置、下载包与临时日志留在忽略目录，验收后清理。
@@ -78,7 +82,7 @@ SVG 保留 `viewBox`、必要的路径与层次。功能图标保留上游文件
 修改 PlantUML 后，可使用已有脚本：
 
 ```powershell
-python scripts/render-diagrams.py --plantuml-jar <官方 PlantUML JAR 路径>
+python scripts/render-diagrams.py --plantuml-jar "/实际路径/plantuml.jar"
 git diff --check
 ```
 
