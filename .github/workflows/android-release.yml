@@ -229,7 +229,7 @@ jobs:
             echo "Candidate publication requires an alpha, beta or rc version." >&2
             exit 1
           fi
-          bash .github/scripts/android-release-tag.sh "$TAG" "$GITHUB_SHA"
+          python3 .github/scripts/android-release-tag.py "$TAG" "$GITHUB_SHA"
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
             "dist/$APK_FILE" \
             dist/SHA256SUMS.txt \
@@ -325,7 +325,7 @@ jobs:
           else
             release_flag="--prerelease"
           fi
-          bash .github/scripts/android-release-tag.sh "$tag" "$CANDIDATE_COMMIT"
+          python3 .github/scripts/android-release-tag.py "$tag" "$CANDIDATE_COMMIT"
           gh release create "$tag" --repo "$GITHUB_REPOSITORY" --verify-tag \
             "dist/PebblePile-${VERSION_NAME}.apk" \
             dist/SHA256SUMS.txt \
