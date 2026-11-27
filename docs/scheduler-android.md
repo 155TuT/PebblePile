@@ -6,7 +6,7 @@
 
 `PebblePileApplication` 配置 `PersistentTaskWorkerFactory`，并在启动时排入一项恢复工作。恢复程序先完成旧资料导入，再从 Room 查找排队中、执行中和等待重试的整理任务，以及待处理的删除任务。这样即使进程在提交业务事务后、唤醒 Worker 前退出，下次启动仍能找到原任务。旧版因等待算法而挂起的整理任务沿用原编号执行，手动暂停的任务等用户继续。
 
-Worker 收到任务 ID 后，`AndroidTaskRuntime` 按任务类型分派。整理任务由 `RoomTaskStore` 领取，从已有检查点继续计算。删除任务由 `RoomCleanupRunner` 逐步提交清理结果。[应用调度入口](../app/src/main/java/com/pebblepile/android/AndroidTaskRuntime.kt) · [调度阶段与回归](../scheduler-core/README.md)
+Worker 收到任务 ID 后，`AndroidTaskRuntime` 按任务类型分派。整理任务由 `RoomTaskStore` 领取，从已有检查点继续计算。删除任务由 `RoomCleanupRunner` 逐步提交清理结果。[应用调度入口](../src/runtime/AndroidTaskRuntime.kt) · [调度阶段与回归](scheduler-core.md)
 
 | 业务结果 | WorkManager 的处理 |
 | --- | --- |
@@ -16,4 +16,4 @@ Worker 收到任务 ID 后，`AndroidTaskRuntime` 按任务类型分派。整理
 | 整理任务失败 | Worker 返回失败。任务可执行的操作由业务状态决定。 |
 | 仓储写入异常或 SQLite 异常抛回 Android 运行入口 | Worker 返回重试。 |
 
-整理任务的默认租期是 60 秒，每次保存阶段产物时续租。某阶段计算超过租期时，新的执行者可以接管任务，再次从最近一次有效检查点计算。[执行者与重试规则](src/main/kotlin/com/pebblepile/scheduler/work/PersistentTaskWorker.kt)
+整理任务的默认租期是 60 秒，每次保存阶段产物时续租。某阶段计算超过租期时，新的执行者可以接管任务，再次从最近一次有效检查点计算。[执行者与重试规则](../src/work/PersistentTaskWorker.kt)

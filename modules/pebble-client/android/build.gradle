@@ -11,7 +11,7 @@ apply plugin: 'expo-module-gradle-plugin'
 apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 apply plugin: 'com.google.devtools.ksp'
 
-ext.clientRoot = rootDir.parentFile.parentFile
+ext.clientRoot = rootDir.parentFile
 
 expoModule { canBePublished false }
 

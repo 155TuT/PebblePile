@@ -2,6 +2,8 @@
 .local/
 __pycache__/
 *.pyc
+# Expo generates its Android host from app.json and the local module.
+/android/
 node_modules/
 /.expo/
 /dist/

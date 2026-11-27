@@ -11,8 +11,15 @@ on:
       - "utils/**"
       - "config/**"
       - "components/**"
+      - "modules/**"
       - "assets/android/**"
       - "scripts/gradle.py"
+      - "package*.json"
+      - "tsconfig.json"
+      - "app.json"
+      - "metro.config.js"
+      - "*.ts"
+      - "*.tsx"
       - "test/**"
       - "docs/user-research.md"
       - ".github/workflows/android-ci.yml"
@@ -30,6 +37,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  expo:
+    name: Check Expo development client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Generate Android host from a clean checkout
+        run: |
+          test -z "$(git ls-files -- android)"
+          npx expo prebuild --platform android --no-install
+          test -f android/app/src/main/AndroidManifest.xml
+      - run: npx expo export --platform android --output-dir "$RUNNER_TEMP/pebblepile-bundle"
+
   build-debug:
     name: Build and check debug APK
     runs-on: ubuntu-latest

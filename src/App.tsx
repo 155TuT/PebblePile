@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import PebbleClient from './modules/pebble-client';
+import PebbleClient from '../modules/pebble-client';
 
 export default function App() {
   return <PebbleClient style={styles.client} homeTitle="叠石" />;
