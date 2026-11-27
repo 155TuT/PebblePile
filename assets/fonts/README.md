@@ -12,7 +12,9 @@
 
 ## 加载
 
-[安装脚本](../../scripts/install-design-fonts.ps1)已将三个原文件安装并注册到当前 Windows 用户字体目录。Paper 重启后识别文楷 400/500，以及 Leftist 的原生族名 `Leftist Mono Sans` 400。六张正式 VI 画板已应用并核对字形与换行，本地原型导览已用 Chrome DevTools Protocol 核验实际字形来源：中文分别命中文楷 Regular／Medium，英文命中 LeftistMonoSerif；原生应用与其他设备仍需验证。
+在 Windows 上，把三个原文件放入 `.local/fonts/` 对应子目录，从仓库根目录运行 `python scripts/install-design-fonts.py`，即可将字体注册到当前用户。使用其他来源目录时，用 `--font-root` 指定路径。[安装脚本](../../scripts/install-design-fonts.py)
+
+已有设计验收中，Paper 重启后识别了文楷 400/500 和 Leftist 的原生族名 `Leftist Mono Sans` 400。六张正式 VI 画板已核对字形与换行，本地原型导览通过 Chrome DevTools Protocol 确认中文分别命中文楷 Regular／Medium，英文命中 LeftistMonoSerif。
 
 [theme.css](../theme.css)使用三个 PostScript 名称声明 `local()` 字体：`LXGWWenKai-Regular`、`LXGWWenKai-Medium`、`LeftistMonoSerif`。其他开发环境取得对应原文件后，可运行安装脚本并重新加载预览环境。
 

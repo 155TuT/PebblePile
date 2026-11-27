@@ -87,7 +87,7 @@ npx expo run:android
 | `python scripts/build-prototype-preview.py` | 从 Paper 导出源与动作清单生成点击导览 |
 | `python scripts/build-prototype-preview.py --check` | 检查原型画板与动作映射 |
 | `python scripts/render-information-architecture.py` | 从 Mermaid 思维导图与 VI token 生成信息架构 SVG |
-| `./scripts/render-diagrams.ps1 -PlantUmlJar "JAR 路径"` | 使用 Java 与官方 PlantUML JAR 渲染系统和数据库图 |
+| `python scripts/render-diagrams.py --plantuml-jar "JAR 路径"` | 使用 Java 与官方 PlantUML JAR 渲染系统和数据库图 |
 | `.\android\gradlew.bat -p android :app:assembleDebug` | 在仓库根目录构建 Android 调试包 |
 
 ## 项目文档
@@ -105,7 +105,7 @@ npx expo run:android
 
 系统与数据库说明书参照 GB/T 8567—2006 编排，当前作为设计基线。历史材料见 [早期菜谱方向](docs/recipe/)。
 
-[图形源文件与 SVG](docs/diagrams/)保存在同一目录。转换 Markdown 文档时保留相对目录即可。维护脚本见 [UML 渲染脚本](scripts/render-diagrams.ps1)和 [信息架构渲染脚本](scripts/render-information-architecture.py)。
+[图形源文件与 SVG](docs/diagrams/)保存在同一目录。转换 Markdown 文档时保留相对目录即可。维护脚本见 [UML 渲染脚本](scripts/render-diagrams.py)和 [信息架构渲染脚本](scripts/render-information-architecture.py)。
 
 ### 视觉设计与原型
 

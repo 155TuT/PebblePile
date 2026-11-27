@@ -170,7 +170,7 @@
     "paperFormalTextNodes": 257
   },
   "installation": {
-    "script": "scripts/install-design-fonts.ps1",
+    "script": "scripts/install-design-fonts.py",
     "scope": "Windows current user",
     "target": "%LOCALAPPDATA%/Microsoft/Windows/Fonts",
     "registry": "HKCU/Software/Microsoft/Windows NT/CurrentVersion/Fonts",

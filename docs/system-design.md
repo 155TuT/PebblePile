@@ -341,6 +341,6 @@ Agent 标签表示对内容的语义标注。标签可表达场景、主题、�
 
 ## 附录 图形源文件与交付
 
-本文图形使用统一字体、颜色、方向箭头及领域命名。SVG（Scalable Vector Graphics，可缩放矢量图形）对应 [diagrams](diagrams/) 中同名 `.puml` 文件，修改后可用[渲染脚本](../scripts/render-diagrams.ps1)更新。图 4—图 6 拆开展示同一领域模型，以保留打印字号；数据库图独立展示键与关联。
+本文图形使用统一字体、颜色、方向箭头及领域命名。SVG（Scalable Vector Graphics，可缩放矢量图形）对应 [diagrams](diagrams/) 中同名 `.puml` 文件，修改后可用[渲染脚本](../scripts/render-diagrams.py)更新。图 4—图 6 拆开展示同一领域模型，以保留打印字号；数据库图独立展示键与关联。
 
 课程提交文件名使用“你所热爱的就是软件工程_系统设计说明书.pdf”。本文保留 Markdown 和已渲染图形，转换时将 `docs/diagrams` 一并保留。项目图标见 [assets/icon.svg](../assets/icon.svg)。

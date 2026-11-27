@@ -78,7 +78,7 @@ SVG 保留 `viewBox`、必要的路径与层次。功能图标保留上游文件
 修改 PlantUML 后，可使用已有脚本：
 
 ```powershell
-./scripts/render-diagrams.ps1 -PlantUmlJar <官方 PlantUML JAR 路径>
+python scripts/render-diagrams.py --plantuml-jar <官方 PlantUML JAR 路径>
 git diff --check
 ```
 
