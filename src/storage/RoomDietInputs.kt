@@ -7,6 +7,7 @@ import com.pebblepile.android.model.PebbleRecord
 import com.pebblepile.android.model.SourceRef
 import com.pebblepile.scheduler.StaleInputException
 import com.pebblepile.scheduler.TaskInput
+import com.pebblepile.utils.toLowerHex
 import java.security.MessageDigest
 
 /** Reads within the caller's transaction. Stage guards project only IDs and revisions. */
@@ -50,7 +51,7 @@ internal class RoomDietInputs(private val database: PebbleDatabase) {
             part(row.sourceId)
             part(row.sourceVersion.toString())
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+        return digest.digest().toLowerHex()
     }
 
     fun read(input: TaskInput): DietTaskContext {

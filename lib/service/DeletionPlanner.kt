@@ -11,6 +11,7 @@ import com.pebblepile.android.repository.DeletionReader
 import com.pebblepile.android.repository.DeletionTraversal
 import com.pebblepile.android.repository.DeletionTraversal.FULL_OBJECT
 import com.pebblepile.android.repository.DeletionTraversal.RECORD_VIEW
+import com.pebblepile.utils.toLowerHex
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -115,7 +116,7 @@ internal class DeletionPreviewTokens {
         appendItems("invalidate", plan.invalidate)
         appendItems("cancel", plan.cancel)
         appendItems("rebuild", plan.rebuild)
-        return mac.doFinal().joinToString("") { "%02x".format(it) }
+        return mac.doFinal().toLowerHex()
     }
 
     fun matches(previewId: String, expected: String): Boolean =

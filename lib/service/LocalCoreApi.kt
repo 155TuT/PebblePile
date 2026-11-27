@@ -32,6 +32,7 @@ import com.pebblepile.android.repository.DeletionWriter
 import com.pebblepile.android.repository.OperationKey
 import com.pebblepile.android.repository.RepositoryWriteException
 import com.pebblepile.android.repository.StoredReceipt
+import com.pebblepile.utils.toLowerHex
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.time.DateTimeException
@@ -541,7 +542,7 @@ class LocalCoreApi(
             digest.update(ByteBuffer.allocate(Int.SIZE_BYTES).putInt(bytes?.size ?: -1).array())
             if (bytes != null) digest.update(bytes)
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+        return digest.digest().toLowerHex()
     }
 
     private companion object {

@@ -5,7 +5,7 @@ plugins {
 kotlin {
     jvmToolchain(17)
     val clientRoot = projectDir.resolve("../../..")
-    sourceSets.main { kotlin.setSrcDirs(listOf(clientRoot.resolve("lib/scheduler"))) }
+    sourceSets.main { kotlin.setSrcDirs(listOf(clientRoot.resolve("lib/scheduler"), clientRoot.resolve("utils"))) }
     sourceSets.test { kotlin.setSrcDirs(listOf(clientRoot.resolve("test/scheduler-core"))) }
 }
 

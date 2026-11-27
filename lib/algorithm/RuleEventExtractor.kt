@@ -1,5 +1,6 @@
 package com.pebblepile.android.algorithm
 
+import com.pebblepile.utils.toLowerHex
 import java.security.MessageDigest
 import java.util.concurrent.CancellationException
 
@@ -114,7 +115,7 @@ class RuleEventExtractor(
         val key = source.eventId?.takeIf { it.isNotBlank() } ?: run {
             val normalized = text.trim().replace("\r\n", "\n").replace('\r', '\n')
             val digest = MessageDigest.getInstance("SHA-256").digest(normalized.toByteArray(Charsets.UTF_8))
-            "text:" + digest.joinToString("") { "%02x".format(it) }
+            "text:" + digest.toLowerHex()
         }
         return ExtractedEvent(key, type, tags, facts, evidence, text, subject, weekday, source)
     }

@@ -1,5 +1,6 @@
 package com.pebblepile.scheduler
 
+import com.pebblepile.utils.toLowerHex
 import java.security.MessageDigest
 
 /** 任务阶段按固定顺序执行；恢复时从第一个未完成阶段继续。 */
@@ -174,7 +175,7 @@ private fun digest(parts: List<String>): String {
     val raw = parts.joinToString("") { "${it.length}:$it" }
     return MessageDigest.getInstance("SHA-256")
         .digest(raw.toByteArray(Charsets.UTF_8))
-        .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        .toLowerHex()
 }
 
 fun taskKey(input: TaskInput): String = digest(
