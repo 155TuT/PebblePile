@@ -1,4 +1,13 @@
-// Both the standalone app and the Expo host compile the same Android client sources.
+// Both Android hosts compile the same client. Each contributes its own manifest and entry point.
+android.sourceSets.main {
+    ['src/runtime', 'src/storage', 'src/screens', 'components/compose',
+     'lib/algorithm', 'lib/model', 'lib/repository', 'lib/service'].each { location ->
+        java.srcDir new File(clientRoot, location)
+    }
+    res.srcDir new File(clientRoot, 'assets/android/res')
+    assets.srcDir new File(clientRoot, 'assets/android/assets')
+}
+
 dependencies {
     implementation 'androidx.core:core-ktx:1.15.0'
     implementation 'androidx.activity:activity-compose:1.9.3'

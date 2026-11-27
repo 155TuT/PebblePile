@@ -4,21 +4,22 @@ on:
   push:
     branches:
       - main
-    paths:
+    paths: &client_paths
       - "android/**"
+      - "src/**"
+      - "lib/**"
+      - "utils/**"
+      - "config/**"
+      - "components/**"
+      - "assets/android/**"
+      - "scripts/gradle.py"
+      - "test/**"
+      - "docs/user-research.md"
       - ".github/workflows/android-ci.yml"
       - ".github/workflows/android-release.yml"
       - ".github/scripts/android-*"
-      - "test/**"
-      - "docs/user-research.md"
   pull_request:
-    paths:
-      - "android/**"
-      - ".github/workflows/android-ci.yml"
-      - ".github/workflows/android-release.yml"
-      - ".github/scripts/android-*"
-      - "test/**"
-      - "docs/user-research.md"
+    paths: *client_paths
   workflow_dispatch:
 
 permissions:
@@ -57,41 +58,38 @@ jobs:
           packages: 'platform-tools platforms;android-35 build-tools;34.0.0'
 
       - name: Build, test and lint
-        working-directory: android
         run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon \
+          python3 scripts/gradle.py --no-daemon \
             :scheduler-core:test :scheduler-android:testDebugUnitTest :scheduler-android:assembleDebug :scheduler-android:lintDebug \
             :app:testDebugUnitTest \
             :app:lintDebug \
             :app:assembleDebug
 
       - name: Verify debug APK and source revision
-        working-directory: android
         run: |
-          apk_dir=app/build/outputs/apk
+          apk_dir=build/native/app/outputs/apk
           test ! -e "$apk_dir/androidTest"
-          version_name="$(sed -n 's/^versionName=//p' version.properties)+$(git rev-parse --short=12 HEAD)"
-          version_code="$(sed -n 's/^versionCode=//p' version.properties)"
+          version_name="$(sed -n 's/^versionName=//p' config/version.properties)+$(git rev-parse --short=12 HEAD)"
+          version_code="$(sed -n 's/^versionCode=//p' config/version.properties)"
           badging="$("$ANDROID_HOME/build-tools/34.0.0/aapt" dump badging "$apk_dir/debug/app-debug.apk")"
           grep -F "package: name='com.pebblepile.android' versionCode='$version_code' versionName='$version_name'" <<< "$badging"
 
       - name: Upload JVM test report
-        if: ${{ !cancelled() && hashFiles('android/*/build/test-results/*/TEST-*.xml') != '' }}
+        if: ${{ !cancelled() && hashFiles('build/native/*/test-results/*/TEST-*.xml') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: android-unit-test-report-${{ github.sha }}
           path: |
-            android/scheduler-core/build/test-results/test/TEST-*.xml
-            android/scheduler-android/build/test-results/testDebugUnitTest/TEST-*.xml
-            android/app/build/reports/tests/testDebugUnitTest/
-            android/app/build/test-results/testDebugUnitTest/TEST-*.xml
+            build/native/scheduler-core/test-results/test/TEST-*.xml
+            build/native/scheduler-android/test-results/testDebugUnitTest/TEST-*.xml
+            build/native/app/reports/tests/testDebugUnitTest/
+            build/native/app/test-results/testDebugUnitTest/TEST-*.xml
           retention-days: 14
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: pebblepile-debug-${{ github.sha }}
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: build/native/app/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14

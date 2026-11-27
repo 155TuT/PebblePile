@@ -7,7 +7,14 @@ android {
     namespace = "com.pebblepile.scheduler.work"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
-    sourceSets.getByName("test").java.setSrcDirs(listOf(projectDir.resolve("../../test/scheduler-android")))
+    val clientRoot = projectDir.resolve("../../..")
+    sourceSets {
+        getByName("main") {
+            java.setSrcDirs(listOf(clientRoot.resolve("src/work")))
+            manifest.srcFile(clientRoot.resolve("src/work/AndroidManifest.xml"))
+        }
+        getByName("test").java.setSrcDirs(listOf(clientRoot.resolve("test/scheduler-android")))
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

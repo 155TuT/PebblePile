@@ -6,5 +6,4 @@ dependencyResolutionManagement {
     repositories { google(); mavenCentral() }
 }
 rootProject.name = "PebblePileAndroid"
-include(":app")
-include(":scheduler-core", ":scheduler-android")
+include(":app", ":scheduler-core", ":scheduler-android")

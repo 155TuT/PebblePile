@@ -11,7 +11,7 @@ const {
 
 const sharedProjects = `['scheduler-core', 'scheduler-android'].each { name ->
     include ":$name"
-    project(":$name").projectDir = new File(rootDir, "../../android/$name")
+    project(":$name").projectDir = new File(rootDir, "../../config/gradle/$name")
 }
 
 // Keep the standalone and Expo builds' intermediates in their respective projects.
@@ -30,7 +30,7 @@ function patchTemplate(source, from, to) {
 function withNativeManifest(config) {
   return withAndroidManifest(config, async (mod) => {
     const source = await AndroidConfig.Manifest.readAndroidManifestAsync(
-      path.resolve(mod.modRequest.projectRoot, '../android/app/src/main/AndroidManifest.xml'),
+      path.resolve(mod.modRequest.projectRoot, '../src/runtime/AndroidManifest.xml'),
     );
     const nativeApp = source.manifest.application[0];
     const host = AndroidConfig.Manifest.getMainApplicationOrThrow(mod.modResults);

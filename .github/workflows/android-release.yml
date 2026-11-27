@@ -53,11 +53,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version_name="$(sed -n 's/^versionName=//p' android/version.properties)"
-          version_code="$(sed -n 's/^versionCode=//p' android/version.properties)"
+          version_name="$(sed -n 's/^versionName=//p' config/version.properties)"
+          version_code="$(sed -n 's/^versionCode=//p' config/version.properties)"
 
           if [[ ! "$version_name" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$ ]]; then
-            echo "Invalid versionName in android/version.properties: $version_name" >&2
+            echo "Invalid versionName in config/version.properties: $version_name" >&2
             exit 1
           fi
           if [[ ! "$version_code" =~ ^[1-9][0-9]*$ ]]; then
@@ -97,24 +97,21 @@ jobs:
           packages: 'platform-tools platforms;android-35 build-tools;34.0.0 build-tools;35.0.0'
 
       - name: Build signed release APK
-        working-directory: android
         env:
           PEBBLEPILE_KEYSTORE_PASSWORD: ${{ secrets.PEBBLEPILE_KEYSTORE_PASSWORD }}
           PEBBLEPILE_KEY_ALIAS: ${{ secrets.PEBBLEPILE_KEY_ALIAS }}
           PEBBLEPILE_KEY_PASSWORD: ${{ secrets.PEBBLEPILE_KEY_PASSWORD }}
         run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon clean :app:assembleRelease
+          python3 scripts/gradle.py --no-daemon clean :app:assembleRelease
 
       - name: Verify package and create checksums
-        working-directory: android
         shell: bash
         env:
           VERSION_NAME: ${{ steps.version.outputs.name }}
           VERSION_CODE: ${{ steps.version.outputs.code }}
         run: |
           set -euo pipefail
-          apk_source="app/build/outputs/apk/release/app-release.apk"
+          apk_source="build/native/app/outputs/apk/release/app-release.apk"
           test -f "$apk_source"
 
           build_tools="$ANDROID_HOME/build-tools/35.0.0"
@@ -129,15 +126,15 @@ jobs:
           grep -F "versionCode='$VERSION_CODE'" <<< "$badging"
           grep -F "versionName='$VERSION_NAME'" <<< "$badging"
 
-          mkdir -p ../dist
+          mkdir -p dist
           apk_name="PebblePile-${VERSION_NAME}.apk"
-          cp "$apk_source" "../dist/$apk_name"
+          cp "$apk_source" "dist/$apk_name"
           (
-            cd ../dist
+            cd dist
             sha256sum "$apk_name" > SHA256SUMS.txt
           )
 
-          cat > ../dist/build-info.json <<EOF
+          cat > dist/build-info.json <<EOF
           {
             "schemaVersion": 1,
             "applicationId": "com.pebblepile.android",
@@ -147,7 +144,7 @@ jobs:
             "workflowRunId": "$GITHUB_RUN_ID",
             "workflowRunAttempt": "$GITHUB_RUN_ATTEMPT",
             "apk": "$apk_name",
-            "sha256": "$(cut -d' ' -f1 ../dist/SHA256SUMS.txt)"
+            "sha256": "$(cut -d' ' -f1 dist/SHA256SUMS.txt)"
           }
           EOF
 
@@ -167,8 +164,7 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          working-directory: android
-          script: bash ../test/release/android-candidate-smoke.sh
+          script: bash test/release/android-candidate-smoke.sh
 
       - name: Write release notes
         shell: bash
@@ -204,9 +200,8 @@ jobs:
           - 校验文件：\`SHA256SUMS.txt\`
           EOF
 
-          test -f android/release-notes.md
           printf '\n' >> dist/release-notes.md
-          cat android/release-notes.md >> dist/release-notes.md
+          cat "docs/releases/${VERSION_NAME%%-*}.md" >> dist/release-notes.md
 
       - name: Upload signed candidate
         uses: actions/upload-artifact@v4

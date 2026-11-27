@@ -75,7 +75,7 @@
       "unitsPerEm": 1000,
       "variableAxes": [],
       "fontBinaryIncludedInRepository": true,
-      "androidResource": "android/app/src/main/res/font/lxgw_wenkai_regular.ttf"
+      "androidResource": "assets/android/res/font/lxgw_wenkai_regular.ttf"
     },
     {
       "file": "LXGWWenKai-Medium.ttf",
@@ -113,7 +113,7 @@
       "unitsPerEm": 1000,
       "variableAxes": [],
       "fontBinaryIncludedInRepository": true,
-      "androidResource": "android/app/src/main/res/font/lxgw_wenkai_medium.ttf"
+      "androidResource": "assets/android/res/font/lxgw_wenkai_medium.ttf"
     },
     {
       "file": "LeftistMonoSerif.ttf",

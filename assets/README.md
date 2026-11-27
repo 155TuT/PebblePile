@@ -21,4 +21,6 @@
 
 ## 设计资产
 
+Android 开发包和正式包从 [android/res/](android/res/) 读取字体、图标与其他界面资源。随包分发的字体与图标许可保存在 [android/assets/licenses/](android/assets/licenses/)。
+
 [字体说明](fonts/README.md)维护霞鹜文楷 + Leftist Mono Serif 的角色、加载与许可。[设计 token](design-tokens.json)、[主题 CSS](theme.css)和[组件 CSS](components.css)保存正式新拟物规则；[vi/](vi/)只保留当前排版、基础组件与系统组件快照。品牌图直接使用本页 SVG，历史对照保留在 [Paper 探索页](https://app.paper.design/file/01M41JA45T3KFWNYX3GFW8SB5Q/p-3-0)。

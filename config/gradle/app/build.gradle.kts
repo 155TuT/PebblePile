@@ -10,8 +10,9 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val clientRoot = rootDir.parentFile.parentFile
 val versionProperties = Properties().apply {
-    val versionFile = rootProject.file("version.properties")
+    val versionFile = clientRoot.resolve("config/version.properties")
     if (versionFile.isFile) {
         versionFile.reader(Charsets.UTF_8).use { reader -> load(reader) }
     }
@@ -64,10 +65,14 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    for ((name, directory) in mapOf("test" to "unit", "androidTest" to "device")) {
-        sourceSets.getByName(name).apply {
-            java.setSrcDirs(listOf(rootProject.file("../test/$directory"), rootProject.file("../test/shared")))
-            resources.srcDir(rootProject.file("../test/fixtures/issue10"))
+    sourceSets {
+        getByName("main").manifest.srcFile(clientRoot.resolve("src/runtime/AndroidManifest.xml"))
+        getByName("debug").java.srcDir(clientRoot.resolve("components/preview"))
+        for ((name, directory) in mapOf("test" to "unit", "androidTest" to "device")) {
+            getByName(name).apply {
+                java.setSrcDirs(listOf(clientRoot.resolve("test/$directory"), clientRoot.resolve("test/shared")))
+                resources.setSrcDirs(listOf(clientRoot.resolve("test/fixtures/issue10")))
+            }
         }
     }
 
@@ -103,15 +108,15 @@ android {
 
 // Git archives keep the version from version.properties. A checkout also identifies
 // the source revision in the installable debug APK, including incremental builds.
-val checkoutDir = rootProject.projectDir.parentFile
-if (checkoutDir.resolve(".git").exists()) {
+if (clientRoot.resolve(".git").exists()) {
     fun gitOutput(vararg args: String) = providers.exec {
-        workingDir(checkoutDir)
+        workingDir(clientRoot)
         commandLine("git", *args)
     }.standardOutput.asText.map { it.trim() }
 
     val revision = gitOutput("rev-parse", "--short=12", "HEAD")
-    val changes = gitOutput("--no-optional-locks", "status", "--porcelain", "--untracked-files=normal", "--", "android", "test")
+    val changes = gitOutput("--no-optional-locks", "status", "--porcelain", "--untracked-files=normal", "--",
+        "src", "lib", "components", "utils", "config", "test", "assets/android", "scripts/gradle.py")
     val debugVersionName = revision.zip(changes) { hash, status ->
         if (status.isEmpty()) "$pebblePileVersionName+$hash" else "$pebblePileVersionName+$hash.dirty"
     }
@@ -146,7 +151,8 @@ tasks.matching { name == "packageRelease" || name == "bundleRelease" }.configure
     }
 }
 
-apply(from = rootProject.file("gradle/client-dependencies.gradle"))
+extra["clientRoot"] = clientRoot
+apply(from = rootProject.file("android-client.gradle"))
 
 dependencies {
     implementation(project(":scheduler-android"))
@@ -164,8 +170,8 @@ dependencies {
 // Gradle passes project-local test outputs through a JVM argument file. On Windows,
 // non-ASCII checkout paths can be decoded with the platform charset before the test
 // worker starts, which makes every compiled test class appear to be missing.
-if (File.separatorChar == '\\' && !StandardCharsets.US_ASCII.newEncoder().canEncode(rootDir.absolutePath)) {
-    val projectRoot = rootDir.toPath().toAbsolutePath().normalize()
+if (File.separatorChar == '\\' && !StandardCharsets.US_ASCII.newEncoder().canEncode(clientRoot.absolutePath)) {
+    val projectRoot = clientRoot.toPath().toAbsolutePath().normalize()
     val checkoutId = UUID.nameUUIDFromBytes(projectRoot.toString().toByteArray(Charsets.UTF_8))
     tasks.withType<Test>().configureEach {
         doFirst {

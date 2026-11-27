@@ -11,19 +11,13 @@ apply plugin: 'expo-module-gradle-plugin'
 apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 apply plugin: 'com.google.devtools.ksp'
 
-def clientProject = rootProject.file('../../android')
-def clientSources = new File(clientProject, 'app/src/main')
+ext.clientRoot = rootDir.parentFile.parentFile
 
 expoModule { canBePublished false }
 
 android {
     namespace 'com.pebblepile.android'
     buildFeatures { compose true }
-    sourceSets.main {
-        java.srcDir new File(clientSources, 'java')
-        res.srcDir new File(clientSources, 'res')
-        assets.srcDir new File(clientSources, 'assets')
-    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -31,7 +25,7 @@ android {
 }
 kotlin { jvmToolchain(17) }
 
-apply from: new File(clientProject, 'gradle/client-dependencies.gradle')
+apply from: new File(clientRoot, 'config/gradle/android-client.gradle')
 
 dependencies {
     // Compile FlowRow and other Compose calls against the version packaged by the SDK 55 dev client.
