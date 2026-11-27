@@ -19,6 +19,7 @@ PebblePile · 叠石面向移动端个人记忆与偏好建模。当前冲刺交
 | 位置 | 内容与维护方式 |
 | --- | --- |
 | `android/` | Android 客户端、业务接口、仓储实现与设备测试 |
+| `mobile/` | Expo Android 开发入口和本地原生模块。环境准备与调试见[开发指南](mobile/README.md) |
 | `.github/workflows/` | 调试构建、候选 APK 签名与验收后的原包发布 |
 | `docs/` | 需求、设计、联调契约与验收材料 |
 | `docs/diagrams/` | PlantUML／Mermaid 源文件及正式 SVG；修改源文件后更新对应图形 |

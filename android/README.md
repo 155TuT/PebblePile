@@ -23,6 +23,8 @@
 
 ## 构建与测试
 
+日常联调可通过 Expo 开发包打开这里的 Compose 页面、Room 仓储与后台任务。开发入口、模拟器配置、Fast Refresh 和原生断点见 [Expo Android 开发指南](../mobile/README.md)。
+
 在 `android/` 目录下运行。环境需要 JDK 17 或 21、Android SDK 35 和仓库自带的 Gradle Wrapper。首条命令运行调度及应用单元测试、Lint 检查，并生成调试 APK。
 
 ```powershell

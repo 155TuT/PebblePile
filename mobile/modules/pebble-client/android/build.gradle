@@ -1,0 +1,42 @@
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies {
+        classpath("org.jetbrains.kotlin:compose-compiler-gradle-plugin:${rootProject.ext.kotlinVersion}")
+        classpath("com.google.devtools.ksp:symbol-processing-gradle-plugin:${rootProject.ext.kspVersion}")
+    }
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'expo-module-gradle-plugin'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+apply plugin: 'com.google.devtools.ksp'
+
+def clientProject = rootProject.file('../../android')
+def clientSources = new File(clientProject, 'app/src/main')
+
+expoModule { canBePublished false }
+
+android {
+    namespace 'com.pebblepile.android'
+    buildFeatures { compose true }
+    sourceSets.main {
+        java.srcDir new File(clientSources, 'java')
+        res.srcDir new File(clientSources, 'res')
+        assets.srcDir new File(clientSources, 'assets')
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+kotlin { jvmToolchain(17) }
+
+apply from: new File(clientProject, 'gradle/client-dependencies.gradle')
+
+dependencies {
+    // Compile FlowRow and other Compose calls against the version packaged by the SDK 55 dev client.
+    implementation 'androidx.compose.foundation:foundation:1.9.3'
+    // The host Application inherits WorkManager's Configuration.Provider.
+    api project(':scheduler-android')
+    implementation 'com.facebook.react:react-android'
+}

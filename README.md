@@ -7,6 +7,7 @@
 
 <p align="center">
   <a href="#快速开始">快速开始</a> ·
+  <a href="mobile/README.md">Expo 开发调试</a> ·
   <a href="docs/android-build-release.md">Android 构建与发布</a> ·
   <a href="#项目文档">项目文档</a> ·
   <a href="LICENSE">MIT License</a>
@@ -18,7 +19,8 @@
 
 ## 快速开始
 
-- **Android 客户端**：在 Android 8.0 及以上设备安装 [0.1.0 稳定版](https://github.com/155TuT/PebblePile/releases/tag/v0.1.0)，或按[本地运行](#本地运行)构建调试包。安装后在首页记一段原话，或从其他应用分享纯文本，再到记录库打开同一条记录。
+- **Android 客户端**：在 Android 8.0 及以上设备安装 [0.1.0 稳定版](https://github.com/155TuT/PebblePile/releases/tag/v0.1.0)。安装后在首页记一段原话，或从其他应用分享纯文本，再到记录库打开同一条记录。
+- **开发调试**：从 [本地运行](#本地运行) 启动 Expo Android 开发包。在模拟器上操作叠石，并用 Fast Refresh 查看 TypeScript 改动。
 - **在线查看**：[Paper 移动端原型](https://app.paper.design/file/01M41JA45T3KFWNYX3GFW8SB5Q/p-5-0)包含 20 个画板，覆盖输入、整理、记录回查、反馈和记忆纠正。
 - **本地体验**：下载完整仓库，用浏览器打开 [本地点击导览](assets/prototype/index.html)。导览使用虚构资料模拟页面跳转、输入和反馈，无需启动服务器。
 
@@ -33,7 +35,7 @@
 
 Android 客户端使用 Kotlin、Jetpack Compose 和 Navigation Compose，数据存储使用 Room，后台调度使用 WorkManager。
 
-构建链为 Gradle Wrapper 8.9、Android Gradle Plugin 8.7.3、JDK 17、compileSdk 35，最低支持 Android 8.0（API 26）。CI 使用 JDK 17 和 Android SDK 35。
+开发入口使用 Expo SDK 55 和 React Native 0.83，通过本地原生视图挂载同一套 Compose 页面。正式 Android 工程使用 Gradle Wrapper 8.9、Android Gradle Plugin 8.7.3 和 compileSdk 35，最低支持 Android 8.0（API 26）。CI 使用 JDK 17 和 Android SDK 35。
 
 ## 项目架构
 
@@ -50,6 +52,7 @@ PebblePile/
 │   ├── prototype/           # 点击导览、Paper 导出源与动作清单
 │   └── vi/                  # 正式设计快照
 ├── android/                 # Kotlin + Jetpack Compose Android 工程
+├── mobile/                  # Expo 调试入口与本地原生模块
 ├── docs/                    # 产品需求、调研与设计说明
 │   ├── diagrams/            # PlantUML／Mermaid 源文件与 SVG
 │   └── recipe/              # 早期菜谱方向的研究和需求
@@ -60,14 +63,20 @@ PebblePile/
 
 ## 本地运行
 
-构建调试 APK：
+安装 Node.js、OpenJDK 17、Android Studio 和所需 SDK，并在 Device Manager 创建 Android 模拟器。首次从仓库根目录安装开发依赖。[环境配置](mobile/README.md#准备环境)
 
 ```powershell
-cd android
-.\gradlew.bat clean testDebugUnitTest lintDebug assembleDebug
+cd mobile
+npm ci
 ```
 
-产物为 `android/app/build/outputs/apk/debug/app-debug.apk`。运行前设置 JDK 17 或 21 的 `JAVA_HOME` 与 Android SDK 35 的 `ANDROID_HOME`，详见 [Android 构建、签名与发布](docs/android-build-release.md)。
+以后在 `mobile/` 中运行一条命令，Expo 会选择模拟器、编译并安装开发包、启动 Metro，随后打开叠石。
+
+```sh
+npx expo run:android
+```
+
+开发包使用独立的本地数据库，可与正式版同时安装。[热刷新与断点调试](mobile/README.md#热刷新与调试) · [原生 APK 构建、签名与发布](docs/android-build-release.md)
 
 ## 常用命令
 

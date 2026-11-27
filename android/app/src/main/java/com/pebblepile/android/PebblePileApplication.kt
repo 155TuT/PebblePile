@@ -8,7 +8,7 @@ import androidx.work.WorkManager
 import com.pebblepile.android.service.CoreApi
 import com.pebblepile.scheduler.work.PersistentTaskWorkerFactory
 
-class PebblePileApplication : Application(), Configuration.Provider {
+open class PebblePileApplication : Application(), Configuration.Provider {
     internal val taskRuntime by lazy { AndroidTaskRuntime(this) }
     val coreApi: CoreApi by lazy { DemoCoreApi(this) }
 

@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "叠石 · 开发版",
+    "slug": "pebblepile",
+    "version": "0.1.0",
+    "platforms": ["android"],
+    "orientation": "portrait",
+    "scheme": "pebblepile-dev",
+    "android": {
+      "package": "com.pebblepile.mobile.dev",
+      "allowBackup": false
+    },
+    "plugins": ["expo-dev-client", "./plugins/withPebbleAndroid"]
+  }
+}

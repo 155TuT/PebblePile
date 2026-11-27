@@ -9,7 +9,9 @@
 | 候选验证 | API 35 模拟器通过 96 项调试版设备用例，随后安装签名 APK 并启动首页。[候选构建](https://github.com/155TuT/PebblePile/actions/runs/45604399762) |
 | 正式发布 | 工作流校验同一份候选文件，在来源提交上建标签并上传 Release。[发布运行](https://github.com/155TuT/PebblePile/actions/runs/45618461469) |
 
-## 环境基线
+日常在模拟器上开发可从 `mobile/` 启动 Expo，安装与调试步骤见 [Expo Android 开发指南](../mobile/README.md)。下文用于 `android/` 原生工程的构建、设备测试和签名发布。
+
+## 原生工程环境基线
 
 | 项目 | 取值 |
 | --- | --- |

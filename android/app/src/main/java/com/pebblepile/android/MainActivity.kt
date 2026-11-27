@@ -26,9 +26,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -52,7 +55,7 @@ private const val MEMORY_ROUTE = "settings/memory"
 private const val RULES_ROUTE = "settings/rules"
 private const val DATA_ROUTE = "settings/data"
 
-private data class PendingShare(val text: String, val operationId: String)
+internal data class PendingShare(val text: String, val operationId: String)
 private data class UiToast(val message: String, val state: PebbleFeedbackState)
 
 private val StringSetSaver = Saver<Set<String>, ArrayList<String>>(
@@ -62,14 +65,9 @@ private val StringSetSaver = Saver<Set<String>, ArrayList<String>>(
 
 class MainActivity : ComponentActivity() {
     private var pendingShare by mutableStateOf<PendingShare?>(null)
-    private var settings by mutableStateOf(PebbleSettings())
-    private val settingsStore by lazy { PebbleSettingsStore(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        settings = settingsStore.load()
-        val api = (application as PebblePileApplication).coreApi
-        api.setAutoOrganize(settings.autoOrganize)
         if (savedInstanceState == null) {
             acceptShare(intent)
         } else {
@@ -78,30 +76,10 @@ class MainActivity : ComponentActivity() {
             if (text != null && id != null) pendingShare = PendingShare(text, id)
         }
         setContent {
-            val density = LocalDensity.current
-            val adjustedDensity = remember(density, settings.textScale) {
-                Density(density.density, density.fontScale * settings.textScale.multiplier)
-            }
-            CompositionLocalProvider(LocalDensity provides adjustedDensity) {
-                PebbleComponentTheme {
-                    PebbleApp(
-                        api = api,
-                        settings = settings,
-                        pendingShare = pendingShare,
-                        onSettingsChange = ::updateSettings,
-                        onShareConsumed = { consumed ->
-                            if (pendingShare == consumed) pendingShare = null
-                        },
-                    )
-                }
-            }
+            PebbleClientContent(pendingShare = pendingShare, onShareConsumed = { consumed ->
+                if (pendingShare == consumed) pendingShare = null
+            })
         }
-    }
-
-    private fun updateSettings(updated: PebbleSettings) {
-        settings = updated
-        settingsStore.save(updated)
-        (application as PebblePileApplication).coreApi.setAutoOrganize(updated.autoOrganize)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -127,8 +105,45 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+internal fun PebbleClientContent(
+    homeTitle: String = "叠石",
+    pendingShare: PendingShare? = null,
+    onShareConsumed: (PendingShare) -> Unit = {},
+) {
+    val application = LocalContext.current.applicationContext as PebblePileApplication
+    val api = application.coreApi
+    val store = remember(application) { PebbleSettingsStore(application) }
+    var settings by remember(store) { mutableStateOf(store.load()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        settings = store.load()
+        api.setAutoOrganize(settings.autoOrganize)
+    }
+    val density = LocalDensity.current
+    val adjustedDensity = remember(density, settings.textScale) {
+        Density(density.density, density.fontScale * settings.textScale.multiplier)
+    }
+    CompositionLocalProvider(LocalDensity provides adjustedDensity) {
+        PebbleComponentTheme {
+            PebbleApp(
+                api = api,
+                homeTitle = homeTitle,
+                settings = settings,
+                onSettingsChange = { updated ->
+                    settings = updated
+                    store.save(updated)
+                    api.setAutoOrganize(updated.autoOrganize)
+                },
+                pendingShare = pendingShare,
+                onShareConsumed = onShareConsumed,
+            )
+        }
+    }
+}
+
+@Composable
 private fun PebbleApp(
     api: CoreApi,
+    homeTitle: String,
     settings: PebbleSettings,
     pendingShare: PendingShare?,
     onSettingsChange: (PebbleSettings) -> Unit,
@@ -174,7 +189,7 @@ private fun PebbleApp(
         Column(Modifier.fillMaxSize()) {
             PebbleTopBar(
                 title = when (currentRoute) {
-                    HOME_ROUTE -> "叠石"
+                    HOME_ROUTE -> homeTitle
                     LIBRARY_ROUTE -> "记录库"
                     SETTINGS_ROUTE -> "设置"
                     MEMORY_ROUTE -> "记忆与偏好"
