@@ -64,10 +64,10 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    listOf("test", "androidTest").forEach { name ->
+    for ((name, directory) in mapOf("test" to "unit", "androidTest" to "device")) {
         sourceSets.getByName(name).apply {
-            java.srcDir("src/sharedTest/java")
-            resources.srcDir(rootProject.file("../docs/testing/issue10"))
+            java.setSrcDirs(listOf(rootProject.file("../test/$directory"), rootProject.file("../test/shared")))
+            resources.srcDir(rootProject.file("../test/fixtures/issue10"))
         }
     }
 
@@ -111,7 +111,7 @@ if (checkoutDir.resolve(".git").exists()) {
     }.standardOutput.asText.map { it.trim() }
 
     val revision = gitOutput("rev-parse", "--short=12", "HEAD")
-    val changes = gitOutput("--no-optional-locks", "status", "--porcelain", "--untracked-files=normal", "--", "android")
+    val changes = gitOutput("--no-optional-locks", "status", "--porcelain", "--untracked-files=normal", "--", "android", "test")
     val debugVersionName = revision.zip(changes) { hash, status ->
         if (status.isEmpty()) "$pebblePileVersionName+$hash" else "$pebblePileVersionName+$hash.dirty"
     }

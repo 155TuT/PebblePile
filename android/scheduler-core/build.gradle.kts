@@ -4,6 +4,7 @@ plugins {
 
 kotlin {
     jvmToolchain(17)
+    sourceSets.test { kotlin.setSrcDirs(listOf(projectDir.resolve("../../test/scheduler-core"))) }
 }
 
 dependencies {

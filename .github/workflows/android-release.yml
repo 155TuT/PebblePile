@@ -168,7 +168,7 @@ jobs:
           arch: x86_64
           disable-animations: true
           working-directory: android
-          script: bash ../.github/scripts/android-candidate-smoke.sh
+          script: bash ../test/release/android-candidate-smoke.sh
 
       - name: Write release notes
         shell: bash

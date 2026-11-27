@@ -5,7 +5,7 @@ import com.google.gson.JsonParser
 /** Frozen issue #10 inputs shared by every repository implementation. */
 internal object Issue10Fixtures {
     private val fixtures = requireNotNull(Issue10Fixtures::class.java.getResourceAsStream("/fixtures.json")) {
-        "Expected docs/testing/issue10/fixtures.json on the test classpath"
+        "Expected test/fixtures/issue10/fixtures.json on the test classpath"
     }.bufferedReader(Charsets.UTF_8).use { JsonParser.parseReader(it).asJsonObject }
 
     fun text(group: String, id: String): String = fixtures.getAsJsonArray(group)

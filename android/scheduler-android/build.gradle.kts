@@ -7,6 +7,7 @@ android {
     namespace = "com.pebblepile.scheduler.work"
     compileSdk = 35
     defaultConfig { minSdk = 26 }
+    sourceSets.getByName("test").java.setSrcDirs(listOf(projectDir.resolve("../../test/scheduler-android")))
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

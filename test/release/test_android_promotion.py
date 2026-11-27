@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 
-CHECK = Path(__file__).resolve().parents[1] / "scripts" / "android-promote.py"
+CHECK = Path(__file__).resolve().parents[2] / ".github" / "scripts" / "android-promote.py"
 
 
 class CandidatePromotionTest(unittest.TestCase):

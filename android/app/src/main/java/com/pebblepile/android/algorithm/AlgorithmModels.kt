@@ -42,7 +42,7 @@ data class EvidenceRef(
 /**
  * 饮食场景抽取事实。`null` 表示原文未交代该信息，不补造。
  *
- * 字段口径对齐 `docs/testing/issue10/fixtures.json` 的 `expectedFacts`。
+ * 字段口径对齐 `test/fixtures/issue10/fixtures.json` 的 `expectedFacts`。
  */
 data class DietFacts(
     val scenario: String = "diet",
