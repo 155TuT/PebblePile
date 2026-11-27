@@ -425,7 +425,7 @@ Docker 用于可重复部署和隔离依赖。调研还应覆盖持久卷、数�
 
 ### 十、现有材料怎样沿这条主线重构
 
-现有 [research](../../research.md)、[PRD](../../prd.md)、[作业说明](../../homework.md)与 [PPT](../../ppt/outline.md)主要围绕菜谱导入、个人版本、做饭反馈和复用组织。来源、版本、反馈与恢复机制可以继续复用；新的中心对象应是**经历、证据、条件偏好与修订状态**。
+现有 [research](../../research.md)、[PRD](../../prd.md)、[作业说明](https://github.com/155TuT/2601-fzu-SoftwareEngineering-YuezhongWu/blob/bfa407f601fdcfbeb4357bb5c4758de72a950d0e/homework/team/task5/ans/recipe/homework.md)与 [PPT](https://github.com/155TuT/2601-fzu-SoftwareEngineering-YuezhongWu/blob/bfa407f601fdcfbeb4357bb5c4758de72a950d0e/homework/team/task5/ans/recipe/ppt/outline.md)主要围绕菜谱导入、个人版本、做饭反馈和复用组织。来源、版本、反馈与恢复机制可以继续复用；新的中心对象应是**经历、证据、条件偏好与修订状态**。
 
 | 材料 | 下一版应形成的主线 |
 | --- | --- |

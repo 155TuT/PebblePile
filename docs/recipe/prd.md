@@ -5,7 +5,7 @@
 | 所属团队 | 你所热爱的就是软件工程 |
 | 版本与日期 | v0.3 · 2026-10-25 |
 | 文档状态 | 需求评审稿，作为首期开发、演示和验收的共同依据 |
-| 需求来源 | [作业要求](../task-requirement.md)、[产品调研](research.md)、[团队定位记录](assets/research/qq-chat-2026-10-19.md)、[答辩反馈与项目反思](reply.md)中的“课上老师对大家答辩的反馈”和“对自己项目的反思” |
+| 需求来源 | [作业要求](https://github.com/155TuT/2601-fzu-SoftwareEngineering-YuezhongWu/blob/bfa407f601fdcfbeb4357bb5c4758de72a950d0e/homework/team/task5/task-requirement.md)、[产品调研](research.md)、[团队定位记录](assets/research/qq-chat-2026-10-19.md)、[答辩反馈与项目反思](reply.md)中的“课上老师对大家答辩的反馈”和“对自己项目的反思” |
 | 编写参考 | [GB/T 9385—2008《计算机软件需求规格说明规范》](https://openstd.samr.gov.cn/bzgk/std/newGbInfo?hcno=2790825C43AD0B69E3C38C140BFFCFE6)；[pm-skills：create-prd](https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/pm-execution/skills/create-prd/SKILL.md)、[test-scenarios](https://github.com/phuryn/pm-skills/blob/07b34f64ee828df08953f505b7f747aef85ae7c6/pm-execution/skills/test-scenarios/SKILL.md) |
 
 本文按“目标用户—现有痛点—产品亮点—使用过程—结课验收”组织需求。截至本版，依据来自团队讨论、答辩反馈和公开资料，用户访谈与同任务实测待完成。第六节区分团队承诺的交付门槛与待验证的效果目标。
@@ -606,7 +606,7 @@ classDiagram
 
 ### 8.5 协作与需求维护
 
-以下沿用[团队现有分工](homework.md)，围绕本版主线分配职责。
+以下沿用[团队现有分工](https://github.com/155TuT/2601-fzu-SoftwareEngineering-YuezhongWu/blob/bfa407f601fdcfbeb4357bb5c4758de72a950d0e/homework/team/task5/ans/recipe/homework.md)，围绕本版主线分配职责。
 
 | 协作方向 | 成员 | 对应职责 |
 | --- | --- | --- |

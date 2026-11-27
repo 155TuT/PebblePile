@@ -1,6 +1,6 @@
 # 菜谱领域产品调研：个性化的本地菜单管理服务
 
-> 调研更新：2026-10-19。本文为[团队作业选题与需求分析](../task-requirement.md)提供依据，用于明确产品定位、目标用户、领域 Agent 的职责及课程实现范围。
+> 调研更新：2026-10-19。本文为[团队作业选题与需求分析](https://github.com/155TuT/2601-fzu-SoftwareEngineering-YuezhongWu/blob/bfa407f601fdcfbeb4357bb5c4758de72a950d0e/homework/team/task5/task-requirement.md)提供依据，用于明确产品定位、目标用户、领域 Agent 的职责及课程实现范围。
 >
 > 定位依据来自[QQ 聊天记录整理与截图](assets/research/qq-chat-2026-10-19.md)，外部依据来自[产品官方说明、技术文档与研究论文](assets/research/recipe-research-sources.md)。团队讨论用于澄清产品意图；市场机会、用户收益和技术方案仍需验证。当前尚未完成目标用户访谈、竞品上手对照或原型测试。
 
@@ -261,7 +261,7 @@ QQ 记录解决的是团队定位表述，不能计入这些目标用户访谈�
 
 ### 6.4 对作业材料的支撑
 
-根据[任务要求](../task-requirement.md)，10 月 24 日进行选题答辩，博客截止为 10 月 25 日 23:59；最终软件需上线并提供访问地址和必要测试方式。
+根据[任务要求](https://github.com/155TuT/2601-fzu-SoftwareEngineering-YuezhongWu/blob/bfa407f601fdcfbeb4357bb5c4758de72a950d0e/homework/team/task5/task-requirement.md)，10 月 24 日进行选题答辩，博客截止为 10 月 25 日 23:59；最终软件需上线并提供访问地址和必要测试方式。
 
 | 作业所需内容 | 本文提供的依据 | 后续需补齐 |
 | --- | --- | --- |
