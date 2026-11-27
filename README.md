@@ -45,7 +45,9 @@ npm ci
 npx expo run:android
 ```
 
-保存 TypeScript 文件后，Fast Refresh 会更新正在运行的页面。开发包已安装时，下次只改 TypeScript 可以用 `npx expo start --android --dev-client`。改动 Kotlin、Room 或原生模块后，重新运行 `npx expo run:android`。开发包与正式版各自保存资料。[断点调试与常见问题](docs/development.md#热刷新与调试)
+保存 TypeScript 文件后，Fast Refresh 会更新正在运行的页面。开发包已安装时，下次只改 TypeScript 可用 `npx expo start --android --dev-client`。改动 Kotlin、Room 或原生模块后则需重新运行 `npx expo run:android`。
+
+[断点调试与常见问题](docs/development.md#热刷新与调试)
 
 ## 目录结构
 
@@ -75,7 +77,9 @@ PebblePile/
 └── AGENTS.md                # AI 协作约定
 ```
 
-开发包和正式包共用同一份 Kotlin 源码。Expo 可以从 `app.json`、配置插件和原生模块重建整个 `android/`。要单独构建 APK，从仓库根目录运行 `python scripts/gradle.py :app:assembleDebug`。[客户端工程说明](docs/android-client.md) · [构建、签名与发布](docs/android-build-release.md)
+要单独构建 APK 可从仓库根目录运行 `python scripts/gradle.py :app:assembleDebug`。
+
+[客户端工程说明](docs/android-client.md) · [构建、签名与发布](docs/android-build-release.md)
 
 ## 参与协作
 
